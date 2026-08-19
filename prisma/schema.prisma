@@ -1,0 +1,177 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum GoalType {
+  LOSE_WEIGHT
+  MAINTAIN
+  GAIN_WEIGHT
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHTLY_ACTIVE
+  MODERATELY_ACTIVE
+  VERY_ACTIVE
+  EXTRA_ACTIVE
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum WorkoutLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model User {
+  id               String         @id @default(uuid())
+  username         String         @unique
+  email            String?        @unique
+  password         String
+  name             String?
+  avatar           String?
+  role             Role           @default(USER)
+  isActive         Boolean        @default(true)
+
+  gender           Gender?
+  dateOfBirth      DateTime?
+  heightCm         Float?
+  weightKg         Float?
+  activityLevel    ActivityLevel? @default(SEDENTARY)
+  goal             GoalType?      @default(MAINTAIN)
+
+  bmi              Float?
+  bmr              Float?
+  tdee             Float?
+  targetCalories   Float?
+  targetProtein    Float?
+  targetCarb       Float?
+  targetFat        Float?
+
+  dailyAiQuota     Int            @default(10)
+  refreshTokenHash String?
+  timezone         String         @default("Asia/Ho_Chi_Minh")
+
+  meals            Meal[]
+  weightLogs       WeightLog[]
+  aiMessages       AiMessage[]
+  apiUsageLogs     ApiUsageLog[]
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([role, isActive])
+}
+
+model Meal {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealType      MealType     @default(LUNCH)
+  date          DateTime
+  imageUrl      String?
+  
+  totalCalories Float        @default(0)
+  totalProtein  Float        @default(0)
+  totalCarb     Float        @default(0)
+  totalFat      Float        @default(0)
+  
+  items         MealItem[]
+  
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([userId, date])
+}
+
+model MealItem {
+  id           String   @id @default(uuid())
+  mealId       String
+  meal         Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  name         String
+  servingSize  String?
+  quantity     Float    @default(1)
+  calories     Float
+  protein      Float
+  carb         Float
+  fat          Float
+  source       String   @default("manual")
+}
+
+model WeightLog {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg Float
+  note     String?
+  date     DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model DietPlanTemplate {
+  id           String   @id @default(uuid())
+  goal         GoalType
+  title        String
+  description  String?
+  targetCalo   Float
+  mealsSummary Json
+  createdAt    DateTime @default(now())
+}
+
+model WorkoutPlanTemplate {
+  id           String        @id @default(uuid())
+  goal         GoalType
+  level        WorkoutLevel  @default(BEGINNER)
+  title        String
+  description  String?
+  schedule     Json
+  createdAt    DateTime      @default(now())
+}
+
+model AiMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model ApiUsageLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature      String
+  promptTokens Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+}

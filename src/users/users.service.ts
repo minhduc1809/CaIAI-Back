@@ -1,0 +1,213 @@
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { HealthCalculatorService } from './health-calculator.service';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+
+@Injectable()
+export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly healthCalculator: HealthCalculatorService,
+  ) {}
+
+  /**
+   * Lấy thông tin cá nhân của người dùng đang đăng nhập
+   */
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        gender: true,
+        dateOfBirth: true,
+        heightCm: true,
+        weightKg: true,
+        activityLevel: true,
+        goal: true,
+        bmi: true,
+        bmr: true,
+        tdee: true,
+        targetCalories: true,
+        targetProtein: true,
+        targetCarb: true,
+        targetFat: true,
+        dailyAiQuota: true,
+        timezone: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    return {
+      message: 'Lấy thông tin người dùng thành công',
+      data: user,
+    };
+  }
+
+  /**
+   * Cập nhật thông số cơ thể và tự động tính toán lại BMI/BMR/TDEE/Macros
+   */
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    // 1. Lấy thông tin user hiện tại
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!currentUser) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    // 2. Gom các thông số mới (hoặc giữ lại thông số cũ nếu không truyền)
+    const heightCm = dto.heightCm !== undefined ? dto.heightCm : currentUser.heightCm;
+    const weightKg = dto.weightKg !== undefined ? dto.weightKg : currentUser.weightKg;
+    const dateOfBirth = dto.dateOfBirth !== undefined ? (dto.dateOfBirth ? new Date(dto.dateOfBirth) : null) : currentUser.dateOfBirth;
+    const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
+    const activityLevel = dto.activityLevel !== undefined ? dto.activityLevel : currentUser.activityLevel;
+    const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
+
+    // 3. Tính toán toàn bộ chỉ số sức khỏe tự động
+    const calculations = this.healthCalculator.calculateAllMetrics({
+      heightCm,
+      weightKg,
+      dateOfBirth,
+      gender,
+      activityLevel,
+      goal,
+    });
+
+    // 4. Cập nhật vào Database
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.name !== undefined ? dto.name : currentUser.name,
+        avatar: dto.avatar !== undefined ? dto.avatar : currentUser.avatar,
+        gender,
+        dateOfBirth,
+        heightCm,
+        weightKg,
+        activityLevel,
+        goal,
+        timezone: dto.timezone !== undefined ? dto.timezone : currentUser.timezone,
+        // Các chỉ số tính toán
+        bmi: calculations.bmi,
+        bmr: calculations.bmr,
+        tdee: calculations.tdee,
+        targetCalories: calculations.targetCalories,
+        targetProtein: calculations.targetProtein,
+        targetCarb: calculations.targetCarb,
+        targetFat: calculations.targetFat,
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        gender: true,
+        dateOfBirth: true,
+        heightCm: true,
+        weightKg: true,
+        activityLevel: true,
+        goal: true,
+        bmi: true,
+        bmr: true,
+        tdee: true,
+        targetCalories: true,
+        targetProtein: true,
+        targetCarb: true,
+        targetFat: true,
+        dailyAiQuota: true,
+        timezone: true,
+        updatedAt: true,
+      },
+    });
+
+    // 5. Nếu có cập nhật cân nặng mới, tự động ghi 1 dòng vào WeightLog để vẽ biểu đồ
+    if (dto.weightKg && dto.weightKg !== currentUser.weightKg) {
+      await this.prisma.weightLog.create({
+        data: {
+          userId,
+          weightKg: dto.weightKg,
+          note: 'Cập nhật từ hồ sơ người dùng',
+        },
+      });
+    }
+
+    return {
+      message: 'Cập nhật thông tin và tính toán chỉ số sức khỏe thành công',
+      data: {
+        ...updatedUser,
+        bmiClassification: calculations.bmiClassification,
+      },
+    };
+  }
+
+  /**
+   * Báo cáo tổng quan phân tích thể trạng và chỉ số dinh dưỡng
+   */
+  async getHealthSummary(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    const calculations = this.healthCalculator.calculateAllMetrics({
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      activityLevel: user.activityLevel,
+      goal: user.goal,
+    });
+
+    return {
+      message: 'Lấy báo cáo phân tích thể trạng thành công',
+      data: {
+        userId: user.id,
+        username: user.username,
+        name: user.name,
+        currentStats: {
+          heightCm: user.heightCm,
+          weightKg: user.weightKg,
+          gender: user.gender,
+          goal: user.goal,
+          activityLevel: user.activityLevel,
+        },
+        metrics: calculations,
+        advice: this.generateQuickHealthAdvice(user.goal, calculations.bmi),
+      },
+    };
+  }
+
+  private generateQuickHealthAdvice(goal: string | null, bmi: number | null): string {
+    if (!bmi) {
+      return 'Vui lòng cập nhật đầy đủ chiều cao và cân nặng để nhận được lời khuyên cá nhân hóa.';
+    }
+    if (goal === 'LOSE_WEIGHT') {
+      return 'Để giảm cân hiệu quả và an toàn, hãy duy trì mức thâm hụt calo đều đặn, ưu tiên nạp đủ đạm (protein) để giữ cơ bắp và kết hợp cardio 3-4 buổi/tuần.';
+    }
+    if (goal === 'GAIN_WEIGHT') {
+      return 'Để tăng cân / tăng cơ lành mạnh, hãy nạp dư thừa calo sạch từ nguồn tinh bột phức, thịt nạc, trứng, sữa và kết hợp tập kháng lực (Gym/Kháng lực).';
+    }
+    return 'Duy trì năng lượng nạp vào tương đương năng lượng tiêu hao (TDEE) để giữ cân nặng và vóc dáng ổn định.';
+  }
+}
