@@ -9,7 +9,7 @@ import {
   IsUrl,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Gender, GoalType, ActivityLevel } from '@prisma/client';
+import { Gender, GoalType, ActivityLevel, MacroStyle } from '@prisma/client';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Nguyễn Văn A', description: 'Họ và tên người dùng' })
@@ -39,12 +39,33 @@ export class UpdateProfileDto {
   @Max(250, { message: 'Chiều cao tối đa 250 cm' })
   heightCm?: number;
 
-  @ApiPropertyOptional({ example: 68.5, description: 'Cân nặng (kg)' })
+  @ApiPropertyOptional({ example: 68.5, description: 'Cân nặng hiện tại (kg)' })
   @IsOptional()
   @IsNumber({}, { message: 'Cân nặng phải là số' })
   @Min(20, { message: 'Cân nặng tối thiểu 20 kg' })
   @Max(300, { message: 'Cân nặng tối đa 300 kg' })
   weightKg?: number;
+
+  @ApiPropertyOptional({ example: 62.0, description: 'Cân nặng mục tiêu (kg)' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Cân nặng mục tiêu phải là số' })
+  @Min(20, { message: 'Cân nặng mục tiêu tối thiểu 20 kg' })
+  @Max(300, { message: 'Cân nặng mục tiêu tối đa 300 kg' })
+  targetWeightKg?: number;
+
+  @ApiPropertyOptional({ example: 0.5, description: 'Tốc độ tăng/giảm cân (kg/tuần): 0.25, 0.5, 0.75, 1.0' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Tốc độ phải là số' })
+  @Min(0.1, { message: 'Tốc độ tối thiểu 0.1 kg/tuần' })
+  @Max(1.5, { message: 'Tốc độ tối đa 1.5 kg/tuần' })
+  weightRateKgPerWeek?: number;
+
+  @ApiPropertyOptional({ example: 18.5, description: 'Tỷ lệ mỡ cơ thể (%)' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Tỷ lệ mỡ phải là số' })
+  @Min(3, { message: 'Tỷ lệ mỡ tối thiểu 3%' })
+  @Max(60, { message: 'Tỷ lệ mỡ tối đa 60%' })
+  bodyFatPercent?: number;
 
   @ApiPropertyOptional({
     enum: ActivityLevel,
@@ -63,6 +84,15 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsEnum(GoalType, { message: 'Mục tiêu không hợp lệ (LOSE_WEIGHT, MAINTAIN, GAIN_WEIGHT)' })
   goal?: GoalType;
+
+  @ApiPropertyOptional({
+    enum: MacroStyle,
+    example: MacroStyle.BALANCED,
+    description: 'Trường phái phân bổ Macro (BALANCED, HIGH_CARB_LOW_FAT, LOW_CARB_HIGH_FAT, KETO)',
+  })
+  @IsOptional()
+  @IsEnum(MacroStyle, { message: 'Trường phái Macro không hợp lệ' })
+  macroStyle?: MacroStyle;
 
   @ApiPropertyOptional({ example: 'Asia/Ho_Chi_Minh', description: 'Múi giờ' })
   @IsOptional()

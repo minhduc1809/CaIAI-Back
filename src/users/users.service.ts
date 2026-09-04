@@ -33,8 +33,12 @@ export class UsersService {
         dateOfBirth: true,
         heightCm: true,
         weightKg: true,
+        targetWeightKg: true,
+        weightRateKgPerWeek: true,
+        bodyFatPercent: true,
         activityLevel: true,
         goal: true,
+        macroStyle: true,
         bmi: true,
         bmr: true,
         tdee: true,
@@ -75,19 +79,27 @@ export class UsersService {
     // 2. Gom các thông số mới (hoặc giữ lại thông số cũ nếu không truyền)
     const heightCm = dto.heightCm !== undefined ? dto.heightCm : currentUser.heightCm;
     const weightKg = dto.weightKg !== undefined ? dto.weightKg : currentUser.weightKg;
+    const targetWeightKg = dto.targetWeightKg !== undefined ? dto.targetWeightKg : currentUser.targetWeightKg;
+    const weightRateKgPerWeek = dto.weightRateKgPerWeek !== undefined ? dto.weightRateKgPerWeek : currentUser.weightRateKgPerWeek;
+    const bodyFatPercent = dto.bodyFatPercent !== undefined ? dto.bodyFatPercent : currentUser.bodyFatPercent;
     const dateOfBirth = dto.dateOfBirth !== undefined ? (dto.dateOfBirth ? new Date(dto.dateOfBirth) : null) : currentUser.dateOfBirth;
     const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
     const activityLevel = dto.activityLevel !== undefined ? dto.activityLevel : currentUser.activityLevel;
     const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
+    const macroStyle = dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
 
     // 3. Tính toán toàn bộ chỉ số sức khỏe tự động
     const calculations = this.healthCalculator.calculateAllMetrics({
       heightCm,
       weightKg,
+      targetWeightKg,
+      weightRateKgPerWeek,
+      bodyFatPercent,
       dateOfBirth,
       gender,
       activityLevel,
       goal,
+      macroStyle,
     });
 
     // 4. Cập nhật vào Database
@@ -100,8 +112,12 @@ export class UsersService {
         dateOfBirth,
         heightCm,
         weightKg,
+        targetWeightKg,
+        weightRateKgPerWeek,
+        bodyFatPercent,
         activityLevel,
         goal,
+        macroStyle: calculations.macroStyle,
         timezone: dto.timezone !== undefined ? dto.timezone : currentUser.timezone,
         // Các chỉ số tính toán
         bmi: calculations.bmi,
@@ -123,8 +139,12 @@ export class UsersService {
         dateOfBirth: true,
         heightCm: true,
         weightKg: true,
+        targetWeightKg: true,
+        weightRateKgPerWeek: true,
+        bodyFatPercent: true,
         activityLevel: true,
         goal: true,
+        macroStyle: true,
         bmi: true,
         bmr: true,
         tdee: true,
@@ -154,6 +174,7 @@ export class UsersService {
       data: {
         ...updatedUser,
         bmiClassification: calculations.bmiClassification,
+        bmrFormula: calculations.bmrFormula,
       },
     };
   }
@@ -173,10 +194,14 @@ export class UsersService {
     const calculations = this.healthCalculator.calculateAllMetrics({
       heightCm: user.heightCm,
       weightKg: user.weightKg,
+      targetWeightKg: user.targetWeightKg,
+      weightRateKgPerWeek: user.weightRateKgPerWeek,
+      bodyFatPercent: user.bodyFatPercent,
       dateOfBirth: user.dateOfBirth,
       gender: user.gender,
       activityLevel: user.activityLevel,
       goal: user.goal,
+      macroStyle: user.macroStyle,
     });
 
     return {
@@ -188,8 +213,12 @@ export class UsersService {
         currentStats: {
           heightCm: user.heightCm,
           weightKg: user.weightKg,
+          targetWeightKg: user.targetWeightKg,
+          weightRateKgPerWeek: user.weightRateKgPerWeek,
+          bodyFatPercent: user.bodyFatPercent,
           gender: user.gender,
           goal: user.goal,
+          macroStyle: user.macroStyle,
           activityLevel: user.activityLevel,
         },
         metrics: calculations,

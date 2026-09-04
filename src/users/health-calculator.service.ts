@@ -1,33 +1,49 @@
 import { Injectable } from '@nestjs/common';
-import { Gender, GoalType, ActivityLevel } from '@prisma/client';
+import { Gender, GoalType, ActivityLevel, MacroStyle } from '@prisma/client';
 
 export interface HealthMetricsInput {
   heightCm?: number | null;
   weightKg?: number | null;
+  targetWeightKg?: number | null;
+  weightRateKgPerWeek?: number | null;
+  bodyFatPercent?: number | null;
   dateOfBirth?: Date | string | null;
   gender?: Gender | null;
   activityLevel?: ActivityLevel | null;
   goal?: GoalType | null;
+  macroStyle?: MacroStyle | null;
 }
 
 export interface HealthCalculationsResult {
   bmi: number | null;
   bmiClassification: string | null;
   bmr: number | null;
+  bmrFormula: string;
   tdee: number | null;
   targetCalories: number | null;
   targetProtein: number | null; // gram
   targetCarb: number | null;    // gram
   targetFat: number | null;     // gram
+  macroStyle: MacroStyle;
 }
 
 @Injectable()
 export class HealthCalculatorService {
   /**
-   * Tính toán toàn bộ chỉ số BMI, BMR, TDEE, Calo mục tiêu và Macros
+   * Tính toán toàn bộ chỉ số BMI, BMR, TDEE, Calo mục tiêu và Macros theo chuẩn BRD
    */
   calculateAllMetrics(input: HealthMetricsInput): HealthCalculationsResult {
-    const { heightCm, weightKg, dateOfBirth, gender, activityLevel, goal } = input;
+    const {
+      heightCm,
+      weightKg,
+      bodyFatPercent,
+      dateOfBirth,
+      gender,
+      activityLevel,
+      goal,
+      weightRateKgPerWeek,
+      macroStyle = MacroStyle.BALANCED,
+    } = input;
 
     // 1. Tính BMI
     const bmi = this.calculateBMI(heightCm, weightKg);
@@ -36,27 +52,30 @@ export class HealthCalculatorService {
     // 2. Tính tuổi
     const age = this.calculateAge(dateOfBirth);
 
-    // 3. Tính BMR
-    const bmr = this.calculateBMR(heightCm, weightKg, age, gender);
+    // 3. Tính BMR (Katch-McArdle nếu có % mỡ, hoặc Mifflin-St Jeor)
+    const bmrResult = this.calculateBMR(heightCm, weightKg, age, gender, bodyFatPercent);
 
     // 4. Tính TDEE
-    const tdee = this.calculateTDEE(bmr, activityLevel);
+    const tdee = this.calculateTDEE(bmrResult.bmr, activityLevel);
 
-    // 5. Tính Calo mục tiêu (Target Calories)
-    const targetCalories = this.calculateTargetCalories(tdee, goal);
+    // 5. Tính Calo mục tiêu (Target Calories dựa trên tốc độ thay đổi cân nặng kg/tuần)
+    const targetCalories = this.calculateTargetCalories(tdee, goal, weightRateKgPerWeek);
 
-    // 6. Phân bổ Macros (Protein, Carb, Fat)
-    const macros = this.calculateMacros(targetCalories, weightKg, goal);
+    // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle)
+    const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;
+    const macros = this.calculateMacros(targetCalories, resolvedMacroStyle);
 
     return {
       bmi,
       bmiClassification,
-      bmr,
+      bmr: bmrResult.bmr,
+      bmrFormula: bmrResult.formula,
       tdee,
       targetCalories,
       targetProtein: macros.protein,
       targetCarb: macros.carb,
       targetFat: macros.fat,
+      macroStyle: resolvedMacroStyle,
     };
   }
 
@@ -99,22 +118,32 @@ export class HealthCalculatorService {
   }
 
   /**
-   * Công thức Mifflin-St Jeor chuẩn quốc tế:
-   * - Nam: 10 * weight(kg) + 6.25 * height(cm) - 5 * age + 5
-   * - Nữ:  10 * weight(kg) + 6.25 * height(cm) - 5 * age - 161
+   * Tính BMR:
+   * - Nếu có bodyFatPercent: Công thức Katch-McArdle (LBM = weight * (1 - bf/100), BMR = 370 + 21.6 * LBM)
+   * - Ngược lại: Công thức Mifflin-St Jeor
    */
   private calculateBMR(
     heightCm?: number | null,
     weightKg?: number | null,
     age?: number | null,
     gender?: Gender | null,
-  ): number | null {
-    if (!heightCm || !weightKg || !age || !gender) return null;
+    bodyFatPercent?: number | null,
+  ): { bmr: number | null; formula: string } {
+    if (!weightKg || weightKg <= 0) return { bmr: null, formula: 'None' };
+
+    // Ưu tiên Katch-McArdle nếu có % mỡ cơ thể
+    if (bodyFatPercent && bodyFatPercent > 3 && bodyFatPercent < 60) {
+      const lbm = weightKg * (1 - bodyFatPercent / 100);
+      const bmr = 370 + 21.6 * lbm;
+      return { bmr: Math.round(bmr), formula: 'Katch-McArdle (Dựa trên Lean Body Mass)' };
+    }
+
+    if (!heightCm || !age || !gender) return { bmr: null, formula: 'None' };
 
     const baseBMR = 10 * weightKg + 6.25 * heightCm - 5 * age;
-    let bmr = gender === Gender.MALE ? baseBMR + 5 : baseBMR - 161;
+    const bmr = gender === Gender.MALE ? baseBMR + 5 : baseBMR - 161;
 
-    return Math.round(bmr);
+    return { bmr: Math.round(bmr), formula: 'Mifflin-St Jeor' };
   }
 
   /**
@@ -123,23 +152,23 @@ export class HealthCalculatorService {
   private calculateTDEE(bmr: number | null, activityLevel?: ActivityLevel | null): number | null {
     if (!bmr) return null;
 
-    let multiplier = 1.2; // Mặc định SEDENTARY
+    let multiplier = 1.2;
 
     switch (activityLevel) {
       case ActivityLevel.SEDENTARY:
-        multiplier = 1.2; // Ít vận động, ngồi văn phòng
+        multiplier = 1.2;
         break;
       case ActivityLevel.LIGHTLY_ACTIVE:
-        multiplier = 1.375; // Vận động nhẹ 1-3 ngày/tuần
+        multiplier = 1.375;
         break;
       case ActivityLevel.MODERATELY_ACTIVE:
-        multiplier = 1.55; // Vận động vừa 3-5 ngày/tuần
+        multiplier = 1.55;
         break;
       case ActivityLevel.VERY_ACTIVE:
-        multiplier = 1.725; // Vận động nhiều 6-7 ngày/tuần
+        multiplier = 1.725;
         break;
       case ActivityLevel.EXTRA_ACTIVE:
-        multiplier = 1.9; // Cường độ rất cao / VĐV
+        multiplier = 1.9;
         break;
       default:
         multiplier = 1.2;
@@ -149,48 +178,67 @@ export class HealthCalculatorService {
   }
 
   /**
-   * Tính Calo mục tiêu:
-   * - Giảm cân: Calorie Deficit (-500 kcal an toàn, giảm ~0.5kg/tuần)
-   * - Giữ cân: TDEE
-   * - Tăng cân: Calorie Surplus (+400 kcal)
+   * Tính Calo mục tiêu dựa trên Tốc độ thay đổi cân nặng (kg/tuần):
+   * 1 kg mỡ = ~7700 kcal.
+   * Thâm hụt hoặc thặng dư calo/ngày = (weightRateKgPerWeek * 7700) / 7.
    */
-  private calculateTargetCalories(tdee: number | null, goal?: GoalType | null): number | null {
+  private calculateTargetCalories(
+    tdee: number | null,
+    goal?: GoalType | null,
+    weightRateKgPerWeek?: number | null,
+  ): number | null {
     if (!tdee) return null;
+
+    const rate = weightRateKgPerWeek && weightRateKgPerWeek > 0 ? weightRateKgPerWeek : 0.5;
+    const deltaPerDay = Math.round((rate * 7700) / 7);
 
     let target = tdee;
     if (goal === GoalType.LOSE_WEIGHT) {
-      target = Math.max(tdee - 500, 1200); // Không để tụt dưới 1200 kcal
+      target = Math.max(tdee - deltaPerDay, 1200); // Ngưỡng an toàn tối thiểu 1200 kcal
     } else if (goal === GoalType.GAIN_WEIGHT) {
-      target = tdee + 400;
+      target = tdee + deltaPerDay;
     }
 
     return Math.round(target);
   }
 
   /**
-   * Phân bổ Tỷ lệ Macro chuẩn khoa học:
-   * - Giảm cân: 35% Protein, 40% Carb, 25% Fat
-   * - Giữ cân: 30% Protein, 45% Carb, 25% Fat
-   * - Tăng cân: 25% Protein, 55% Carb, 20% Fat
-   * (1g Protein = 4 kcal, 1g Carb = 4 kcal, 1g Fat = 9 kcal)
+   * Phân bổ tỷ lệ Macro theo từng trường phái dinh dưỡng:
+   * - BALANCED: 30% Protein, 40% Carb, 30% Fat
+   * - HIGH_CARB_LOW_FAT: 30% Protein, 55% Carb, 15% Fat (VĐV / chạy bền)
+   * - LOW_CARB_HIGH_FAT: 35% Protein, 20% Carb, 45% Fat
+   * - KETO: 25% Protein, 5% Carb, 70% Fat
    */
-  private calculateMacros(targetCalories: number | null, weightKg?: number | null, goal?: GoalType | null) {
+  private calculateMacros(targetCalories: number | null, style: MacroStyle) {
     if (!targetCalories) {
       return { protein: null, carb: null, fat: null };
     }
 
     let proteinRatio = 0.3;
-    let carbRatio = 0.45;
-    let fatRatio = 0.25;
+    let carbRatio = 0.4;
+    let fatRatio = 0.3;
 
-    if (goal === GoalType.LOSE_WEIGHT) {
-      proteinRatio = 0.35;
-      carbRatio = 0.4;
-      fatRatio = 0.25;
-    } else if (goal === GoalType.GAIN_WEIGHT) {
-      proteinRatio = 0.25;
-      carbRatio = 0.55;
-      fatRatio = 0.2;
+    switch (style) {
+      case MacroStyle.HIGH_CARB_LOW_FAT:
+        proteinRatio = 0.3;
+        carbRatio = 0.55;
+        fatRatio = 0.15;
+        break;
+      case MacroStyle.LOW_CARB_HIGH_FAT:
+        proteinRatio = 0.35;
+        carbRatio = 0.2;
+        fatRatio = 0.45;
+        break;
+      case MacroStyle.KETO:
+        proteinRatio = 0.25;
+        carbRatio = 0.05;
+        fatRatio = 0.7;
+        break;
+      case MacroStyle.BALANCED:
+      default:
+        proteinRatio = 0.3;
+        carbRatio = 0.4;
+        fatRatio = 0.3;
     }
 
     const proteinGram = Math.round((targetCalories * proteinRatio) / 4);
