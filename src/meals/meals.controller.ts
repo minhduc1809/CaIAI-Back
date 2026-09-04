@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -13,6 +14,9 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MealsService } from './meals.service';
 import { CreateMealDto } from './dto/create-meal.dto';
+import { UpdateMealDto } from './dto/update-meal.dto';
+import { QuickAddMealDto } from './dto/quick-add-meal.dto';
+import { CopyMealDto } from './dto/copy-meal.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -32,6 +36,17 @@ export class MealsController {
     @Body() createMealDto: CreateMealDto,
   ) {
     return this.mealsService.createMeal(userId, createMealDto);
+  }
+
+  @Post('quick-add')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Ghi nhận calo/macro nhanh (không cần chọn từng món con)' })
+  @ApiResponse({ status: 201, description: 'Ghi nhận calo nhanh thành công' })
+  async quickAddMeal(
+    @CurrentUser('id') userId: string,
+    @Body() dto: QuickAddMealDto,
+  ) {
+    return this.mealsService.quickAddMeal(userId, dto);
   }
 
   @Get()
@@ -54,6 +69,53 @@ export class MealsController {
     @Query('date') date?: string,
   ) {
     return this.mealsService.getDailyNutritionSummary(userId, date);
+  }
+
+  @Get('statistics')
+  @ApiOperation({ summary: 'Thống kê dinh dưỡng theo dải ngày (mặc định 7 ngày gần nhất)' })
+  @ApiQuery({ name: 'startDate', required: false, example: '2026-08-13' })
+  @ApiQuery({ name: 'endDate', required: false, example: '2026-08-19' })
+  @ApiResponse({ status: 200, description: 'Lấy thống kê thành công' })
+  async getStatistics(
+    @CurrentUser('id') userId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.mealsService.getNutritionStatistics(userId, startDate, endDate);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Lấy thông tin chi tiết của 1 bữa ăn' })
+  @ApiResponse({ status: 200, description: 'Lấy chi tiết thành công' })
+  async getMealDetail(
+    @CurrentUser('id') userId: string,
+    @Param('id') mealId: string,
+  ) {
+    return this.mealsService.getMealDetail(userId, mealId);
+  }
+
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cập nhật bữa ăn (sửa loại bữa, ngày hoặc danh sách món ăn)' })
+  @ApiResponse({ status: 200, description: 'Cập nhật bữa ăn thành công' })
+  async updateMeal(
+    @CurrentUser('id') userId: string,
+    @Param('id') mealId: string,
+    @Body() updateMealDto: UpdateMealDto,
+  ) {
+    return this.mealsService.updateMeal(userId, mealId, updateMealDto);
+  }
+
+  @Post(':id/copy')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Sao chép bữa ăn sang một ngày khác (Copy meal)' })
+  @ApiResponse({ status: 201, description: 'Sao chép bữa ăn thành công' })
+  async copyMeal(
+    @CurrentUser('id') userId: string,
+    @Param('id') mealId: string,
+    @Body() copyMealDto: CopyMealDto,
+  ) {
+    return this.mealsService.copyMeal(userId, mealId, copyMealDto);
   }
 
   @Delete(':id')
