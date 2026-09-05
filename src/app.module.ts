@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { MealsModule } from './meals/meals.module';
 import { WeightLogsModule } from './weight-logs/weight-logs.module';
+import { WorkoutsModule } from './workouts/workouts.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -21,6 +22,7 @@ import { AppService } from './app.service';
     RecommendationsModule,
     MealsModule,
     WeightLogsModule,
+    WorkoutsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
