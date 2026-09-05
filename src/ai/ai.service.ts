@@ -196,7 +196,7 @@ Trả về duy nhất định dạng JSON chuẩn theo schema sau (không thêm 
         });
 
         const prompt = `
-Bạn là AI Nutrition & Fitness Coach của ứng dụng CalAI. Hãy trả lời người dùng bằng tiếng Việt thân thiện, khoa học, súc tích, mang tính động viên cao.
+Bạn là AI Nutrition & Fitness Coach của ứng dụng NutriWise. Hãy trả lời người dùng bằng tiếng Việt thân thiện, khoa học, súc tích, mang tính động viên cao.
 ${contextPrompt}
 
 Người dùng hỏi: "${userMessage}"
@@ -219,7 +219,7 @@ Hãy trả lời trực tiếp câu hỏi, đưa ra gợi ý món ăn Việt Nam
 
     // Fallback response khi chưa có key
     return {
-      reply: `Chào bạn! Tôi là CalAI Nutrition Coach. Dựa trên mục tiêu dinh dưỡng của bạn, tôi khuyến nghị bạn nên ưu tiên nguồn protein nạc (ức gà, cá basa, đậu hũ, trứng luộc) kết hợp tinh bột hấp thu chậm (gạo lứt, khoai lang) và nhiều rau củ tươi. Đừng quên uống đủ 2-2.5 lít nước mỗi ngày nhé!`,
+      reply: `Chào bạn! Tôi là NutriWise Nutrition Coach. Dựa trên mục tiêu dinh dưỡng của bạn, tôi khuyến nghị bạn nên ưu tiên nguồn protein nạc (ức gà, cá basa, đậu hũ, trứng luộc) kết hợp tinh bột hấp thu chậm (gạo lứt, khoai lang) và nhiều rau củ tươi. Đừng quên uống đủ 2-2.5 lít nước mỗi ngày nhé!`,
       isFallback: true,
     };
   }
