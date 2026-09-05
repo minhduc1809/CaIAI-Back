@@ -52,6 +52,19 @@ enum WorkoutLevel {
   ADVANCED
 }
 
+enum WorkoutCategory {
+  STRENGTH
+  CARDIO
+  RUNNING
+  CYCLING
+  SWIMMING
+  HIIT
+  WALKING
+  YOGA
+  SPORTS
+  OTHER
+}
+
 model User {
   id                  String         @id @default(uuid())
   username            String         @unique
@@ -87,6 +100,7 @@ model User {
 
   meals               Meal[]
   weightLogs          WeightLog[]
+  workoutLogs         WorkoutLog[]
   customFoods         CustomFood[]
   favoriteFoods       FavoriteFood[]
   aiMessages          AiMessage[]
@@ -214,4 +228,47 @@ model ApiUsageLog {
 
   @@index([userId, createdAt])
   @@index([feature, createdAt])
+}
+
+model WorkoutLog {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  category        WorkoutCategory @default(CARDIO)
+  date            DateTime        @default(now())
+  durationMinutes Int
+  caloriesBurned  Float           @default(0)
+  rpe             Int?
+  note            String?
+
+  exercises       WorkoutExercise[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, date])
+}
+
+model WorkoutExercise {
+  id           String       @id @default(uuid())
+  workoutLogId String
+  workoutLog   WorkoutLog   @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  name         String
+  order        Int          @default(0)
+  sets         WorkoutSet[]
+
+  @@index([workoutLogId])
+}
+
+model WorkoutSet {
+  id         String          @id @default(uuid())
+  exerciseId String
+  exercise   WorkoutExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  setNumber  Int
+  reps       Int
+  weightKg   Float           @default(0)
+  rpe        Int?
+
+  @@index([exerciseId])
 }
