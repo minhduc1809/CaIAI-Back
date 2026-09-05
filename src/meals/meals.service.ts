@@ -333,7 +333,31 @@ export class MealsService {
       consumedFat += meal.totalFat;
     }
 
-    const remainingCalories = Math.max(0, targetCalo - consumedCalories);
+    let targetDate = new Date();
+    if (dateStr) {
+      targetDate = new Date(dateStr);
+    }
+    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+    const workouts = await this.prisma.workoutLog.findMany({
+      where: {
+        userId,
+        date: { gte: startOfDay, lte: endOfDay },
+      },
+      select: { caloriesBurned: true, durationMinutes: true },
+    });
+
+    const activeCaloriesBurned = Math.round(
+      workouts.reduce((sum, w) => sum + (w.caloriesBurned || 0), 0),
+    );
+    const totalExerciseDurationMinutes = workouts.reduce(
+      (sum, w) => sum + w.durationMinutes,
+      0,
+    );
+
+    // Energy Balance: Remaining = Target - Consumed + Active Calories Burned
+    const remainingCalories = Math.max(0, targetCalo - consumedCalories + activeCaloriesBurned);
     const progressPercent = Math.min(100, Math.round((consumedCalories / targetCalo) * 100));
 
     return {
@@ -343,6 +367,8 @@ export class MealsService {
         summary: {
           consumedCalories: Math.round(consumedCalories),
           targetCalories: targetCalo,
+          activeCaloriesBurned,
+          totalExerciseDurationMinutes,
           remainingCalories: Math.round(remainingCalories),
           progressPercent,
           macros: {
@@ -352,6 +378,7 @@ export class MealsService {
           },
         },
         mealsCount: meals.length,
+        workoutsCount: workouts.length,
         meals,
       },
     };
