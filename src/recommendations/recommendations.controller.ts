@@ -1,6 +1,19 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { RecommendationsService } from './recommendations.service';
+import { CreateCustomFoodDto } from './dto/create-custom-food.dto';
+import { AddFavoriteFoodDto } from './dto/add-favorite-food.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -82,5 +95,65 @@ export class RecommendationsController {
   @ApiResponse({ status: 200, description: 'Lấy chi tiết thành công' })
   async getExerciseDetail(@Param('id') exerciseId: string) {
     return this.recommendationsService.getExerciseDetail(exerciseId);
+  }
+
+  // --- CUSTOM FOODS (Món ăn tự tạo của người dùng) ---
+  @Post('custom-foods')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Tạo món ăn riêng của người dùng (Custom Food)' })
+  @ApiResponse({ status: 201, description: 'Tạo món ăn riêng thành công' })
+  async createCustomFood(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCustomFoodDto,
+  ) {
+    return this.recommendationsService.createCustomFood(userId, dto);
+  }
+
+  @Get('custom-foods')
+  @ApiOperation({ summary: 'Lấy danh sách các món ăn riêng của người dùng' })
+  @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
+  async getCustomFoods(@CurrentUser('id') userId: string) {
+    return this.recommendationsService.getCustomFoods(userId);
+  }
+
+  @Delete('custom-foods/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xóa món ăn riêng' })
+  @ApiResponse({ status: 200, description: 'Xóa món ăn thành công' })
+  async deleteCustomFood(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.recommendationsService.deleteCustomFood(userId, id);
+  }
+
+  // --- FAVORITE FOODS (Món ăn yêu thích) ---
+  @Post('favorites')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Thêm món ăn vào danh sách yêu thích' })
+  @ApiResponse({ status: 201, description: 'Thêm món yêu thích thành công' })
+  async addFavoriteFood(
+    @CurrentUser('id') userId: string,
+    @Body() dto: AddFavoriteFoodDto,
+  ) {
+    return this.recommendationsService.addFavoriteFood(userId, dto.foodName);
+  }
+
+  @Get('favorites')
+  @ApiOperation({ summary: 'Lấy danh sách tên các món ăn yêu thích' })
+  @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
+  async getFavoriteFoods(@CurrentUser('id') userId: string) {
+    return this.recommendationsService.getFavoriteFoods(userId);
+  }
+
+  @Delete('favorites/:foodName')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bỏ món ăn khỏi danh sách yêu thích' })
+  @ApiResponse({ status: 200, description: 'Bỏ yêu thích thành công' })
+  async removeFavoriteFood(
+    @CurrentUser('id') userId: string,
+    @Param('foodName') foodName: string,
+  ) {
+    return this.recommendationsService.removeFavoriteFood(userId, foodName);
   }
 }

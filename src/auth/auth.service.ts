@@ -193,6 +193,66 @@ export class AuthService {
   }
 
   /**
+   * Đổi mật khẩu tài khoản
+   */
+  async changePassword(userId: string, changePasswordDto: any) {
+    const { oldPassword, newPassword } = changePasswordDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      throw new ConflictException('Mật khẩu hiện tại không chính xác');
+    }
+
+    if (oldPassword === newPassword) {
+      throw new ConflictException('Mật khẩu mới không được trùng với mật khẩu cũ');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+        refreshTokenHash: null,
+      },
+    });
+
+    return {
+      message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
+    };
+  }
+
+  /**
+   * Xóa vĩnh viễn tài khoản người dùng
+   */
+  async deleteAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+
+    return {
+      message: 'Tài khoản và toàn bộ dữ liệu liên quan đã được xóa vĩnh viễn',
+    };
+  }
+
+  /**
    * Sinh Access Token và Refresh Token
    */
   private async generateTokens(userId: string, username: string, role: string) {

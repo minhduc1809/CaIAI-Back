@@ -24,6 +24,13 @@ enum GoalType {
   GAIN_WEIGHT
 }
 
+enum MacroStyle {
+  BALANCED
+  HIGH_CARB_LOW_FAT
+  LOW_CARB_HIGH_FAT
+  KETO
+}
+
 enum ActivityLevel {
   SEDENTARY
   LIGHTLY_ACTIVE
@@ -45,42 +52,62 @@ enum WorkoutLevel {
   ADVANCED
 }
 
+enum WorkoutCategory {
+  STRENGTH
+  CARDIO
+  RUNNING
+  CYCLING
+  SWIMMING
+  HIIT
+  WALKING
+  YOGA
+  SPORTS
+  OTHER
+}
+
 model User {
-  id               String         @id @default(uuid())
-  username         String         @unique
-  email            String?        @unique
-  password         String
-  name             String?
-  avatar           String?
-  role             Role           @default(USER)
-  isActive         Boolean        @default(true)
+  id                  String         @id @default(uuid())
+  username            String         @unique
+  email               String?        @unique
+  password            String
+  name                String?
+  avatar              String?
+  role                Role           @default(USER)
+  isActive            Boolean        @default(true)
 
-  gender           Gender?
-  dateOfBirth      DateTime?
-  heightCm         Float?
-  weightKg         Float?
-  activityLevel    ActivityLevel? @default(SEDENTARY)
-  goal             GoalType?      @default(MAINTAIN)
+  gender              Gender?
+  dateOfBirth         DateTime?
+  heightCm            Float?
+  weightKg            Float?
+  targetWeightKg      Float?
+  weightRateKgPerWeek Float?         @default(0.5)
+  bodyFatPercent      Float?
+  activityLevel       ActivityLevel? @default(SEDENTARY)
+  goal                GoalType?      @default(MAINTAIN)
+  macroStyle          MacroStyle?    @default(BALANCED)
 
-  bmi              Float?
-  bmr              Float?
-  tdee             Float?
-  targetCalories   Float?
-  targetProtein    Float?
-  targetCarb       Float?
-  targetFat        Float?
+  bmi                 Float?
+  bmr                 Float?
+  tdee                Float?
+  targetCalories      Float?
+  targetProtein       Float?
+  targetCarb          Float?
+  targetFat           Float?
 
-  dailyAiQuota     Int            @default(10)
-  refreshTokenHash String?
-  timezone         String         @default("Asia/Ho_Chi_Minh")
+  dailyAiQuota        Int            @default(10)
+  refreshTokenHash    String?
+  timezone            String         @default("Asia/Ho_Chi_Minh")
 
-  meals            Meal[]
-  weightLogs       WeightLog[]
-  aiMessages       AiMessage[]
-  apiUsageLogs     ApiUsageLog[]
+  meals               Meal[]
+  weightLogs          WeightLog[]
+  workoutLogs         WorkoutLog[]
+  customFoods         CustomFood[]
+  favoriteFoods       FavoriteFood[]
+  aiMessages          AiMessage[]
+  apiUsageLogs        ApiUsageLog[]
 
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   @@index([role, isActive])
 }
@@ -131,6 +158,33 @@ model WeightLog {
   @@index([userId, date])
 }
 
+model CustomFood {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  servingSize String?
+  calories    Float
+  protein     Float    @default(0)
+  carb        Float    @default(0)
+  fat         Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model FavoriteFood {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodName  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, foodName])
+  @@index([userId])
+}
+
 model DietPlanTemplate {
   id           String   @id @default(uuid())
   goal         GoalType
@@ -174,4 +228,47 @@ model ApiUsageLog {
 
   @@index([userId, createdAt])
   @@index([feature, createdAt])
+}
+
+model WorkoutLog {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  category        WorkoutCategory @default(CARDIO)
+  date            DateTime        @default(now())
+  durationMinutes Int
+  caloriesBurned  Float           @default(0)
+  rpe             Int?
+  note            String?
+
+  exercises       WorkoutExercise[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, date])
+}
+
+model WorkoutExercise {
+  id           String       @id @default(uuid())
+  workoutLogId String
+  workoutLog   WorkoutLog   @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  name         String
+  order        Int          @default(0)
+  sets         WorkoutSet[]
+
+  @@index([workoutLogId])
+}
+
+model WorkoutSet {
+  id         String          @id @default(uuid())
+  exerciseId String
+  exercise   WorkoutExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  setNumber  Int
+  reps       Int
+  weightKg   Float           @default(0)
+  rpe        Int?
+
+  @@index([exerciseId])
 }

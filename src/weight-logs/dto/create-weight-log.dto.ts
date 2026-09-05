@@ -13,4 +13,9 @@ export class CreateWeightLogDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-04T07:00:00.000Z', description: 'Thời điểm ghi nhận cân nặng (mặc định là hiện tại)' })
+  @IsOptional()
+  @IsString()
+  date?: string;
 }

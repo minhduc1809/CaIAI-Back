@@ -319,4 +319,117 @@ export class RecommendationsService {
       data: exercise,
     };
   }
+
+  /**
+   * Tạo món ăn tự tạo riêng của người dùng (Custom Food)
+   */
+  async createCustomFood(userId: string, dto: any) {
+    const food = await this.prisma.customFood.create({
+      data: {
+        userId,
+        name: dto.name,
+        servingSize: dto.servingSize || null,
+        calories: dto.calories,
+        protein: dto.protein || 0,
+        carb: dto.carb || 0,
+        fat: dto.fat || 0,
+      },
+    });
+
+    return {
+      message: 'Tạo món ăn riêng thành công',
+      data: food,
+    };
+  }
+
+  /**
+   * Lấy danh sách món ăn riêng của người dùng
+   */
+  async getCustomFoods(userId: string) {
+    const foods = await this.prisma.customFood.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      message: 'Lấy danh sách món ăn riêng thành công',
+      data: foods,
+    };
+  }
+
+  /**
+   * Xóa món ăn riêng
+   */
+  async deleteCustomFood(userId: string, id: string) {
+    const food = await this.prisma.customFood.findUnique({
+      where: { id },
+    });
+
+    if (!food || food.userId !== userId) {
+      return {
+        message: 'Không tìm thấy món ăn',
+      };
+    }
+
+    await this.prisma.customFood.delete({ where: { id } });
+
+    return {
+      message: 'Xóa món ăn riêng thành công',
+    };
+  }
+
+  /**
+   * Thêm món ăn vào danh sách yêu thích
+   */
+  async addFavoriteFood(userId: string, foodName: string) {
+    const fav = await this.prisma.favoriteFood.upsert({
+      where: {
+        userId_foodName: {
+          userId,
+          foodName,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        foodName,
+      },
+    });
+
+    return {
+      message: 'Đã thêm món vào danh sách yêu thích',
+      data: fav,
+    };
+  }
+
+  /**
+   * Lấy danh sách món ăn yêu thích
+   */
+  async getFavoriteFoods(userId: string) {
+    const favorites = await this.prisma.favoriteFood.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      message: 'Lấy danh sách món yêu thích thành công',
+      data: favorites.map((f) => f.foodName),
+    };
+  }
+
+  /**
+   * Bỏ món ăn khỏi danh sách yêu thích
+   */
+  async removeFavoriteFood(userId: string, foodName: string) {
+    await this.prisma.favoriteFood.deleteMany({
+      where: {
+        userId,
+        foodName,
+      },
+    });
+
+    return {
+      message: 'Đã bỏ món khỏi danh sách yêu thích',
+    };
+  }
 }
