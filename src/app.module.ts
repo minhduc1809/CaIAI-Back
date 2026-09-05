@@ -7,6 +7,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { MealsModule } from './meals/meals.module';
 import { WeightLogsModule } from './weight-logs/weight-logs.module';
 import { WorkoutsModule } from './workouts/workouts.module';
+import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -23,6 +24,7 @@ import { AppService } from './app.service';
     MealsModule,
     WeightLogsModule,
     WorkoutsModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
