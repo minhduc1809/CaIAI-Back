@@ -56,3 +56,8 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /docs
+
+# Rule & instruction files
+CODING_RULES.md
+*.rules.md
+*.rule.md
