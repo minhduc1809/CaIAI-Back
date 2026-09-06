@@ -12,6 +12,8 @@ export interface HealthMetricsInput {
   activityLevel?: ActivityLevel | null;
   goal?: GoalType | null;
   macroStyle?: MacroStyle | null;
+  /** Ước tính Expenditure thích ứng (Adaptive Expenditure Engine) — khi có, dùng thay TDEE công thức tĩnh để tính Target Calories. */
+  expenditureOverride?: number | null;
 }
 
 export interface HealthCalculationsResult {
@@ -43,6 +45,7 @@ export class HealthCalculatorService {
       goal,
       weightRateKgPerWeek,
       macroStyle = MacroStyle.BALANCED,
+      expenditureOverride,
     } = input;
 
     // 1. Tính BMI
@@ -58,8 +61,9 @@ export class HealthCalculatorService {
     // 4. Tính TDEE
     const tdee = this.calculateTDEE(bmrResult.bmr, activityLevel);
 
-    // 5. Tính Calo mục tiêu (Target Calories dựa trên tốc độ thay đổi cân nặng kg/tuần)
-    const targetCalories = this.calculateTargetCalories(tdee, goal, weightRateKgPerWeek);
+    // 5. Tính Calo mục tiêu — ưu tiên Adaptive Expenditure (nếu đã hội tụ/đang cập nhật) thay vì TDEE công thức tĩnh
+    const expenditureForTarget = expenditureOverride ?? tdee;
+    const targetCalories = this.calculateTargetCalories(expenditureForTarget, goal, weightRateKgPerWeek);
 
     // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle)
     const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;

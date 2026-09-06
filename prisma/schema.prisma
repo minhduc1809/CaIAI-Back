@@ -94,6 +94,11 @@ model User {
   targetCarb          Float?
   targetFat           Float?
 
+  // Adaptive Expenditure Engine — ước tính TDEE thích ứng theo dữ liệu thực tế (cân nặng + calo đã log)
+  adaptiveExpenditure   Float?
+  expenditureStatus     String    @default("UPDATING") // UPDATING | HOLDING
+  expenditureUpdatedAt  DateTime?
+
   dailyAiQuota        Int            @default(10)
   refreshTokenHash    String?
   timezone            String         @default("Asia/Ho_Chi_Minh")

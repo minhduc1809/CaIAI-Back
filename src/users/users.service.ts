@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HealthCalculatorService } from './health-calculator.service';
+import { AdaptiveExpenditureService } from './adaptive-expenditure.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly healthCalculator: HealthCalculatorService,
+    private readonly adaptiveExpenditure: AdaptiveExpenditureService,
   ) {}
 
   /**
@@ -46,6 +48,8 @@ export class UsersService {
         targetProtein: true,
         targetCarb: true,
         targetFat: true,
+        adaptiveExpenditure: true,
+        expenditureStatus: true,
         dailyAiQuota: true,
         timezone: true,
         createdAt: true,
@@ -88,7 +92,28 @@ export class UsersService {
     const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
     const macroStyle = dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
 
-    // 3. Tính toán toàn bộ chỉ số sức khỏe tự động
+    // 3a. Tính TDEE công thức tĩnh trước (baseline & sanity bound cho Adaptive Engine)
+    const staticCalculations = this.healthCalculator.calculateAllMetrics({
+      heightCm,
+      weightKg,
+      targetWeightKg,
+      weightRateKgPerWeek,
+      bodyFatPercent,
+      dateOfBirth,
+      gender,
+      activityLevel,
+      goal,
+      macroStyle,
+    });
+
+    // 3b. Adaptive Expenditure Engine — hồi quy dữ liệu cân nặng + calo đã log thực tế
+    const expenditureResult = await this.adaptiveExpenditure.recalculate(
+      userId,
+      staticCalculations.tdee,
+      currentUser.adaptiveExpenditure,
+    );
+
+    // 3c. Tính lại Target Calories/Macro dựa trên Expenditure thích ứng (nếu có) thay vì TDEE tĩnh
     const calculations = this.healthCalculator.calculateAllMetrics({
       heightCm,
       weightKg,
@@ -100,6 +125,7 @@ export class UsersService {
       activityLevel,
       goal,
       macroStyle,
+      expenditureOverride: expenditureResult.method === 'ADAPTIVE' ? expenditureResult.estimatedExpenditure : null,
     });
 
     // 4. Cập nhật vào Database
@@ -127,6 +153,9 @@ export class UsersService {
         targetProtein: calculations.targetProtein,
         targetCarb: calculations.targetCarb,
         targetFat: calculations.targetFat,
+        adaptiveExpenditure: expenditureResult.estimatedExpenditure,
+        expenditureStatus: expenditureResult.status,
+        expenditureUpdatedAt: new Date(),
       },
       select: {
         id: true,
@@ -152,6 +181,8 @@ export class UsersService {
         targetProtein: true,
         targetCarb: true,
         targetFat: true,
+        adaptiveExpenditure: true,
+        expenditureStatus: true,
         dailyAiQuota: true,
         timezone: true,
         updatedAt: true,
@@ -175,7 +206,42 @@ export class UsersService {
         ...updatedUser,
         bmiClassification: calculations.bmiClassification,
         bmrFormula: calculations.bmrFormula,
+        expenditureMessage: expenditureResult.message,
       },
+    };
+  }
+
+  /**
+   * Xem chi tiết trạng thái Adaptive Expenditure Engine kèm hướng dẫn đọc hiểu (BRD: Expenditure Page)
+   */
+  async getExpenditureStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    const staticCalculations = this.healthCalculator.calculateAllMetrics({
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      targetWeightKg: user.targetWeightKg,
+      weightRateKgPerWeek: user.weightRateKgPerWeek,
+      bodyFatPercent: user.bodyFatPercent,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      activityLevel: user.activityLevel,
+      goal: user.goal,
+      macroStyle: user.macroStyle,
+    });
+
+    const expenditureResult = await this.adaptiveExpenditure.recalculate(
+      userId,
+      staticCalculations.tdee,
+      user.adaptiveExpenditure,
+    );
+
+    return {
+      message: 'Lấy trạng thái Expenditure thành công',
+      data: expenditureResult,
     };
   }
 
@@ -222,6 +288,8 @@ export class UsersService {
           activityLevel: user.activityLevel,
         },
         metrics: calculations,
+        adaptiveExpenditure: user.adaptiveExpenditure,
+        expenditureStatus: user.expenditureStatus,
         advice: this.generateQuickHealthAdvice(user.goal, calculations.bmi),
       },
     };
