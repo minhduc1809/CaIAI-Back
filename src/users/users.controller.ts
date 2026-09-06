@@ -46,4 +46,15 @@ export class UsersController {
   async getHealthSummary(@CurrentUser('id') userId: string) {
     return this.usersService.getHealthSummary(userId);
   }
+
+  @Get('me/expenditure')
+  @ApiOperation({
+    summary: 'Xem trạng thái Adaptive Expenditure Engine (Updating/Holding) kèm hướng dẫn đọc hiểu',
+    description:
+      'Trả về Expenditure ước tính từ dữ liệu cân nặng + calo đã log thực tế (Adaptive), hoặc TDEE công thức tĩnh nếu chưa đủ dữ liệu (Static Fallback).',
+  })
+  @ApiResponse({ status: 200, description: 'Lấy trạng thái Expenditure thành công' })
+  async getExpenditure(@CurrentUser('id') userId: string) {
+    return this.usersService.getExpenditureStatus(userId);
+  }
 }

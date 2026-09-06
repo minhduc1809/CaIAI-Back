@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HealthCalculatorService } from '../users/health-calculator.service';
+import { AdaptiveExpenditureService } from '../users/adaptive-expenditure.service';
 import { CreateWeightLogDto } from './dto/create-weight-log.dto';
 import { UpdateWeightLogDto } from './dto/update-weight-log.dto';
 
@@ -13,6 +14,7 @@ export class WeightLogsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly healthCalculator: HealthCalculatorService,
+    private readonly adaptiveExpenditure: AdaptiveExpenditureService,
   ) {}
 
   /**
@@ -38,7 +40,8 @@ export class WeightLogsService {
     });
 
     if (user) {
-      const calculations = this.healthCalculator.calculateAllMetrics({
+      // 2a. Tính TDEE công thức tĩnh trước (làm baseline & sanity bound cho Adaptive Engine)
+      const staticCalculations = this.healthCalculator.calculateAllMetrics({
         heightCm: user.heightCm,
         weightKg,
         targetWeightKg: user.targetWeightKg,
@@ -51,17 +54,42 @@ export class WeightLogsService {
         macroStyle: user.macroStyle,
       });
 
+      // 2b. Adaptive Expenditure Engine — hồi quy dữ liệu cân nặng + calo đã log thực tế
+      const expenditureResult = await this.adaptiveExpenditure.recalculate(
+        userId,
+        staticCalculations.tdee,
+        user.adaptiveExpenditure,
+      );
+
+      // 2c. Tính lại Target Calories/Macro dựa trên Expenditure thích ứng (nếu có) thay vì TDEE tĩnh
+      const finalCalculations = this.healthCalculator.calculateAllMetrics({
+        heightCm: user.heightCm,
+        weightKg,
+        targetWeightKg: user.targetWeightKg,
+        weightRateKgPerWeek: user.weightRateKgPerWeek,
+        bodyFatPercent: user.bodyFatPercent,
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        activityLevel: user.activityLevel,
+        goal: user.goal,
+        macroStyle: user.macroStyle,
+        expenditureOverride: expenditureResult.method === 'ADAPTIVE' ? expenditureResult.estimatedExpenditure : null,
+      });
+
       await this.prisma.user.update({
         where: { id: userId },
         data: {
           weightKg,
-          bmi: calculations.bmi,
-          bmr: calculations.bmr,
-          tdee: calculations.tdee,
-          targetCalories: calculations.targetCalories,
-          targetProtein: calculations.targetProtein,
-          targetCarb: calculations.targetCarb,
-          targetFat: calculations.targetFat,
+          bmi: finalCalculations.bmi,
+          bmr: finalCalculations.bmr,
+          tdee: finalCalculations.tdee,
+          targetCalories: finalCalculations.targetCalories,
+          targetProtein: finalCalculations.targetProtein,
+          targetCarb: finalCalculations.targetCarb,
+          targetFat: finalCalculations.targetFat,
+          adaptiveExpenditure: expenditureResult.estimatedExpenditure,
+          expenditureStatus: expenditureResult.status,
+          expenditureUpdatedAt: new Date(),
         },
       });
     }
