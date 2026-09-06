@@ -39,6 +39,28 @@ enum ActivityLevel {
   EXTRA_ACTIVE
 }
 
+enum StressLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DietType {
+  BALANCED
+  VEGETARIAN
+  VEGAN
+  KETO
+  LOW_CARB
+  PESCATARIAN
+  OTHER
+}
+
+enum FoodBudgetLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum MealType {
   BREAKFAST
   LUNCH
@@ -85,6 +107,17 @@ model User {
   activityLevel       ActivityLevel? @default(SEDENTARY)
   goal                GoalType?      @default(MAINTAIN)
   macroStyle          MacroStyle?    @default(BALANCED)
+
+  // Lifestyle Profile (BRD Onboarding — nhóm 6/7)
+  sleepHours          Float?
+  stressLevel         StressLevel?     @default(MEDIUM)
+  takesSupplements    Boolean?         @default(false)
+
+  // Nutrition Profile (BRD Onboarding — nhóm 7/7)
+  dietType            DietType?        @default(BALANCED)
+  mealsPerDay         Int?             @default(3)
+  cookTimeMinutes     Int?             @default(30)
+  foodBudgetLevel     FoodBudgetLevel? @default(MEDIUM)
 
   bmi                 Float?
   bmr                 Float?

@@ -3,13 +3,22 @@ import {
   IsString,
   IsNumber,
   IsEnum,
+  IsBoolean,
   IsDateString,
   Min,
   Max,
   IsUrl,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Gender, GoalType, ActivityLevel, MacroStyle } from '@prisma/client';
+import {
+  Gender,
+  GoalType,
+  ActivityLevel,
+  MacroStyle,
+  StressLevel,
+  DietType,
+  FoodBudgetLevel,
+} from '@prisma/client';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Nguyễn Văn A', description: 'Họ và tên người dùng' })
@@ -98,4 +107,45 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @ApiPropertyOptional({ example: 7.5, description: 'Số giờ ngủ trung bình mỗi đêm' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Số giờ ngủ phải là số' })
+  @Min(0, { message: 'Số giờ ngủ tối thiểu 0' })
+  @Max(24, { message: 'Số giờ ngủ tối đa 24' })
+  sleepHours?: number;
+
+  @ApiPropertyOptional({ enum: StressLevel, example: StressLevel.MEDIUM, description: 'Mức độ stress' })
+  @IsOptional()
+  @IsEnum(StressLevel, { message: 'Mức độ stress không hợp lệ (LOW, MEDIUM, HIGH)' })
+  stressLevel?: StressLevel;
+
+  @ApiPropertyOptional({ example: false, description: 'Có sử dụng thực phẩm bổ sung (supplements) hay không' })
+  @IsOptional()
+  @IsBoolean({ message: 'takesSupplements phải là boolean' })
+  takesSupplements?: boolean;
+
+  @ApiPropertyOptional({ enum: DietType, example: DietType.BALANCED, description: 'Loại chế độ ăn' })
+  @IsOptional()
+  @IsEnum(DietType, { message: 'Loại chế độ ăn không hợp lệ' })
+  dietType?: DietType;
+
+  @ApiPropertyOptional({ example: 3, description: 'Số bữa ăn mỗi ngày' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Số bữa ăn phải là số' })
+  @Min(1, { message: 'Tối thiểu 1 bữa/ngày' })
+  @Max(10, { message: 'Tối đa 10 bữa/ngày' })
+  mealsPerDay?: number;
+
+  @ApiPropertyOptional({ example: 30, description: 'Thời gian nấu ăn có sẵn (phút)' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Thời gian nấu ăn phải là số' })
+  @Min(0, { message: 'Thời gian nấu ăn tối thiểu 0 phút' })
+  @Max(300, { message: 'Thời gian nấu ăn tối đa 300 phút' })
+  cookTimeMinutes?: number;
+
+  @ApiPropertyOptional({ enum: FoodBudgetLevel, example: FoodBudgetLevel.MEDIUM, description: 'Mức ngân sách ăn uống' })
+  @IsOptional()
+  @IsEnum(FoodBudgetLevel, { message: 'Mức ngân sách không hợp lệ (LOW, MEDIUM, HIGH)' })
+  foodBudgetLevel?: FoodBudgetLevel;
 }
