@@ -80,6 +80,42 @@ enum WorkoutLevel {
   ADVANCED
 }
 
+enum TrainingGoal {
+  BUILD_MUSCLE
+  LOSE_FAT
+  STRENGTH
+  ENDURANCE
+  RECOMP
+  GENERAL_FITNESS
+}
+
+enum SessionsPerWeek {
+  ONE_TO_TWO
+  THREE_TO_FOUR
+  FIVE_TO_SIX
+  SEVEN
+}
+
+enum EquipmentAccess {
+  FULL_GYM
+  BASIC_GYM
+  HOME_DUMBBELL
+  BODYWEIGHT_ONLY
+}
+
+enum ProgramType {
+  COACHED
+  COLLABORATIVE
+  MANUAL
+}
+
+enum ProteinPreference {
+  LOW
+  MID
+  HIGH
+  VERY_HIGH
+}
+
 enum WorkoutCategory {
   STRENGTH
   CARDIO
@@ -124,6 +160,26 @@ model User {
   mealsPerDay         Int?             @default(3)
   cookTimeMinutes     Int?             @default(30)
   foodBudgetLevel     FoodBudgetLevel? @default(MEDIUM)
+
+  // Training Profile (BRD Onboarding)
+  trainingExperience    WorkoutLevel?      @default(BEGINNER)
+  trainingGoal          TrainingGoal?      @default(GENERAL_FITNESS)
+  sessionsPerWeek       SessionsPerWeek?   @default(THREE_TO_FOUR)
+  equipmentAccess       EquipmentAccess?   @default(BODYWEIGHT_ONLY)
+  injuries              String[]           @default([])
+  injuriesOtherNote     String?
+  oneRepMaxSquatKg      Float?
+  oneRepMaxBenchKg      Float?
+  oneRepMaxDeadliftKg   Float?
+
+  // Program Setup (BRD Onboarding / Goals & Program)
+  programType           ProgramType?       @default(COACHED)
+  proteinPreference     ProteinPreference? @default(MID)
+
+  // Nutrition Profile — Intermittent Fasting
+  isIntermittentFasting Boolean?           @default(false)
+  ifWindowStart         String?
+  ifWindowEnd           String?
 
   bmi                 Float?
   bmr                 Float?

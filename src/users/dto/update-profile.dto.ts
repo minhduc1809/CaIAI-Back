@@ -4,7 +4,9 @@ import {
   IsNumber,
   IsEnum,
   IsBoolean,
+  IsArray,
   IsDateString,
+  Matches,
   Min,
   Max,
   IsUrl,
@@ -18,6 +20,12 @@ import {
   StressLevel,
   DietType,
   FoodBudgetLevel,
+  WorkoutLevel,
+  TrainingGoal,
+  SessionsPerWeek,
+  EquipmentAccess,
+  ProgramType,
+  ProteinPreference,
 } from '@prisma/client';
 
 export class UpdateProfileDto {
@@ -148,4 +156,83 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsEnum(FoodBudgetLevel, { message: 'Mức ngân sách không hợp lệ (LOW, MEDIUM, HIGH)' })
   foodBudgetLevel?: FoodBudgetLevel;
+
+  @ApiPropertyOptional({ enum: WorkoutLevel, example: WorkoutLevel.BEGINNER, description: 'Kinh nghiệm tập luyện' })
+  @IsOptional()
+  @IsEnum(WorkoutLevel, { message: 'Kinh nghiệm tập luyện không hợp lệ' })
+  trainingExperience?: WorkoutLevel;
+
+  @ApiPropertyOptional({ enum: TrainingGoal, example: TrainingGoal.GENERAL_FITNESS, description: 'Mục tiêu tập luyện' })
+  @IsOptional()
+  @IsEnum(TrainingGoal, { message: 'Mục tiêu tập luyện không hợp lệ' })
+  trainingGoal?: TrainingGoal;
+
+  @ApiPropertyOptional({ enum: SessionsPerWeek, example: SessionsPerWeek.THREE_TO_FOUR, description: 'Số buổi tập mong muốn mỗi tuần' })
+  @IsOptional()
+  @IsEnum(SessionsPerWeek, { message: 'Số buổi tập mỗi tuần không hợp lệ' })
+  sessionsPerWeek?: SessionsPerWeek;
+
+  @ApiPropertyOptional({ enum: EquipmentAccess, example: EquipmentAccess.BODYWEIGHT_ONLY, description: 'Thiết bị/nơi tập sẵn có' })
+  @IsOptional()
+  @IsEnum(EquipmentAccess, { message: 'Thiết bị tập không hợp lệ' })
+  equipmentAccess?: EquipmentAccess;
+
+  @ApiPropertyOptional({ example: ['KNEE', 'SHOULDER'], description: 'Danh sách chấn thương/hạn chế vận động' })
+  @IsOptional()
+  @IsArray({ message: 'Danh sách chấn thương phải là mảng' })
+  @IsString({ each: true, message: 'Mỗi mục chấn thương phải là chuỗi' })
+  injuries?: string[];
+
+  @ApiPropertyOptional({ example: 'Đau vai phải khi nâng tạ qua đầu', description: 'Ghi chú chấn thương khác' })
+  @IsOptional()
+  @IsString()
+  injuriesOtherNote?: string;
+
+  @ApiPropertyOptional({ example: 80, description: '1RM Squat hiện tại (kg)' })
+  @IsOptional()
+  @IsNumber({}, { message: '1RM Squat phải là số' })
+  @Min(0, { message: '1RM Squat tối thiểu 0' })
+  @Max(500, { message: '1RM Squat tối đa 500' })
+  oneRepMaxSquatKg?: number;
+
+  @ApiPropertyOptional({ example: 60, description: '1RM Bench Press hiện tại (kg)' })
+  @IsOptional()
+  @IsNumber({}, { message: '1RM Bench phải là số' })
+  @Min(0, { message: '1RM Bench tối thiểu 0' })
+  @Max(500, { message: '1RM Bench tối đa 500' })
+  oneRepMaxBenchKg?: number;
+
+  @ApiPropertyOptional({ example: 100, description: '1RM Deadlift hiện tại (kg)' })
+  @IsOptional()
+  @IsNumber({}, { message: '1RM Deadlift phải là số' })
+  @Min(0, { message: '1RM Deadlift tối thiểu 0' })
+  @Max(500, { message: '1RM Deadlift tối đa 500' })
+  oneRepMaxDeadliftKg?: number;
+
+  @ApiPropertyOptional({ enum: ProgramType, example: ProgramType.COACHED, description: 'Kiểu chương trình tập' })
+  @IsOptional()
+  @IsEnum(ProgramType, { message: 'Kiểu chương trình không hợp lệ' })
+  programType?: ProgramType;
+
+  @ApiPropertyOptional({ enum: ProteinPreference, example: ProteinPreference.MID, description: 'Mức ưu tiên Protein' })
+  @IsOptional()
+  @IsEnum(ProteinPreference, { message: 'Mức ưu tiên Protein không hợp lệ' })
+  proteinPreference?: ProteinPreference;
+
+  @ApiPropertyOptional({ example: false, description: 'Có áp dụng nhịn ăn gián đoạn (Intermittent Fasting) hay không' })
+  @IsOptional()
+  @IsBoolean({ message: 'isIntermittentFasting phải là boolean' })
+  isIntermittentFasting?: boolean;
+
+  @ApiPropertyOptional({ example: '12:00', description: 'Giờ bắt đầu khung ăn (Intermittent Fasting), định dạng HH:mm' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Định dạng giờ phải là HH:mm' })
+  ifWindowStart?: string;
+
+  @ApiPropertyOptional({ example: '20:00', description: 'Giờ kết thúc khung ăn (Intermittent Fasting), định dạng HH:mm' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Định dạng giờ phải là HH:mm' })
+  ifWindowEnd?: string;
 }
