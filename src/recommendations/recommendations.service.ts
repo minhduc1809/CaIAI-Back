@@ -329,6 +329,8 @@ export class RecommendationsService {
         userId,
         name: dto.name,
         servingSize: dto.servingSize || null,
+        servingAmount: dto.servingAmount ?? null,
+        servingUnit: dto.servingUnit || null,
         calories: dto.calories,
         protein: dto.protein || 0,
         carb: dto.carb || 0,
@@ -376,6 +378,49 @@ export class RecommendationsService {
     return {
       message: 'Xóa món ăn riêng thành công',
     };
+  }
+
+  /**
+   * Tra cứu thông tin dinh dưỡng theo mã vạch (Barcode Scanner) qua OpenFoodFacts API công khai.
+   * Nutriments của OpenFoodFacts tính theo 100g/100ml — quy đổi sẵn về "1 khẩu phần chuẩn" (100g) để app dùng trực tiếp.
+   */
+  async lookupBarcode(barcode: string) {
+    try {
+      const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const json = await response.json();
+
+      if (json.status !== 1 || !json.product) {
+        return {
+          message: 'Không tìm thấy sản phẩm với mã vạch này',
+          data: null,
+        };
+      }
+
+      const product = json.product;
+      const nutriments = product.nutriments || {};
+
+      return {
+        message: 'Tra cứu mã vạch thành công',
+        data: {
+          barcode,
+          name: product.product_name || product.product_name_vi || 'Sản phẩm không tên',
+          brand: product.brands || null,
+          imageUrl: product.image_url || null,
+          servingSize: product.serving_size || '100g',
+          servingAmount: 100,
+          servingUnit: 'GRAM',
+          calories: Math.round((nutriments['energy-kcal_100g'] || 0) * 10) / 10,
+          protein: Math.round((nutriments['proteins_100g'] || 0) * 10) / 10,
+          carb: Math.round((nutriments['carbohydrates_100g'] || 0) * 10) / 10,
+          fat: Math.round((nutriments['fat_100g'] || 0) * 10) / 10,
+        },
+      };
+    } catch (error) {
+      return {
+        message: 'Không thể tra cứu mã vạch lúc này, vui lòng thử lại',
+        data: null,
+      };
+    }
   }
 
   /**

@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealType } from '@prisma/client';
+import { MealType, ServingUnit } from '@prisma/client';
 
 export class CreateMealItemDto {
   @ApiProperty({ example: 'Phở bò tái', description: 'Tên món ăn' })
@@ -19,10 +19,21 @@ export class CreateMealItemDto {
   @IsNotEmpty({ message: 'Tên món ăn không được để trống' })
   name: string;
 
-  @ApiPropertyOptional({ example: '1 tô vừa (~350g)', description: 'Khẩu phần / Đơn vị tính' })
+  @ApiPropertyOptional({ example: '1 tô vừa (~350g)', description: 'Khẩu phần / Đơn vị tính (mô tả tự do, hiển thị)' })
   @IsOptional()
   @IsString()
   servingSize?: string;
+
+  @ApiPropertyOptional({ example: 350, description: 'Số lượng khẩu phần chuẩn hóa (đi kèm servingUnit)' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Số lượng khẩu phần phải là số' })
+  @Min(0, { message: 'Số lượng khẩu phần tối thiểu 0' })
+  servingAmount?: number;
+
+  @ApiPropertyOptional({ enum: ServingUnit, example: ServingUnit.GRAM, description: 'Đơn vị khẩu phần chuẩn hóa (GRAM, ML, PORTION)' })
+  @IsOptional()
+  @IsEnum(ServingUnit, { message: 'Đơn vị khẩu phần không hợp lệ (GRAM, ML, PORTION)' })
+  servingUnit?: ServingUnit;
 
   @ApiPropertyOptional({ example: 1, description: 'Số lượng' })
   @IsOptional()

@@ -48,6 +48,8 @@ export class MealsService {
           create: items.map((item) => ({
             name: item.name,
             servingSize: item.servingSize || null,
+            servingAmount: item.servingAmount ?? null,
+            servingUnit: item.servingUnit || null,
             quantity: item.quantity || 1,
             calories: item.calories,
             protein: item.protein || 0,

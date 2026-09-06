@@ -61,6 +61,12 @@ enum FoodBudgetLevel {
   HIGH
 }
 
+enum ServingUnit {
+  GRAM
+  ML
+  PORTION
+}
+
 enum MealType {
   BREAKFAST
   LUNCH
@@ -177,6 +183,8 @@ model MealItem {
   meal         Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
   name         String
   servingSize  String?
+  servingAmount Float?
+  servingUnit  ServingUnit? @default(PORTION)
   quantity     Float    @default(1)
   calories     Float
   protein      Float
@@ -202,6 +210,8 @@ model CustomFood {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   servingSize String?
+  servingAmount Float?
+  servingUnit ServingUnit? @default(PORTION)
   calories    Float
   protein     Float    @default(0)
   carb        Float    @default(0)

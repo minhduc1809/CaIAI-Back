@@ -1,5 +1,6 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ServingUnit } from '@prisma/client';
 
 export class CreateCustomFoodDto {
   @ApiProperty({ example: 'Cơm gạo lứt thịt kho trứng', description: 'Tên món ăn tự tạo' })
@@ -7,10 +8,21 @@ export class CreateCustomFoodDto {
   @IsNotEmpty({ message: 'Tên món ăn không được để trống' })
   name: string;
 
-  @ApiPropertyOptional({ example: '1 phần (300g)', description: 'Khẩu phần / Đơn vị tính' })
+  @ApiPropertyOptional({ example: '1 phần (300g)', description: 'Khẩu phần / Đơn vị tính (mô tả tự do, hiển thị)' })
   @IsOptional()
   @IsString()
   servingSize?: string;
+
+  @ApiPropertyOptional({ example: 300, description: 'Số lượng khẩu phần chuẩn hóa (đi kèm servingUnit)' })
+  @IsOptional()
+  @IsNumber({}, { message: 'Số lượng khẩu phần phải là số' })
+  @Min(0, { message: 'Số lượng khẩu phần tối thiểu 0' })
+  servingAmount?: number;
+
+  @ApiPropertyOptional({ enum: ServingUnit, example: ServingUnit.GRAM, description: 'Đơn vị khẩu phần chuẩn hóa (GRAM, ML, PORTION)' })
+  @IsOptional()
+  @IsEnum(ServingUnit, { message: 'Đơn vị khẩu phần không hợp lệ (GRAM, ML, PORTION)' })
+  servingUnit?: ServingUnit;
 
   @ApiProperty({ example: 480, description: 'Lượng Calo (kcal)' })
   @IsNumber({}, { message: 'Calories phải là số' })

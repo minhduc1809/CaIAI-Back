@@ -97,6 +97,13 @@ export class RecommendationsController {
     return this.recommendationsService.getExerciseDetail(exerciseId);
   }
 
+  @Get('barcode/:code')
+  @ApiOperation({ summary: 'Tra cứu thông tin dinh dưỡng theo mã vạch sản phẩm (qua OpenFoodFacts)' })
+  @ApiResponse({ status: 200, description: 'Tra cứu mã vạch thành công (data null nếu không tìm thấy)' })
+  async lookupBarcode(@Param('code') code: string) {
+    return this.recommendationsService.lookupBarcode(code);
+  }
+
   // --- CUSTOM FOODS (Món ăn tự tạo của người dùng) ---
   @Post('custom-foods')
   @HttpCode(HttpStatus.CREATED)
