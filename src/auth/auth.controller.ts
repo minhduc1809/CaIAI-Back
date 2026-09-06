@@ -14,6 +14,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -72,6 +74,36 @@ export class AuthController {
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(userId, changePasswordDto);
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đăng nhập/Đăng ký bằng Google Sign-In (idToken)' })
+  @ApiResponse({ status: 200, description: 'Đăng nhập Google thành công, trả về User & Tokens' })
+  @ApiResponse({ status: 401, description: 'idToken không hợp lệ' })
+  async loginWithGoogle(@Body() googleLoginDto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(googleLoginDto.idToken);
+  }
+
+  @Post('send-verification-email')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Gửi (hoặc gửi lại) mã OTP xác thực email' })
+  @ApiResponse({ status: 200, description: 'Đã gửi mã xác thực' })
+  async sendVerificationEmail(@CurrentUser('id') userId: string) {
+    return this.authService.sendVerificationEmail(userId);
+  }
+
+  @Post('verify-email')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Xác thực email bằng mã OTP' })
+  @ApiResponse({ status: 200, description: 'Xác thực thành công' })
+  @ApiResponse({ status: 400, description: 'Mã không hợp lệ hoặc đã hết hạn' })
+  async verifyEmail(@CurrentUser('id') userId: string, @Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(userId, verifyEmailDto.code);
   }
 
   @Delete('me')

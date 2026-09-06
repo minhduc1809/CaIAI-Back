@@ -3,12 +3,15 @@ import {
   ConflictException,
   UnauthorizedException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { OAuth2Client } from 'google-auth-library';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -16,12 +19,16 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly googleClient: OAuth2Client;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly mailService: MailService,
+  ) {
+    this.googleClient = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
+  }
 
   /**
    * Đăng ký tài khoản người dùng mới (bằng username)
@@ -69,6 +76,13 @@ export class AuthService {
     // 6. Lưu hashed refresh token vào DB
     await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
 
+    // 7. Nếu có email, gửi mã xác thực (không chặn luồng đăng ký nếu gửi lỗi)
+    if (user.email) {
+      this.sendVerificationEmail(user.id).catch((err) =>
+        this.logger.error(`Gửi email xác thực thất bại cho user ${user.id}: ${err.message}`),
+      );
+    }
+
     return {
       message: 'Đăng ký tài khoản thành công',
       data: {
@@ -78,10 +92,176 @@ export class AuthService {
           email: user.email,
           name: user.name,
           role: user.role,
+          isEmailVerified: user.isEmailVerified,
         },
         ...tokens,
       },
     };
+  }
+
+  /**
+   * Sinh mã OTP 6 số, lưu vào DB kèm hạn 15 phút, và gửi email xác thực
+   */
+  async sendVerificationEmail(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+    if (!user.email) {
+      throw new BadRequestException('Tài khoản chưa có địa chỉ email để xác thực');
+    }
+    if (user.isEmailVerified) {
+      throw new ConflictException('Email này đã được xác thực');
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerificationCode: code,
+        emailVerificationExpiresAt: expiresAt,
+      },
+    });
+
+    await this.mailService.sendVerificationCode(user.email, code);
+
+    return { message: 'Mã xác thực đã được gửi tới email của bạn' };
+  }
+
+  /**
+   * Xác thực email bằng mã OTP đã gửi
+   */
+  async verifyEmail(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+    if (user.isEmailVerified) {
+      throw new ConflictException('Email này đã được xác thực');
+    }
+    if (!user.emailVerificationCode || !user.emailVerificationExpiresAt) {
+      throw new BadRequestException('Chưa có mã xác thực nào được gửi. Vui lòng yêu cầu gửi lại.');
+    }
+    if (user.emailVerificationExpiresAt < new Date()) {
+      throw new BadRequestException('Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi lại.');
+    }
+    if (user.emailVerificationCode !== code) {
+      throw new BadRequestException('Mã xác thực không chính xác');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isEmailVerified: true,
+        emailVerifiedAt: new Date(),
+        emailVerificationCode: null,
+        emailVerificationExpiresAt: null,
+      },
+    });
+
+    return { message: 'Xác thực email thành công' };
+  }
+
+  /**
+   * Đăng nhập/Đăng ký bằng Google Sign-In (idToken xác thực qua Credential Manager phía Android)
+   */
+  async loginWithGoogle(idToken: string) {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId) {
+      throw new BadRequestException('Server chưa cấu hình GOOGLE_CLIENT_ID');
+    }
+
+    let payload: any;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({ idToken, audience: clientId });
+      payload = ticket.getPayload();
+    } catch (e) {
+      throw new UnauthorizedException('idToken Google không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!payload?.sub || !payload?.email) {
+      throw new UnauthorizedException('Không lấy được thông tin tài khoản Google');
+    }
+
+    const googleId = payload.sub;
+    const email = payload.email.toLowerCase();
+
+    let user = await this.prisma.user.findUnique({ where: { googleId } });
+
+    if (!user) {
+      // Chưa có tài khoản Google này — kiểm tra xem email đã tồn tại (đăng ký local trước đó) chưa
+      user = await this.prisma.user.findUnique({ where: { email } });
+
+      if (user) {
+        // Liên kết tài khoản local hiện có với Google
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId,
+            isEmailVerified: true,
+            emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          },
+        });
+      } else {
+        const cleanUsername = await this.generateUniqueUsernameFromEmail(email);
+        user = await this.prisma.user.create({
+          data: {
+            username: cleanUsername,
+            email,
+            password: null,
+            name: payload.name || cleanUsername,
+            avatar: payload.picture || null,
+            authProvider: 'GOOGLE',
+            googleId,
+            isEmailVerified: true,
+            emailVerifiedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    if (!user.isActive) {
+      throw new ForbiddenException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.');
+    }
+
+    const tokens = await this.generateTokens(user.id, user.username, user.role);
+    await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+
+    return {
+      message: 'Đăng nhập bằng Google thành công',
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          isEmailVerified: user.isEmailVerified,
+        },
+        ...tokens,
+      },
+    };
+  }
+
+  /**
+   * Sinh username duy nhất từ phần trước @ của email (thêm hậu tố số nếu trùng)
+   */
+  private async generateUniqueUsernameFromEmail(email: string): Promise<string> {
+    const base = email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 25) || 'user';
+
+    let candidate = base;
+    let suffix = 0;
+    while (await this.prisma.user.findUnique({ where: { username: candidate } })) {
+      suffix += 1;
+      candidate = `${base}${suffix}`;
+    }
+    return candidate;
   }
 
   /**
@@ -110,7 +290,10 @@ export class AuthService {
       throw new ForbiddenException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.');
     }
 
-    // 3. Đối chiếu mật khẩu
+    // 3. Đối chiếu mật khẩu (tài khoản đăng nhập bằng Google không có mật khẩu local)
+    if (!user.password) {
+      throw new UnauthorizedException('Tài khoản này đăng nhập bằng Google. Vui lòng dùng Đăng nhập với Google.');
+    }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không chính xác');
@@ -204,6 +387,9 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+    if (!user.password) {
+      throw new ConflictException('Tài khoản này đăng nhập bằng Google, không có mật khẩu để đổi');
     }
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
