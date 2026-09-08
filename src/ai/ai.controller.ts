@@ -123,15 +123,15 @@ export class AiController {
   }
 
   // =========================================================================
-  // 2. AI CHATBOT COACH & QUOTA TIN NHẮN (10 TIN/NGÀY + MUA THÊM TIN NHẮN)
+  // 2. AI CHATBOT COACH & CÁC BẢN NÂNG CẤP (BẢN PLUS, PRO, MAX)
   // =========================================================================
 
   @Get('chat/packages')
   @ApiOperation({
-    summary: 'Lấy danh sách các gói nạp thêm token AI Coach',
-    description: 'Danh sách các gói nạp token giúp người dùng trò chuyện nhiều hơn với AI Coach (+200k, +500k, +1 triệu tokens).',
+    summary: 'Lấy danh sách các bản nâng cấp AI Coach (Plus, Pro, Max)',
+    description: 'Danh sách 3 bản nâng cấp thành viên giúp người dùng trò chuyện sâu hơn và mở rộng hạn mức với AI Coach (Plus, Pro, Max).',
   })
-  @ApiResponse({ status: 200, description: 'Danh sách gói token' })
+  @ApiResponse({ status: 200, description: 'Danh sách bản nâng cấp' })
   getChatPackages(): ChatPackageInfo[] {
     return this.aiService.getAvailableChatPackages();
   }
@@ -140,8 +140,8 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Nạp thêm token AI Coach (Tăng thêm token, không hết hạn)',
-    description: 'Nạp thêm token vào tài khoản (+200k, +500k, +1M). Hệ thống luôn ưu tiên dùng hết 50,000 token miễn phí mỗi ngày trước.',
+    summary: 'Nâng cấp bản AI Coach (Bản Plus, Pro, Max - Không hết hạn)',
+    description: 'Nâng cấp tài khoản lên bản Plus, Pro hoặc Max. Hệ thống luôn ưu tiên dùng hết lượt miễn phí mỗi ngày trước.',
   })
   @ApiResponse({ status: 200, type: ChatQuotaInfoDto })
   async purchaseChatQuota(
@@ -155,7 +155,7 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Kiểm tra hạn mức token AI Coach (50k token free/ngày + Token đã mua)',
+    summary: 'Kiểm tra trạng thái hạn mức trò chuyện AI Coach (Bản hiện tại & tỷ lệ còn lại)',
   })
   @ApiResponse({ status: 200, type: ChatQuotaInfoDto })
   async getChatQuota(@CurrentUser('id') userId: string): Promise<ChatQuotaInfoDto> {

@@ -15,19 +15,29 @@ export class ChatMessageDto {
 }
 
 export class ChatQuotaInfoDto {
-  @ApiProperty({ example: 50000, description: 'Hạn mức token miễn phí mỗi ngày (50k tokens/ngày)' })
-  dailyFreeLimit: number;
+  @ApiProperty({ example: true, description: 'Người dùng còn hạn mức để trò chuyện hay không' })
+  hasQuota: boolean;
 
-  @ApiProperty({ example: 42500, description: 'Số token miễn phí còn lại hôm nay' })
-  freeRemaining: number;
+  @ApiProperty({ example: 'PRO', enum: ['FREE', 'PLUS', 'PRO', 'MAX'], description: 'Gói thành viên AI Coach hiện tại' })
+  currentTier: 'FREE' | 'PLUS' | 'PRO' | 'MAX';
 
-  @ApiProperty({ example: 200000, description: 'Số token đã mua thêm còn lại (vĩnh viễn, không hết hạn)' })
-  purchasedCredits: number;
+  @ApiProperty({ example: 'Gói Pro', description: 'Tên hiển thị của gói thành viên' })
+  tierName: string;
 
-  @ApiProperty({ example: 242500, description: 'Tổng số token có thể sử dụng ngay bây giờ' })
-  totalRemaining: number;
+  @ApiProperty({ example: 85, description: 'Tỷ lệ % hạn mức trò chuyện còn lại' })
+  remainingPercent: number;
 
-  @ApiProperty({ example: '2026-09-09T00:00:00+07:00', description: 'Thời điểm reset 50k token miễn phí tiếp theo' })
+  @ApiProperty({
+    example: 'COMFORTABLE',
+    enum: ['COMFORTABLE', 'GOOD', 'LOW', 'EXHAUSTED'],
+    description: 'Trạng thái dung lượng trò chuyện',
+  })
+  status: 'COMFORTABLE' | 'GOOD' | 'LOW' | 'EXHAUSTED';
+
+  @ApiProperty({ example: 'Hạn mức trò chuyện dồi dào', description: 'Thông báo trạng thái thân thiện' })
+  statusMessage: string;
+
+  @ApiProperty({ example: '2026-09-09T00:00:00+07:00', description: 'Thời điểm làm mới lượt miễn phí tiếp theo' })
   resetsAt: string;
 }
 
@@ -35,10 +45,7 @@ export class ChatResponseDto {
   @ApiProperty({ description: 'Tin nhắn trả lời từ AI Coach' })
   reply: string;
 
-  @ApiProperty({ example: 650, description: 'Số token tiêu thụ cho lượt trò chuyện này (prompt + context + reply)' })
-  tokensUsed: number;
-
-  @ApiProperty({ description: 'Thông tin quota token sau khi chat', type: () => ChatQuotaInfoDto })
+  @ApiProperty({ description: 'Thông tin trạng thái hạn mức sau khi gửi tin nhắn', type: () => ChatQuotaInfoDto })
   quota: ChatQuotaInfoDto;
 }
 
@@ -49,6 +56,6 @@ export class ChatHistoryResponseDto {
   @ApiProperty({ description: 'Tổng số tin nhắn hiện có trong 7 ngày' })
   totalMessages: number;
 
-  @ApiProperty({ description: 'Thông tin hạn mức token', type: () => ChatQuotaInfoDto })
+  @ApiProperty({ description: 'Thông tin trạng thái hạn mức', type: () => ChatQuotaInfoDto })
   quota: ChatQuotaInfoDto;
 }

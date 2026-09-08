@@ -1,24 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
 
-export enum ChatTokenPackageId {
-  TOKEN_200K = 'TOKEN_200K',
-  TOKEN_500K = 'TOKEN_500K',
-  TOKEN_1M = 'TOKEN_1M',
+export enum ChatPlanPackageId {
+  PLUS = 'PLUS',
+  PRO = 'PRO',
+  MAX = 'MAX',
   CUSTOM = 'CUSTOM',
 }
 
 export class PurchaseChatQuotaDto {
   @ApiProperty({
-    enum: ChatTokenPackageId,
-    description: 'Gói nạp token AI Coach: TOKEN_200K (+200k tokens), TOKEN_500K (+500k tokens), TOKEN_1M (+1 triệu tokens), CUSTOM',
-    example: ChatTokenPackageId.TOKEN_200K,
+    enum: ChatPlanPackageId,
+    description: 'Bản nâng cấp AI Coach: PLUS (Bản Plus), PRO (Bản Pro - Phổ biến nhất), MAX (Bản Max - Cao cấp nhất), CUSTOM',
+    example: ChatPlanPackageId.PRO,
   })
-  @IsEnum(ChatTokenPackageId)
-  packageId: ChatTokenPackageId;
+  @IsEnum(ChatPlanPackageId)
+  packageId: ChatPlanPackageId;
 
   @ApiPropertyOptional({
-    description: 'Số token tuỳ chọn nếu packageId = CUSTOM (ví dụ: 300000)',
+    description: 'Hạn mức bổ sung tuỳ chọn nếu packageId = CUSTOM',
     example: 300000,
   })
   @IsOptional()

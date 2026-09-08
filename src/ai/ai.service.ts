@@ -6,7 +6,7 @@ import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
 import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dto';
 import { ChatQuotaInfoDto, ChatResponseDto, ChatHistoryResponseDto, ChatMessageDto } from './dto/chat-history-response.dto';
-import { PurchaseChatQuotaDto, ChatTokenPackageId } from './dto/purchase-chat-quota.dto';
+import { PurchaseChatQuotaDto, ChatPlanPackageId } from './dto/purchase-chat-quota.dto';
 import { SuggestMealResponseDto, SuggestedMealItemDto, NutritionGapDto } from './dto/suggest-meal-response.dto';
 import { ScanMenuResponseDto, MenuItemDto } from './dto/menu-scan.dto';
 
@@ -69,30 +69,30 @@ export class AiService {
   ];
 
   /**
-   * Danh mục các gói nạp thêm token trò chuyện AI Coach (Tăng thêm 200k, 500k, 1M tokens)
+   * Danh mục 3 bản nâng cấp AI Coach (Plus, Pro, Max)
    */
-  public static readonly CHAT_TOKEN_PACKAGES: ChatPackageInfo[] = [
+  public static readonly CHAT_PLANS: ChatPackageInfo[] = [
     {
-      id: 'TOKEN_200K',
-      name: 'Gói 200K Tokens',
+      id: 'PLUS',
+      name: 'Bản Plus',
       credits: 200000,
       priceVnd: 29000,
-      description: 'Nạp thêm 200,000 tokens AI Coach (không hết hạn, dùng sau khi hết 50k token free/ngày)',
+      description: 'Mở rộng trò chuyện với AI Coach, phân tích sâu thực đơn & chế độ ăn mỗi ngày',
     },
     {
-      id: 'TOKEN_500K',
-      name: 'Gói 500K Tokens',
+      id: 'PRO',
+      name: 'Bản Pro',
       credits: 500000,
       priceVnd: 59000,
-      description: 'Nạp thêm 500,000 tokens AI Coach (tiết kiệm 20%, không hết hạn)',
+      description: 'Trò chuyện không giới hạn, phân tích dinh dưỡng cá nhân hóa chuyên sâu suốt tháng',
       isPopular: true,
     },
     {
-      id: 'TOKEN_1M',
-      name: 'Gói 1 Triệu Tokens',
+      id: 'MAX',
+      name: 'Bản Max',
       credits: 1000000,
       priceVnd: 99000,
-      description: 'Nạp thêm 1,000,000 tokens AI Coach (tiết kiệm 35%, thoải mái trò chuyện dài hạn)',
+      description: 'Bản cao cấp nhất - Huấn luyện viên AI toàn diện đồng hành mọi lúc mọi nơi',
       bestValue: true,
     },
   ];
@@ -251,29 +251,29 @@ export class AiService {
   }
 
   // =========================================================================
-  // PHẦN 2: QUẢN LÝ QUOTA & GÓI CHAT AI COACH THEO TOKEN (50K TOKEN/NGÀY + MUA TOKEN)
+  // PHẦN 2: QUẢN LÝ CÁC BẢN NÂNG CẤP CHAT AI COACH (BẢN PLUS, PRO, MAX)
   // =========================================================================
 
   getAvailableChatPackages(): ChatPackageInfo[] {
-    return AiService.CHAT_TOKEN_PACKAGES;
+    return AiService.CHAT_PLANS;
   }
 
   async purchaseChatCredits(userId: string, dto: PurchaseChatQuotaDto): Promise<ChatQuotaInfoDto> {
     let creditsToAdd = 0;
 
-    if (dto.packageId === ChatTokenPackageId.CUSTOM) {
+    if (dto.packageId === ChatPlanPackageId.CUSTOM) {
       if (!dto.customCredits || dto.customCredits <= 0) {
-        throw new BadRequestException('Vui lòng nhập số token customCredits hợp lệ (> 0).');
+        throw new BadRequestException('Vui lòng nhập hạn mức customCredits hợp lệ (> 0).');
       }
       creditsToAdd = dto.customCredits;
     } else {
-      const pkg = AiService.CHAT_TOKEN_PACKAGES.find((p) => p.id === dto.packageId);
-      if (!pkg) {
+      const plan = AiService.CHAT_PLANS.find((p) => p.id === dto.packageId);
+      if (!plan) {
         throw new BadRequestException(
-          `Gói token '${dto.packageId}' không tồn tại. Vui lòng chọn: ${AiService.CHAT_TOKEN_PACKAGES.map((p) => p.id).join(', ')}`,
+          `Bản nâng cấp '${dto.packageId}' không tồn tại. Vui lòng chọn: ${AiService.CHAT_PLANS.map((p) => p.id).join(', ')}`,
         );
       }
-      creditsToAdd = pkg.credits;
+      creditsToAdd = plan.credits;
     }
 
     await this.prisma.user.update({
@@ -283,7 +283,7 @@ export class AiService {
       },
     });
 
-    this.logger.log(`User ${userId} đã nạp thành công ${creditsToAdd.toLocaleString()} tokens AI Coach`);
+    this.logger.log(`User ${userId} đã nâng cấp thành công gói ${dto.packageId} AI Coach`);
     return this.getDailyChatQuota(userId);
   }
 
@@ -296,7 +296,7 @@ export class AiService {
     const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
     const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
 
-    // Tính tổng số token đã dùng trong ngày hôm nay từ ApiUsageLog
+    // Tính tổng dung lượng đã dùng trong ngày hôm nay từ ApiUsageLog
     const usageToday = await this.prisma.apiUsageLog.findMany({
       where: {
         userId,
@@ -311,16 +311,49 @@ export class AiService {
       0,
     );
 
-    const dailyFreeLimit = AiService.DAILY_CHAT_TOKEN_LIMIT; // 50,000 tokens
+    const dailyFreeLimit = AiService.DAILY_CHAT_TOKEN_LIMIT; // 50,000
     const freeRemaining = Math.max(0, dailyFreeLimit - freeUsedToday);
     const purchasedCredits = Math.max(0, user?.purchasedChatQuota ?? 0);
     const totalRemaining = freeRemaining + purchasedCredits;
 
+    // Xác định bản nâng cấp hiện tại của người dùng
+    let currentTier: 'FREE' | 'PLUS' | 'PRO' | 'MAX' = 'FREE';
+    let tierName = 'Bản Miễn Phí';
+    if (purchasedCredits >= 1000000) {
+      currentTier = 'MAX';
+      tierName = 'Bản Max';
+    } else if (purchasedCredits >= 500000) {
+      currentTier = 'PRO';
+      tierName = 'Bản Pro';
+    } else if (purchasedCredits >= 200000) {
+      currentTier = 'PLUS';
+      tierName = 'Bản Plus';
+    }
+
+    const totalCapacity = dailyFreeLimit + purchasedCredits;
+    const remainingPercent = Math.min(100, Math.max(0, Math.round((totalRemaining / totalCapacity) * 100)));
+    const hasQuota = totalRemaining > 0;
+
+    let status: 'COMFORTABLE' | 'GOOD' | 'LOW' | 'EXHAUSTED' = 'COMFORTABLE';
+    let statusMessage = 'Hạn mức trò chuyện rất dồi dào';
+    if (!hasQuota) {
+      status = 'EXHAUSTED';
+      statusMessage = 'Đã sử dụng hết lượt trò chuyện hôm nay';
+    } else if (remainingPercent <= 20) {
+      status = 'LOW';
+      statusMessage = 'Sắp hết lượt trò chuyện hôm nay';
+    } else if (remainingPercent <= 60) {
+      status = 'GOOD';
+      statusMessage = 'Hạn mức trò chuyện ổn định';
+    }
+
     return {
-      dailyFreeLimit,
-      freeRemaining,
-      purchasedCredits,
-      totalRemaining,
+      hasQuota,
+      currentTier,
+      tierName,
+      remainingPercent,
+      status,
+      statusMessage,
       resetsAt: resetsAt.toISOString(),
     };
   }
@@ -330,85 +363,61 @@ export class AiService {
   ): Promise<{ quota: ChatQuotaInfoDto; usedQuotaType: 'FREE' | 'PURCHASED' }> {
     const quota = await this.getDailyChatQuota(userId);
 
-    if (quota.totalRemaining <= 0) {
+    if (!quota.hasQuota) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
           message:
-            'Bạn đã sử dụng hết 50,000 tokens AI Coach miễn phí hôm nay và không còn đủ token mua thêm. Hãy nạp thêm gói token (+200k, +500k, +1M) để tiếp tục trò chuyện hoặc quay lại vào ngày mai nhé!',
+            'Bạn đã sử dụng hết lượt trò chuyện AI Coach miễn phí hôm nay. Hãy nâng cấp lên bản Plus, Pro hoặc Max để tiếp tục trò chuyện hoặc quay lại vào ngày mai nhé!',
           error: 'Too Many Requests',
-          dailyFreeLimit: quota.dailyFreeLimit,
-          freeRemaining: 0,
-          purchasedCredits: 0,
-          totalRemaining: 0,
+          hasQuota: false,
+          currentTier: quota.currentTier,
+          tierName: quota.tierName,
+          remainingPercent: 0,
+          status: 'EXHAUSTED',
+          statusMessage: 'Đã hết lượt trò chuyện hôm nay',
           resetsAt: quota.resetsAt,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
-    const usedQuotaType: 'FREE' | 'PURCHASED' = quota.freeRemaining > 0 ? 'FREE' : 'PURCHASED';
+    // Đếm lại freeRemaining để biết đang trừ vào free hay purchased
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const { startOfDay } = this.getTimezoneDayBounds(user?.timezone || 'Asia/Ho_Chi_Minh');
+    const logsToday = await this.prisma.apiUsageLog.findMany({
+      where: { userId, feature: 'chat_coach', createdAt: { gte: startOfDay } },
+      select: { promptTokens: true, outputTokens: true },
+    });
+    const used = logsToday.reduce((acc, l) => acc + (l.promptTokens || 0) + (l.outputTokens || 0), 0);
+    const usedQuotaType: 'FREE' | 'PURCHASED' = used < AiService.DAILY_CHAT_TOKEN_LIMIT ? 'FREE' : 'PURCHASED';
+
     return { quota, usedQuotaType };
   }
 
   private async deductChatQuotaAfterSuccess(
     userId: string,
     usedQuotaType: 'FREE' | 'PURCHASED',
-    quota: ChatQuotaInfoDto,
     tokens: { promptTokens: number; outputTokens: number; costUsd: number },
   ): Promise<ChatQuotaInfoDto> {
     const totalTokensConsumed = tokens.promptTokens + tokens.outputTokens;
 
     if (usedQuotaType === 'FREE') {
-      if (totalTokensConsumed <= quota.freeRemaining) {
-        // Đủ quota miễn phí
-        await this.logApiUsage(userId, 'chat_coach', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
-        const newFree = Math.max(0, quota.freeRemaining - totalTokensConsumed);
-        return {
-          ...quota,
-          freeRemaining: newFree,
-          totalRemaining: newFree + quota.purchasedCredits,
-        };
-      } else {
-        // Vượt quá phần free còn lại -> trừ hết phần free, phần dôi dư trừ vào purchased
-        const overflow = totalTokensConsumed - quota.freeRemaining;
-        await this.logApiUsage(userId, 'chat_coach', quota.freeRemaining, 0, tokens.costUsd);
-
-        const deductFromPurchased = Math.min(quota.purchasedCredits, overflow);
-        if (deductFromPurchased > 0) {
-          await this.prisma.user.update({
-            where: { id: userId },
-            data: { purchasedChatQuota: { decrement: deductFromPurchased } },
-          });
-          await this.logApiUsage(userId, 'chat_coach_paid', deductFromPurchased, 0, 0);
-        }
-
-        const newPurchased = Math.max(0, quota.purchasedCredits - deductFromPurchased);
-        return {
-          ...quota,
-          freeRemaining: 0,
-          purchasedCredits: newPurchased,
-          totalRemaining: newPurchased,
-        };
-      }
+      await this.logApiUsage(userId, 'chat_coach', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
     } else {
-      // Đã hết 50k free -> Trừ thẳng vào token đã mua (purchasedChatQuota)
-      const deductAmount = Math.min(quota.purchasedCredits, totalTokensConsumed);
       await this.prisma.user.update({
         where: { id: userId },
         data: {
-          purchasedChatQuota: { decrement: deductAmount },
+          purchasedChatQuota: { decrement: totalTokensConsumed },
         },
       });
       await this.logApiUsage(userId, 'chat_coach_paid', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
-      const newPurchased = Math.max(0, quota.purchasedCredits - deductAmount);
-      return {
-        ...quota,
-        freeRemaining: 0,
-        purchasedCredits: newPurchased,
-        totalRemaining: newPurchased,
-      };
     }
+
+    return this.getDailyChatQuota(userId);
   }
 
   // =========================================================================
@@ -632,9 +641,9 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
       this.logger.error(`Failed to save chat message: ${e.message}`);
     }
 
-    // 9. Khấu trừ quota tokens theo số token tiêu thụ thực tế
+    // 9. Khấu trừ quota dung lượng theo mức tiêu thụ thực tế
     const tokensUsed = promptTokens + outputTokens;
-    const updatedQuota = await this.deductChatQuotaAfterSuccess(userId, usedQuotaType, quota, {
+    const updatedQuota = await this.deductChatQuotaAfterSuccess(userId, usedQuotaType, {
       promptTokens,
       outputTokens,
       costUsd: (tokensUsed / 1000) * 0.00015,
@@ -642,7 +651,6 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
 
     return {
       reply,
-      tokensUsed,
       quota: updatedQuota,
     };
   }
