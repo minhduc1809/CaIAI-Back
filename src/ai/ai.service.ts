@@ -672,6 +672,167 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
     return `Chào bạn! Dựa trên mục tiêu dinh dưỡng hôm nay (còn thiếu ${remainingCalories > 0 ? remainingCalories : 0} kcal, ${remainingProtein > 0 ? remainingProtein : 0}g protein), tôi khuyến nghị bạn tập trung vào nguồn đạm sạch (ức gà, cá basa, trứng chần, đậu hũ) kết hợp nhiều rau xanh. Nếu bạn cần gợi ý thực đơn cụ thể cho từng bữa, cứ hỏi tôi nhé!`;
   }
 
+  // =========================================================================
+  // PHẦN 5: AI SUGGEST MEAL (GỢI Ý MÓN ĂN VIỆT NAM THÔNG MINH BÙ TRỪ DINH DƯỠNG)
+  // =========================================================================
+
+  async suggestMeal(userId: string): Promise<SuggestMealResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        goal: true,
+        targetCalories: true,
+        targetProtein: true,
+        targetCarb: true,
+        targetFat: true,
+        timezone: true,
+      },
+    });
+
+    const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
+    const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
+
+    const todayMeals = await this.prisma.meal.findMany({
+      where: {
+        userId,
+        date: { gte: startOfDay, lt: resetsAt },
+      },
+    });
+
+    const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.totalCalories || 0), 0);
+    const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.totalProtein || 0), 0);
+    const consumedCarb = todayMeals.reduce((acc, m) => acc + (m.totalCarb || 0), 0);
+    const consumedFat = todayMeals.reduce((acc, m) => acc + (m.totalFat || 0), 0);
+
+    const targetCalories = user?.targetCalories || 2000;
+    const targetProtein = user?.targetProtein || 140;
+    const targetCarb = user?.targetCarb || 200;
+    const targetFat = user?.targetFat || 60;
+
+    const remainingCalories = Math.max(0, Math.round(targetCalories - consumedCalories));
+    const remainingProtein = Math.max(0, Math.round(targetProtein - consumedProtein));
+    const remainingCarbs = Math.max(0, Math.round(targetCarb - consumedCarb));
+    const remainingFat = Math.max(0, Math.round(targetFat - consumedFat));
+
+    const nutritionGap: NutritionGapDto = {
+      remainingCalories,
+      remainingProtein,
+      remainingCarbs,
+      remainingFat,
+    };
+
+    if (this.genAI) {
+      try {
+        const model = this.genAI.getGenerativeModel({
+          model: this.modelName,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.3,
+          },
+        });
+
+        const prompt = `
+Bạn là chuyên gia dinh dưỡng thể hình hàng đầu tại Việt Nam.
+Người dùng đang có mục tiêu: ${user?.goal || 'Duy trì vóc dáng'}.
+Ngân sách dinh dưỡng CÒN THIẾU hôm nay cần bù đắp:
+- Calo còn thiếu: ${remainingCalories} kcal
+- Protein còn thiếu: ${remainingProtein} g
+- Carbs còn thiếu: ${remainingCarbs} g
+- Fat còn thiếu: ${remainingFat} g
+
+Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ biến, dễ mua hoặc dễ nấu để bù đắp vừa vặn nhất cho lượng calo và macro còn thiếu này.
+
+Định dạng JSON trả về DUY NHẤT:
+{
+  "advice": "Lời khuyên tổng quan súc tích về tình trạng dinh dưỡng hôm nay (1-2 câu)",
+  "suggestions": [
+    {
+      "name": "Tên món ăn Việt Nam (kèm định lượng)",
+      "mealType": "Bữa tối / Bữa phụ",
+      "calories": 450,
+      "protein": 38,
+      "carbs": 45,
+      "fat": 10,
+      "reason": "Giải thích vì sao món này phù hợp nhất với lượng calo/macro còn thiếu hôm nay",
+      "ingredients": ["Thành phần 1", "Thành phần 2"]
+    }
+  ]
+}
+`;
+
+        const response = await model.generateContent(prompt);
+        const text = response.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(text);
+
+        return {
+          nutritionGap,
+          suggestions: parsed.suggestions || [],
+          advice: parsed.advice || `Bạn còn thiếu ${remainingProtein}g protein và ${remainingCalories} kcal. Hãy nạp thêm bữa ăn lành mạnh nhé!`,
+        };
+      } catch (err) {
+        this.logger.error(`Lỗi khi gọi Gemini Suggest Meal: ${err.message}. Chuyển sang Smart Fallback.`);
+      }
+    }
+
+    // Smart Fallback gợi ý món Việt thông minh
+    return this.getSmartMealSuggestions(nutritionGap);
+  }
+
+  private getSmartMealSuggestions(gap: NutritionGapDto): SuggestMealResponseDto {
+    const suggestions: SuggestedMealItemDto[] = [];
+
+    if (gap.remainingProtein >= 30) {
+      suggestions.push({
+        name: 'Phở gà ức ít bánh + 2 trứng chần',
+        mealType: 'Bữa tối giàu đạm',
+        calories: Math.min(gap.remainingCalories, 480),
+        protein: 42,
+        carbs: 50,
+        fat: 10,
+        reason: 'Cung cấp lượng protein tinh khiết dồi dào từ ức gà và trứng, bù đắp tức thì chỉ tiêu protein còn thiếu trong ngày.',
+        ingredients: ['150g ức gà xé', '150g bánh phở tươi', '2 quả trứng chần', 'Giá đỗ và rau thơm'],
+      });
+      suggestions.push({
+        name: 'Cơm gạo lứt + Ức gà nướng áp chảo + Bông cải luộc',
+        mealType: 'Bữa tối Eat Clean',
+        calories: Math.min(gap.remainingCalories, 450),
+        protein: 45,
+        carbs: 48,
+        fat: 8,
+        reason: 'Tinh bột hấp thu chậm từ gạo lứt và protein nạc giúp no lâu, chống dị hóa cơ ban đêm.',
+        ingredients: ['150g cơm gạo lứt', '180g ức gà ướp sốt tỏi ớt', '150g bông cải xanh luộc'],
+      });
+    } else if (gap.remainingCalories > 200) {
+      suggestions.push({
+        name: 'Salad ức gà xé sốt mè rang',
+        mealType: 'Bữa tối nhẹ nhàng',
+        calories: 320,
+        protein: 28,
+        carbs: 16,
+        fat: 12,
+        reason: 'Lượng calo vừa phải, bổ sung chất xơ và đủ lượng protein còn thiếu nhẹ trong ngày.',
+        ingredients: ['100g ức gà luộc xé', 'Xà lách, dưa leo, cà chua bi', '2 thìa sốt mè rang'],
+      });
+    } else {
+      suggestions.push({
+        name: '1 Hũ Sữa chua Hy Lạp + 1 thìa hạt chia',
+        mealType: 'Bữa phụ nhẹ',
+        calories: 140,
+        protein: 15,
+        carbs: 10,
+        fat: 4,
+        reason: 'Calo rất thấp, bổ sung men vi sinh và đạm casein tiêu hóa chậm giúp ngủ ngon.',
+        ingredients: ['100g sữa chua Hy Lạp không đường', '10g hạt chia'],
+      });
+    }
+
+    return {
+      nutritionGap: gap,
+      suggestions,
+      advice: `Hôm nay bạn còn thiếu ${gap.remainingProtein}g Protein và ${gap.remainingCalories} kcal. Hãy ưu tiên nạp nguồn đạm nạc để hoàn thành mục tiêu ngày nhé!`,
+    };
+  }
+
 
 
   // =========================================================================

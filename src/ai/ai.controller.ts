@@ -23,6 +23,7 @@ import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
 import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dto';
 import { ChatQuotaInfoDto, ChatResponseDto, ChatHistoryResponseDto } from './dto/chat-history-response.dto';
 import { PurchaseChatQuotaDto } from './dto/purchase-chat-quota.dto';
+import { SuggestMealResponseDto } from './dto/suggest-meal-response.dto';
 
 @ApiTags('AI Engine')
 @Controller('ai')
@@ -194,5 +195,21 @@ export class AiController {
   @ApiResponse({ status: 200, type: ChatResponseDto })
   async chat(@CurrentUser('id') userId: string, @Body() dto: ChatAiDto): Promise<ChatResponseDto> {
     return this.aiService.chat(userId, dto.message);
+  }
+
+  // =========================================================================
+  // 3. AI SUGGEST MEAL (GỢI Ý MÓN ĂN THÔNG MINH BÙ TRỪ CALO CÒN THIẾU)
+  // =========================================================================
+
+  @Get('suggest-meal')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'AI gợi ý món ăn Việt Nam bù trừ calo/macro còn thiếu hôm nay',
+    description: 'Tính toán lượng calo và protein còn thiếu trong ngày, từ đó gợi ý 1-2 món ăn Việt Nam tối ưu nhất.',
+  })
+  @ApiResponse({ status: 200, type: SuggestMealResponseDto })
+  async suggestMeal(@CurrentUser('id') userId: string): Promise<SuggestMealResponseDto> {
+    return this.aiService.suggestMeal(userId);
   }
 }
