@@ -27,7 +27,9 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
   ) {
-    this.googleClient = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
+    this.googleClient = new OAuth2Client(
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+    );
   }
 
   /**
@@ -79,7 +81,9 @@ export class AuthService {
     // 7. Nếu có email, gửi mã xác thực (không chặn luồng đăng ký nếu gửi lỗi)
     if (user.email) {
       this.sendVerificationEmail(user.id).catch((err) =>
-        this.logger.error(`Gửi email xác thực thất bại cho user ${user.id}: ${err.message}`),
+        this.logger.error(
+          `Gửi email xác thực thất bại cho user ${user.id}: ${err.message}`,
+        ),
       );
     }
 
@@ -108,7 +112,9 @@ export class AuthService {
       throw new UnauthorizedException('Không tìm thấy người dùng');
     }
     if (!user.email) {
-      throw new BadRequestException('Tài khoản chưa có địa chỉ email để xác thực');
+      throw new BadRequestException(
+        'Tài khoản chưa có địa chỉ email để xác thực',
+      );
     }
     if (user.isEmailVerified) {
       throw new ConflictException('Email này đã được xác thực');
@@ -142,10 +148,14 @@ export class AuthService {
       throw new ConflictException('Email này đã được xác thực');
     }
     if (!user.emailVerificationCode || !user.emailVerificationExpiresAt) {
-      throw new BadRequestException('Chưa có mã xác thực nào được gửi. Vui lòng yêu cầu gửi lại.');
+      throw new BadRequestException(
+        'Chưa có mã xác thực nào được gửi. Vui lòng yêu cầu gửi lại.',
+      );
     }
     if (user.emailVerificationExpiresAt < new Date()) {
-      throw new BadRequestException('Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi lại.');
+      throw new BadRequestException(
+        'Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi lại.',
+      );
     }
     if (user.emailVerificationCode !== code) {
       throw new BadRequestException('Mã xác thực không chính xác');
@@ -175,14 +185,21 @@ export class AuthService {
 
     let payload: any;
     try {
-      const ticket = await this.googleClient.verifyIdToken({ idToken, audience: clientId });
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
       payload = ticket.getPayload();
     } catch (e) {
-      throw new UnauthorizedException('idToken Google không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(
+        'idToken Google không hợp lệ hoặc đã hết hạn',
+      );
     }
 
     if (!payload?.sub || !payload?.email) {
-      throw new UnauthorizedException('Không lấy được thông tin tài khoản Google');
+      throw new UnauthorizedException(
+        'Không lấy được thông tin tài khoản Google',
+      );
     }
 
     const googleId = payload.sub;
@@ -223,7 +240,9 @@ export class AuthService {
     }
 
     if (!user.isActive) {
-      throw new ForbiddenException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.',
+      );
     }
 
     const tokens = await this.generateTokens(user.id, user.username, user.role);
@@ -248,16 +267,21 @@ export class AuthService {
   /**
    * Sinh username duy nhất từ phần trước @ của email (thêm hậu tố số nếu trùng)
    */
-  private async generateUniqueUsernameFromEmail(email: string): Promise<string> {
-    const base = email
-      .split('@')[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '')
-      .slice(0, 25) || 'user';
+  private async generateUniqueUsernameFromEmail(
+    email: string,
+  ): Promise<string> {
+    const base =
+      email
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 25) || 'user';
 
     let candidate = base;
     let suffix = 0;
-    while (await this.prisma.user.findUnique({ where: { username: candidate } })) {
+    while (
+      await this.prisma.user.findUnique({ where: { username: candidate } })
+    ) {
       suffix += 1;
       candidate = `${base}${suffix}`;
     }
@@ -274,29 +298,34 @@ export class AuthService {
     // 1. Tìm user theo username hoặc email
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { username: identifier },
-          { email: identifier },
-        ],
+        OR: [{ username: identifier }, { email: identifier }],
       },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không chính xác');
+      throw new UnauthorizedException(
+        'Tên đăng nhập hoặc mật khẩu không chính xác',
+      );
     }
 
     // 2. Kiểm tra tài khoản có bị khóa không
     if (!user.isActive) {
-      throw new ForbiddenException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.',
+      );
     }
 
     // 3. Đối chiếu mật khẩu (tài khoản đăng nhập bằng Google không có mật khẩu local)
     if (!user.password) {
-      throw new UnauthorizedException('Tài khoản này đăng nhập bằng Google. Vui lòng dùng Đăng nhập với Google.');
+      throw new UnauthorizedException(
+        'Tài khoản này đăng nhập bằng Google. Vui lòng dùng Đăng nhập với Google.',
+      );
     }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không chính xác');
+      throw new UnauthorizedException(
+        'Tên đăng nhập hoặc mật khẩu không chính xác',
+      );
     }
 
     // 4. Sinh cặp tokens
@@ -330,10 +359,14 @@ export class AuthService {
     let payload: any;
     try {
       payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'default_refresh_secret',
+        secret:
+          this.configService.get<string>('JWT_REFRESH_SECRET') ||
+          'default_refresh_secret',
       });
     } catch (e) {
-      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(
+        'Refresh token không hợp lệ hoặc đã hết hạn',
+      );
     }
 
     // 2. Tìm user
@@ -342,17 +375,26 @@ export class AuthService {
     });
 
     if (!user || !user.refreshTokenHash || !user.isActive) {
-      throw new UnauthorizedException('Không thể cấp mới token. Vui lòng đăng nhập lại.');
+      throw new UnauthorizedException(
+        'Không thể cấp mới token. Vui lòng đăng nhập lại.',
+      );
     }
 
     // 3. Đối chiếu refreshToken gửi lên với hash lưu trong DB
-    const isTokenMatch = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+    const isTokenMatch = await bcrypt.compare(
+      refreshToken,
+      user.refreshTokenHash,
+    );
     if (!isTokenMatch) {
       throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
     // 4. Sinh bộ tokens mới
-    const newTokens = await this.generateTokens(user.id, user.username, user.role);
+    const newTokens = await this.generateTokens(
+      user.id,
+      user.username,
+      user.role,
+    );
     await this.updateRefreshTokenHash(user.id, newTokens.refreshToken);
 
     return {
@@ -389,7 +431,9 @@ export class AuthService {
       throw new UnauthorizedException('Không tìm thấy người dùng');
     }
     if (!user.password) {
-      throw new ConflictException('Tài khoản này đăng nhập bằng Google, không có mật khẩu để đổi');
+      throw new ConflictException(
+        'Tài khoản này đăng nhập bằng Google, không có mật khẩu để đổi',
+      );
     }
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
@@ -398,7 +442,9 @@ export class AuthService {
     }
 
     if (oldPassword === newPassword) {
-      throw new ConflictException('Mật khẩu mới không được trùng với mật khẩu cũ');
+      throw new ConflictException(
+        'Mật khẩu mới không được trùng với mật khẩu cũ',
+      );
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -446,12 +492,18 @@ export class AuthService {
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_ACCESS_SECRET') || 'default_access_secret',
-        expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '15m') as any,
+        secret:
+          this.configService.get<string>('JWT_ACCESS_SECRET') ||
+          'default_access_secret',
+        expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ||
+          '15m') as any,
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'default_refresh_secret',
-        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d') as any,
+        secret:
+          this.configService.get<string>('JWT_REFRESH_SECRET') ||
+          'default_refresh_secret',
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ||
+          '7d') as any,
       }),
     ]);
 

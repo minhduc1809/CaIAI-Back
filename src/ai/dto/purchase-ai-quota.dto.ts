@@ -1,10 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsInt,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class PurchaseAiQuotaDto {
   @ApiProperty({
     example: 'PACKAGE_20',
-    description: 'Mã gói lượt chụp: PACKAGE_10 (10 lượt), PACKAGE_20 (20 lượt), PACKAGE_50 (50 lượt), PACKAGE_100 (100 lượt)',
+    description:
+      'Mã gói lượt chụp: PACKAGE_10 (10 lượt), PACKAGE_20 (20 lượt), PACKAGE_50 (50 lượt), PACKAGE_100 (100 lượt)',
     required: false,
   })
   @IsOptional()
@@ -36,7 +44,10 @@ export class AiScanPackageDto {
   @ApiProperty({ example: 29000 })
   priceVnd: number;
 
-  @ApiProperty({ example: '10 lượt chụp ảnh AI nhận diện món ăn không giới hạn thời gian sử dụng' })
+  @ApiProperty({
+    example:
+      '10 lượt chụp ảnh AI nhận diện món ăn không giới hạn thời gian sử dụng',
+  })
   description: string;
 
   @ApiProperty({ example: false, required: false })

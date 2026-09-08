@@ -11,7 +11,13 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { WeightLogsService } from './weight-logs.service';
 import { CreateWeightLogDto } from './dto/create-weight-log.dto';
 import { UpdateWeightLogDto } from './dto/update-weight-log.dto';
@@ -27,7 +33,9 @@ export class WeightLogsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Ghi nhận cân nặng mới (tự động cập nhật lại BMI/BMR/TDEE)' })
+  @ApiOperation({
+    summary: 'Ghi nhận cân nặng mới (tự động cập nhật lại BMI/BMR/TDEE)',
+  })
   @ApiResponse({ status: 201, description: 'Ghi nhận cân nặng thành công' })
   async createLog(
     @CurrentUser('id') userId: string,
@@ -38,7 +46,12 @@ export class WeightLogsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy lịch sử biến động cân nặng theo thời gian' })
-  @ApiQuery({ name: 'limit', required: false, example: 30, description: 'Số lượng bản ghi tối đa' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    example: 30,
+    description: 'Số lượng bản ghi tối đa',
+  })
   @ApiResponse({ status: 200, description: 'Lấy lịch sử thành công' })
   async getLogs(
     @CurrentUser('id') userId: string,
@@ -48,18 +61,27 @@ export class WeightLogsController {
   }
 
   @Get('trend')
-  @ApiOperation({ summary: 'Lấy xu hướng cân nặng làm mượt (Trend Weight - EWMA) để loại bỏ biến động nước' })
+  @ApiOperation({
+    summary:
+      'Lấy xu hướng cân nặng làm mượt (Trend Weight - EWMA) để loại bỏ biến động nước',
+  })
   @ApiQuery({ name: 'limit', required: false, example: 60 })
   @ApiResponse({ status: 200, description: 'Lấy xu hướng cân nặng thành công' })
   async getWeightTrend(
     @CurrentUser('id') userId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.weightLogsService.getWeightTrend(userId, limit ? Number(limit) : 60);
+    return this.weightLogsService.getWeightTrend(
+      userId,
+      limit ? Number(limit) : 60,
+    );
   }
 
   @Get('progress')
-  @ApiOperation({ summary: 'Thống kê tiến độ hoàn thành mục tiêu cân nặng (Start vs Current vs Target)' })
+  @ApiOperation({
+    summary:
+      'Thống kê tiến độ hoàn thành mục tiêu cân nặng (Start vs Current vs Target)',
+  })
   @ApiResponse({ status: 200, description: 'Lấy tiến độ thành công' })
   async getWeightProgress(@CurrentUser('id') userId: string) {
     return this.weightLogsService.getWeightProgress(userId);

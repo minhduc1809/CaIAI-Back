@@ -29,7 +29,10 @@ export class CreateWorkoutSetDto {
   @Min(0, { message: 'weightKg không được âm' })
   weightKg: number;
 
-  @ApiPropertyOptional({ example: 8, description: 'Chỉ số gắng sức RPE (1-10)' })
+  @ApiPropertyOptional({
+    example: 8,
+    description: 'Chỉ số gắng sức RPE (1-10)',
+  })
   @IsOptional()
   @IsNumber()
   @Min(1)
@@ -38,7 +41,10 @@ export class CreateWorkoutSetDto {
 }
 
 export class CreateWorkoutExerciseDto {
-  @ApiProperty({ example: 'Bench Press (Đẩy ngực ngang)', description: 'Tên bài tập' })
+  @ApiProperty({
+    example: 'Bench Press (Đẩy ngực ngang)',
+    description: 'Tên bài tập',
+  })
   @IsString()
   @IsNotEmpty({ message: 'Tên bài tập không được để trống' })
   name: string;
@@ -48,7 +54,10 @@ export class CreateWorkoutExerciseDto {
   @IsNumber()
   order?: number;
 
-  @ApiProperty({ type: [CreateWorkoutSetDto], description: 'Danh sách các set của bài tập' })
+  @ApiProperty({
+    type: [CreateWorkoutSetDto],
+    description: 'Danh sách các set của bài tập',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateWorkoutSetDto)
@@ -56,7 +65,10 @@ export class CreateWorkoutExerciseDto {
 }
 
 export class CreateWorkoutLogDto {
-  @ApiProperty({ example: 'Buổi tập ngực & tay sau', description: 'Tên buổi tập / hoạt động' })
+  @ApiProperty({
+    example: 'Buổi tập ngực & tay sau',
+    description: 'Tên buổi tập / hoạt động',
+  })
   @IsString()
   @IsNotEmpty({ message: 'Tên buổi tập không được để trống' })
   name: string;
@@ -64,7 +76,8 @@ export class CreateWorkoutLogDto {
   @ApiProperty({
     enum: WorkoutCategory,
     example: WorkoutCategory.STRENGTH,
-    description: 'Phân loại tập luyện (STRENGTH, CARDIO, RUNNING, CYCLING, SWIMMING, HIIT, WALKING, YOGA, SPORTS, OTHER)',
+    description:
+      'Phân loại tập luyện (STRENGTH, CARDIO, RUNNING, CYCLING, SWIMMING, HIIT, WALKING, YOGA, SPORTS, OTHER)',
   })
   @IsEnum(WorkoutCategory, { message: 'Phân loại bài tập không hợp lệ' })
   category: WorkoutCategory;
@@ -85,21 +98,28 @@ export class CreateWorkoutLogDto {
 
   @ApiPropertyOptional({
     example: 350,
-    description: 'Lượng calo tiêu hao (kcal). Nếu bỏ trống, hệ thống sẽ tự động tính theo hệ số MET chuẩn.',
+    description:
+      'Lượng calo tiêu hao (kcal). Nếu bỏ trống, hệ thống sẽ tự động tính theo hệ số MET chuẩn.',
   })
   @IsOptional()
   @IsNumber({}, { message: 'caloriesBurned phải là số' })
   @Min(0, { message: 'caloriesBurned không được âm' })
   caloriesBurned?: number;
 
-  @ApiPropertyOptional({ example: 8, description: 'Độ gắng sức toàn buổi RPE (1-10)' })
+  @ApiPropertyOptional({
+    example: 8,
+    description: 'Độ gắng sức toàn buổi RPE (1-10)',
+  })
   @IsOptional()
   @IsNumber()
   @Min(1, { message: 'RPE tối thiểu 1' })
   @Max(10, { message: 'RPE tối đa 10' })
   rpe?: number;
 
-  @ApiPropertyOptional({ example: 'Hôm nay đẩy ngực lên tạ mới rất tốt', description: 'Ghi chú buổi tập' })
+  @ApiPropertyOptional({
+    example: 'Hôm nay đẩy ngực lên tạ mới rất tốt',
+    description: 'Ghi chú buổi tập',
+  })
   @IsOptional()
   @IsString()
   note?: string;

@@ -1,13 +1,34 @@
-import { Injectable, Logger, HttpException, HttpStatus, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
-import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dto';
-import { ChatQuotaInfoDto, ChatResponseDto, ChatHistoryResponseDto, ChatMessageDto } from './dto/chat-history-response.dto';
-import { PurchaseChatQuotaDto, ChatPlanPackageId } from './dto/purchase-chat-quota.dto';
-import { SuggestMealResponseDto, SuggestedMealItemDto, NutritionGapDto } from './dto/suggest-meal-response.dto';
+import {
+  PurchaseAiQuotaDto,
+  AiScanPackageDto,
+} from './dto/purchase-ai-quota.dto';
+import {
+  ChatQuotaInfoDto,
+  ChatResponseDto,
+  ChatHistoryResponseDto,
+  ChatMessageDto,
+} from './dto/chat-history-response.dto';
+import {
+  PurchaseChatQuotaDto,
+  ChatPlanPackageId,
+} from './dto/purchase-chat-quota.dto';
+import {
+  SuggestMealResponseDto,
+  SuggestedMealItemDto,
+  NutritionGapDto,
+} from './dto/suggest-meal-response.dto';
 import { ScanMenuResponseDto, MenuItemDto } from './dto/menu-scan.dto';
 
 export interface ChatPackageInfo {
@@ -41,14 +62,16 @@ export class AiService {
       name: 'Gói Khởi Động',
       credits: 10,
       priceVnd: 29000,
-      description: '10 lượt chụp ảnh AI nhận diện món ăn (không hết hạn, dùng sau khi hết 5 lượt free/ngày)',
+      description:
+        '10 lượt chụp ảnh AI nhận diện món ăn (không hết hạn, dùng sau khi hết 5 lượt free/ngày)',
     },
     {
       id: 'PACKAGE_20',
       name: 'Gói Tiêu Chuẩn',
       credits: 20,
       priceVnd: 49000,
-      description: '20 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 15%, không giới hạn thời gian)',
+      description:
+        '20 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 15%, không giới hạn thời gian)',
       isPopular: true,
     },
     {
@@ -56,14 +79,16 @@ export class AiService {
       name: 'Gói Nâng Cao',
       credits: 50,
       priceVnd: 99000,
-      description: '50 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 30%, không giới hạn thời gian)',
+      description:
+        '50 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 30%, không giới hạn thời gian)',
     },
     {
       id: 'PACKAGE_100',
       name: 'Gói Siêu Cấp',
       credits: 100,
       priceVnd: 179000,
-      description: '100 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 40%, giá tốt nhất)',
+      description:
+        '100 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 40%, giá tốt nhất)',
       bestValue: true,
     },
   ];
@@ -77,14 +102,16 @@ export class AiService {
       name: 'Bản Plus',
       credits: 200000,
       priceVnd: 29000,
-      description: 'Mở rộng trò chuyện với AI Coach, phân tích sâu thực đơn & chế độ ăn mỗi ngày',
+      description:
+        'Mở rộng trò chuyện với AI Coach, phân tích sâu thực đơn & chế độ ăn mỗi ngày',
     },
     {
       id: 'PRO',
       name: 'Bản Pro',
       credits: 500000,
       priceVnd: 59000,
-      description: 'Trò chuyện không giới hạn, phân tích dinh dưỡng cá nhân hóa chuyên sâu suốt tháng',
+      description:
+        'Trò chuyện không giới hạn, phân tích dinh dưỡng cá nhân hóa chuyên sâu suốt tháng',
       isPopular: true,
     },
     {
@@ -92,7 +119,8 @@ export class AiService {
       name: 'Bản Max',
       credits: 1000000,
       priceVnd: 99000,
-      description: 'Bản cao cấp nhất - Huấn luyện viên AI toàn diện đồng hành mọi lúc mọi nơi',
+      description:
+        'Bản cao cấp nhất - Huấn luyện viên AI toàn diện đồng hành mọi lúc mọi nơi',
       bestValue: true,
     },
   ];
@@ -106,14 +134,23 @@ export class AiService {
     private readonly prisma: PrismaService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    this.modelName = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
+    this.modelName =
+      this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
 
-    if (apiKey && apiKey !== 'your_gemini_api_key_here' && apiKey.trim() !== '') {
+    if (
+      apiKey &&
+      apiKey !== 'your_gemini_api_key_here' &&
+      apiKey.trim() !== ''
+    ) {
       try {
         this.genAI = new GoogleGenerativeAI(apiKey.trim());
-        this.logger.log(`Google Gemini AI initialized successfully with model: ${this.modelName}`);
+        this.logger.log(
+          `Google Gemini AI initialized successfully with model: ${this.modelName}`,
+        );
       } catch (err) {
-        this.logger.warn(`Failed to initialize Google Gemini AI: ${err.message}. Using Smart Fallback.`);
+        this.logger.warn(
+          `Failed to initialize Google Gemini AI: ${err.message}. Using Smart Fallback.`,
+        );
       }
     } else {
       this.logger.warn(
@@ -130,7 +167,10 @@ export class AiService {
     return AiService.SCAN_PACKAGES;
   }
 
-  async purchaseScanCredits(userId: string, dto: PurchaseAiQuotaDto): Promise<AiQuotaResponseDto> {
+  async purchaseScanCredits(
+    userId: string,
+    dto: PurchaseAiQuotaDto,
+  ): Promise<AiQuotaResponseDto> {
     let creditsToAdd = 0;
     const packageId = dto.packageId?.trim();
     if (packageId) {
@@ -144,7 +184,9 @@ export class AiService {
     } else if (dto.customCredits && dto.customCredits > 0) {
       creditsToAdd = dto.customCredits;
     } else {
-      throw new BadRequestException('Vui lòng cung cấp packageId hoặc customCredits hợp lệ.');
+      throw new BadRequestException(
+        'Vui lòng cung cấp packageId hoặc customCredits hợp lệ.',
+      );
     }
 
     await this.prisma.user.update({
@@ -154,7 +196,9 @@ export class AiService {
       },
     });
 
-    this.logger.log(`User ${userId} đã mua thành công ${creditsToAdd} lượt chụp ảnh AI`);
+    this.logger.log(
+      `User ${userId} đã mua thành công ${creditsToAdd} lượt chụp ảnh AI`,
+    );
     return this.getDailyPhotoQuota(userId);
   }
 
@@ -191,9 +235,10 @@ export class AiService {
     };
   }
 
-  private async checkAndDetermineQuotaType(
-    userId: string,
-  ): Promise<{ quota: AiQuotaResponseDto; usedQuotaType: 'FREE' | 'PURCHASED' }> {
+  private async checkAndDetermineQuotaType(userId: string): Promise<{
+    quota: AiQuotaResponseDto;
+    usedQuotaType: 'FREE' | 'PURCHASED';
+  }> {
     const quota = await this.getDailyPhotoQuota(userId);
 
     if (quota.totalRemaining <= 0) {
@@ -214,7 +259,8 @@ export class AiService {
       );
     }
 
-    const usedQuotaType: 'FREE' | 'PURCHASED' = quota.freeRemaining > 0 ? 'FREE' : 'PURCHASED';
+    const usedQuotaType: 'FREE' | 'PURCHASED' =
+      quota.freeRemaining > 0 ? 'FREE' : 'PURCHASED';
     return { quota, usedQuotaType };
   }
 
@@ -223,9 +269,19 @@ export class AiService {
     usedQuotaType: 'FREE' | 'PURCHASED',
     quota: AiQuotaResponseDto,
     tokens: { promptTokens: number; outputTokens: number; costUsd: number },
-  ): Promise<{ freeRemaining: number; purchasedCredits: number; totalRemaining: number }> {
+  ): Promise<{
+    freeRemaining: number;
+    purchasedCredits: number;
+    totalRemaining: number;
+  }> {
     if (usedQuotaType === 'FREE') {
-      await this.logApiUsage(userId, 'food_recognition', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+      await this.logApiUsage(
+        userId,
+        'food_recognition',
+        tokens.promptTokens,
+        tokens.outputTokens,
+        tokens.costUsd,
+      );
       const newFreeRemaining = Math.max(0, quota.freeRemaining - 1);
       const newPurchased = quota.purchasedCredits;
       return {
@@ -240,7 +296,13 @@ export class AiService {
           purchasedAiQuota: { decrement: 1 },
         },
       });
-      await this.logApiUsage(userId, 'food_recognition_paid', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+      await this.logApiUsage(
+        userId,
+        'food_recognition_paid',
+        tokens.promptTokens,
+        tokens.outputTokens,
+        tokens.costUsd,
+      );
       const newPurchased = Math.max(0, quota.purchasedCredits - 1);
       return {
         freeRemaining: 0,
@@ -258,12 +320,17 @@ export class AiService {
     return AiService.CHAT_PLANS;
   }
 
-  async purchaseChatCredits(userId: string, dto: PurchaseChatQuotaDto): Promise<ChatQuotaInfoDto> {
+  async purchaseChatCredits(
+    userId: string,
+    dto: PurchaseChatQuotaDto,
+  ): Promise<ChatQuotaInfoDto> {
     let creditsToAdd = 0;
 
     if (dto.packageId === ChatPlanPackageId.CUSTOM) {
       if (!dto.customCredits || dto.customCredits <= 0) {
-        throw new BadRequestException('Vui lòng nhập hạn mức customCredits hợp lệ (> 0).');
+        throw new BadRequestException(
+          'Vui lòng nhập hạn mức customCredits hợp lệ (> 0).',
+        );
       }
       creditsToAdd = dto.customCredits;
     } else {
@@ -283,7 +350,9 @@ export class AiService {
       },
     });
 
-    this.logger.log(`User ${userId} đã nâng cấp thành công gói ${dto.packageId} AI Coach`);
+    this.logger.log(
+      `User ${userId} đã nâng cấp thành công gói ${dto.packageId} AI Coach`,
+    );
     return this.getDailyChatQuota(userId);
   }
 
@@ -331,7 +400,10 @@ export class AiService {
     }
 
     const totalCapacity = dailyFreeLimit + purchasedCredits;
-    const remainingPercent = Math.min(100, Math.max(0, Math.round((totalRemaining / totalCapacity) * 100)));
+    const remainingPercent = Math.min(
+      100,
+      Math.max(0, Math.round((totalRemaining / totalCapacity) * 100)),
+    );
     const hasQuota = totalRemaining > 0;
 
     let status: 'COMFORTABLE' | 'GOOD' | 'LOW' | 'EXHAUSTED' = 'COMFORTABLE';
@@ -387,13 +459,19 @@ export class AiService {
       where: { id: userId },
       select: { timezone: true },
     });
-    const { startOfDay } = this.getTimezoneDayBounds(user?.timezone || 'Asia/Ho_Chi_Minh');
+    const { startOfDay } = this.getTimezoneDayBounds(
+      user?.timezone || 'Asia/Ho_Chi_Minh',
+    );
     const logsToday = await this.prisma.apiUsageLog.findMany({
       where: { userId, feature: 'chat_coach', createdAt: { gte: startOfDay } },
       select: { promptTokens: true, outputTokens: true },
     });
-    const used = logsToday.reduce((acc, l) => acc + (l.promptTokens || 0) + (l.outputTokens || 0), 0);
-    const usedQuotaType: 'FREE' | 'PURCHASED' = used < AiService.DAILY_CHAT_TOKEN_LIMIT ? 'FREE' : 'PURCHASED';
+    const used = logsToday.reduce(
+      (acc, l) => acc + (l.promptTokens || 0) + (l.outputTokens || 0),
+      0,
+    );
+    const usedQuotaType: 'FREE' | 'PURCHASED' =
+      used < AiService.DAILY_CHAT_TOKEN_LIMIT ? 'FREE' : 'PURCHASED';
 
     return { quota, usedQuotaType };
   }
@@ -406,7 +484,13 @@ export class AiService {
     const totalTokensConsumed = tokens.promptTokens + tokens.outputTokens;
 
     if (usedQuotaType === 'FREE') {
-      await this.logApiUsage(userId, 'chat_coach', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+      await this.logApiUsage(
+        userId,
+        'chat_coach',
+        tokens.promptTokens,
+        tokens.outputTokens,
+        tokens.costUsd,
+      );
     } else {
       await this.prisma.user.update({
         where: { id: userId },
@@ -414,7 +498,13 @@ export class AiService {
           purchasedChatQuota: { decrement: totalTokensConsumed },
         },
       });
-      await this.logApiUsage(userId, 'chat_coach_paid', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+      await this.logApiUsage(
+        userId,
+        'chat_coach_paid',
+        tokens.promptTokens,
+        tokens.outputTokens,
+        tokens.costUsd,
+      );
     }
 
     return this.getDailyChatQuota(userId);
@@ -437,7 +527,9 @@ export class AiService {
         },
       });
     } catch (e) {
-      this.logger.warn(`Could not cleanup old chat messages for user ${userId}: ${e.message}`);
+      this.logger.warn(
+        `Could not cleanup old chat messages for user ${userId}: ${e.message}`,
+      );
     }
   }
 
@@ -473,7 +565,9 @@ export class AiService {
   /**
    * Xóa toàn bộ lịch sử trò chuyện của người dùng
    */
-  async clearChatHistory(userId: string): Promise<{ success: boolean; message: string }> {
+  async clearChatHistory(
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
     await this.prisma.aiMessage.deleteMany({
       where: { userId },
     });
@@ -489,7 +583,8 @@ export class AiService {
 
   async chat(userId: string, userMessage: string): Promise<ChatResponseDto> {
     // 1. Kiểm tra hạn mức chat (10 tin free/ngày hoặc lượt mua thêm)
-    const { quota, usedQuotaType } = await this.checkAndDetermineChatQuota(userId);
+    const { quota, usedQuotaType } =
+      await this.checkAndDetermineChatQuota(userId);
 
     // 2. Dọn dẹp tin nhắn cũ hơn 7 ngày
     await this.cleanupOldChatMessages(userId);
@@ -526,10 +621,22 @@ export class AiService {
       orderBy: { date: 'asc' },
     });
 
-    const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.totalCalories || 0), 0);
-    const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.totalProtein || 0), 0);
-    const consumedCarb = todayMeals.reduce((acc, m) => acc + (m.totalCarb || 0), 0);
-    const consumedFat = todayMeals.reduce((acc, m) => acc + (m.totalFat || 0), 0);
+    const consumedCalories = todayMeals.reduce(
+      (acc, m) => acc + (m.totalCalories || 0),
+      0,
+    );
+    const consumedProtein = todayMeals.reduce(
+      (acc, m) => acc + (m.totalProtein || 0),
+      0,
+    );
+    const consumedCarb = todayMeals.reduce(
+      (acc, m) => acc + (m.totalCarb || 0),
+      0,
+    );
+    const consumedFat = todayMeals.reduce(
+      (acc, m) => acc + (m.totalFat || 0),
+      0,
+    );
 
     const targetCalories = user?.targetCalories || 2000;
     const targetProtein = user?.targetProtein || 140;
@@ -545,7 +652,9 @@ export class AiService {
       todayMeals.length > 0
         ? todayMeals
             .map((m) => {
-              const itemNames = m.items.map((i) => `${i.name} (${Math.round(i.calories)} kcal)`).join(', ');
+              const itemNames = m.items
+                .map((i) => `${i.name} (${Math.round(i.calories)} kcal)`)
+                .join(', ');
               return `+ ${m.mealType}: ${Math.round(m.totalCalories)} kcal, ${Math.round(m.totalProtein)}g Protein (Món: ${itemNames || 'N/A'})`;
             })
             .join('\n')
@@ -560,7 +669,9 @@ export class AiService {
     recentHistory.reverse();
 
     const formattedHistory = recentHistory
-      .map((m) => `${m.role === 'user' ? 'Người dùng' : 'AI Coach'}: ${m.content}`)
+      .map(
+        (m) => `${m.role === 'user' ? 'Người dùng' : 'AI Coach'}: ${m.content}`,
+      )
       .join('\n');
 
     let reply = '';
@@ -616,16 +727,26 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
 
         const usage = (response.response as any).usageMetadata;
         promptTokens = usage?.promptTokenCount || Math.ceil(prompt.length / 4);
-        outputTokens = usage?.candidatesTokenCount || Math.ceil(reply.length / 4);
+        outputTokens =
+          usage?.candidatesTokenCount || Math.ceil(reply.length / 4);
       } catch (err) {
-        this.logger.error(`Lỗi khi gọi Gemini Chat: ${err.message}. Chuyển sang Smart Fallback.`);
+        this.logger.error(
+          `Lỗi khi gọi Gemini Chat: ${err.message}. Chuyển sang Smart Fallback.`,
+        );
       }
     }
 
     // 7. Fallback thông minh nếu không có key hoặc API lỗi
     if (!reply) {
-      reply = this.generateSmartChatFallback(userMessage, remainingCalories, remainingProtein, user?.goal || '');
-      promptTokens = Math.ceil((userMessage.length + formattedHistory.length + mealSummary.length) / 4);
+      reply = this.generateSmartChatFallback(
+        userMessage,
+        remainingCalories,
+        remainingProtein,
+        user?.goal || '',
+      );
+      promptTokens = Math.ceil(
+        (userMessage.length + formattedHistory.length + mealSummary.length) / 4,
+      );
       outputTokens = Math.ceil(reply.length / 4);
     }
 
@@ -643,11 +764,15 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
 
     // 9. Khấu trừ quota dung lượng theo mức tiêu thụ thực tế
     const tokensUsed = promptTokens + outputTokens;
-    const updatedQuota = await this.deductChatQuotaAfterSuccess(userId, usedQuotaType, {
-      promptTokens,
-      outputTokens,
-      costUsd: (tokensUsed / 1000) * 0.00015,
-    });
+    const updatedQuota = await this.deductChatQuotaAfterSuccess(
+      userId,
+      usedQuotaType,
+      {
+        promptTokens,
+        outputTokens,
+        costUsd: (tokensUsed / 1000) * 0.00015,
+      },
+    );
 
     return {
       reply,
@@ -664,17 +789,35 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
     const msgLower = message.toLowerCase();
 
     // Check Guardrails trong fallback
-    const offTopicKeywords = ['lập trình', 'viết code', 'python', 'javascript', 'bài thơ', 'toán học', 'chính trị', 'tổng thống', 'giải phương trình'];
+    const offTopicKeywords = [
+      'lập trình',
+      'viết code',
+      'python',
+      'javascript',
+      'bài thơ',
+      'toán học',
+      'chính trị',
+      'tổng thống',
+      'giải phương trình',
+    ];
     if (offTopicKeywords.some((k) => msgLower.includes(k))) {
       return 'Tôi là CalAI Nutrition Coach, chỉ hỗ trợ tư vấn dinh dưỡng, calo và tập luyện thể hình. Hãy cho tôi biết bạn cần hỗ trợ gì về bữa ăn hôm nay nhé!';
     }
 
-    if (msgLower.includes('tối') || msgLower.includes('ăn gì') || msgLower.includes('gợi ý')) {
+    if (
+      msgLower.includes('tối') ||
+      msgLower.includes('ăn gì') ||
+      msgLower.includes('gợi ý')
+    ) {
       return `Hôm nay bạn còn khoảng ${remainingCalories > 0 ? remainingCalories : 0} kcal và cần bổ sung thêm ~${remainingProtein > 0 ? remainingProtein : 0}g protein.
 Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạm) hoặc 1 đĩa Salad ức gà áp chảo sốt mè rang (~350 kcal, 35g đạm). Cả hai món đều bổ sung đạm rất tốt mà không lo vượt calo trong ngày!`;
     }
 
-    if (msgLower.includes('tập') || msgLower.includes('gym') || msgLower.includes('cardio')) {
+    if (
+      msgLower.includes('tập') ||
+      msgLower.includes('gym') ||
+      msgLower.includes('cardio')
+    ) {
       return `Với mục tiêu ${goal || 'sức khỏe'} hiện tại, bạn nên duy trì 45-60 phút tập kháng lực (kháng tạ) kết hợp 15 phút cardio cuối buổi. Nhớ uống đủ nước và nạp 20-30g protein sau buổi tập để cơ bắp phục hồi tối ưu nhé!`;
     }
 
@@ -708,18 +851,36 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
       },
     });
 
-    const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.totalCalories || 0), 0);
-    const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.totalProtein || 0), 0);
-    const consumedCarb = todayMeals.reduce((acc, m) => acc + (m.totalCarb || 0), 0);
-    const consumedFat = todayMeals.reduce((acc, m) => acc + (m.totalFat || 0), 0);
+    const consumedCalories = todayMeals.reduce(
+      (acc, m) => acc + (m.totalCalories || 0),
+      0,
+    );
+    const consumedProtein = todayMeals.reduce(
+      (acc, m) => acc + (m.totalProtein || 0),
+      0,
+    );
+    const consumedCarb = todayMeals.reduce(
+      (acc, m) => acc + (m.totalCarb || 0),
+      0,
+    );
+    const consumedFat = todayMeals.reduce(
+      (acc, m) => acc + (m.totalFat || 0),
+      0,
+    );
 
     const targetCalories = user?.targetCalories || 2000;
     const targetProtein = user?.targetProtein || 140;
     const targetCarb = user?.targetCarb || 200;
     const targetFat = user?.targetFat || 60;
 
-    const remainingCalories = Math.max(0, Math.round(targetCalories - consumedCalories));
-    const remainingProtein = Math.max(0, Math.round(targetProtein - consumedProtein));
+    const remainingCalories = Math.max(
+      0,
+      Math.round(targetCalories - consumedCalories),
+    );
+    const remainingProtein = Math.max(
+      0,
+      Math.round(targetProtein - consumedProtein),
+    );
     const remainingCarbs = Math.max(0, Math.round(targetCarb - consumedCarb));
     const remainingFat = Math.max(0, Math.round(targetFat - consumedFat));
 
@@ -770,16 +931,24 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
 `;
 
         const response = await model.generateContent(prompt);
-        const text = response.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const text = response.response
+          .text()
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
         const parsed = JSON.parse(text);
 
         return {
           nutritionGap,
           suggestions: parsed.suggestions || [],
-          advice: parsed.advice || `Bạn còn thiếu ${remainingProtein}g protein và ${remainingCalories} kcal. Hãy nạp thêm bữa ăn lành mạnh nhé!`,
+          advice:
+            parsed.advice ||
+            `Bạn còn thiếu ${remainingProtein}g protein và ${remainingCalories} kcal. Hãy nạp thêm bữa ăn lành mạnh nhé!`,
         };
       } catch (err) {
-        this.logger.error(`Lỗi khi gọi Gemini Suggest Meal: ${err.message}. Chuyển sang Smart Fallback.`);
+        this.logger.error(
+          `Lỗi khi gọi Gemini Suggest Meal: ${err.message}. Chuyển sang Smart Fallback.`,
+        );
       }
     }
 
@@ -787,7 +956,9 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
     return this.getSmartMealSuggestions(nutritionGap);
   }
 
-  private getSmartMealSuggestions(gap: NutritionGapDto): SuggestMealResponseDto {
+  private getSmartMealSuggestions(
+    gap: NutritionGapDto,
+  ): SuggestMealResponseDto {
     const suggestions: SuggestedMealItemDto[] = [];
 
     if (gap.remainingProtein >= 30) {
@@ -798,8 +969,14 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
         protein: 42,
         carbs: 50,
         fat: 10,
-        reason: 'Cung cấp lượng protein tinh khiết dồi dào từ ức gà và trứng, bù đắp tức thì chỉ tiêu protein còn thiếu trong ngày.',
-        ingredients: ['150g ức gà xé', '150g bánh phở tươi', '2 quả trứng chần', 'Giá đỗ và rau thơm'],
+        reason:
+          'Cung cấp lượng protein tinh khiết dồi dào từ ức gà và trứng, bù đắp tức thì chỉ tiêu protein còn thiếu trong ngày.',
+        ingredients: [
+          '150g ức gà xé',
+          '150g bánh phở tươi',
+          '2 quả trứng chần',
+          'Giá đỗ và rau thơm',
+        ],
       });
       suggestions.push({
         name: 'Cơm gạo lứt + Ức gà nướng áp chảo + Bông cải luộc',
@@ -808,8 +985,13 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
         protein: 45,
         carbs: 48,
         fat: 8,
-        reason: 'Tinh bột hấp thu chậm từ gạo lứt và protein nạc giúp no lâu, chống dị hóa cơ ban đêm.',
-        ingredients: ['150g cơm gạo lứt', '180g ức gà ướp sốt tỏi ớt', '150g bông cải xanh luộc'],
+        reason:
+          'Tinh bột hấp thu chậm từ gạo lứt và protein nạc giúp no lâu, chống dị hóa cơ ban đêm.',
+        ingredients: [
+          '150g cơm gạo lứt',
+          '180g ức gà ướp sốt tỏi ớt',
+          '150g bông cải xanh luộc',
+        ],
       });
     } else if (gap.remainingCalories > 200) {
       suggestions.push({
@@ -819,8 +1001,13 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
         protein: 28,
         carbs: 16,
         fat: 12,
-        reason: 'Lượng calo vừa phải, bổ sung chất xơ và đủ lượng protein còn thiếu nhẹ trong ngày.',
-        ingredients: ['100g ức gà luộc xé', 'Xà lách, dưa leo, cà chua bi', '2 thìa sốt mè rang'],
+        reason:
+          'Lượng calo vừa phải, bổ sung chất xơ và đủ lượng protein còn thiếu nhẹ trong ngày.',
+        ingredients: [
+          '100g ức gà luộc xé',
+          'Xà lách, dưa leo, cà chua bi',
+          '2 thìa sốt mè rang',
+        ],
       });
     } else {
       suggestions.push({
@@ -830,7 +1017,8 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
         protein: 15,
         carbs: 10,
         fat: 4,
-        reason: 'Calo rất thấp, bổ sung men vi sinh và đạm casein tiêu hóa chậm giúp ngủ ngon.',
+        reason:
+          'Calo rất thấp, bổ sung men vi sinh và đạm casein tiêu hóa chậm giúp ngủ ngon.',
         ingredients: ['100g sữa chua Hy Lạp không đường', '10g hạt chia'],
       });
     }
@@ -863,7 +1051,8 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
     note?: string,
   ): Promise<ScanMenuResponseDto> {
     // 1. Kiểm tra hạn mức quét ảnh (5 lượt free/ngày hoặc lượt mua thêm)
-    const { quota, usedQuotaType } = await this.checkAndDetermineQuotaType(userId);
+    const { quota, usedQuotaType } =
+      await this.checkAndDetermineQuotaType(userId);
 
     // 2. Lấy gap calo/protein của người dùng hôm nay
     const user = await this.prisma.user.findUnique({
@@ -886,10 +1075,22 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
       },
     });
 
-    const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.totalCalories || 0), 0);
-    const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.totalProtein || 0), 0);
-    const remainingCalories = Math.max(0, (user?.targetCalories || 2000) - consumedCalories);
-    const remainingProtein = Math.max(0, (user?.targetProtein || 140) - consumedProtein);
+    const consumedCalories = todayMeals.reduce(
+      (acc, m) => acc + (m.totalCalories || 0),
+      0,
+    );
+    const consumedProtein = todayMeals.reduce(
+      (acc, m) => acc + (m.totalProtein || 0),
+      0,
+    );
+    const remainingCalories = Math.max(
+      0,
+      (user?.targetCalories || 2000) - consumedCalories,
+    );
+    const remainingProtein = Math.max(
+      0,
+      (user?.targetProtein || 140) - consumedProtein,
+    );
 
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
@@ -942,7 +1143,11 @@ Nhiệm vụ:
         };
 
         const response = await model.generateContent([prompt, imagePart]);
-        const text = response.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const text = response.response
+          .text()
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
         const parsed = JSON.parse(text);
 
         await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
@@ -951,17 +1156,26 @@ Nhiệm vụ:
           costUsd: 0.0007,
         });
 
-        const allItems: MenuItemDto[] = Array.isArray(parsed.items) ? parsed.items : [];
+        const allItems: MenuItemDto[] = Array.isArray(parsed.items)
+          ? parsed.items
+          : [];
         const recommendedItems = allItems.filter((it) => it.isRecommended);
 
         return {
           restaurantName: parsed.restaurantName || 'Thực Đơn Quán Ăn',
           items: allItems,
-          recommendedItems: recommendedItems.length > 0 ? recommendedItems : allItems.slice(0, 2),
-          summaryAdvice: parsed.summaryAdvice || `Hôm nay bạn còn ${remainingCalories} kcal và ${remainingProtein}g protein. Hãy chọn món giàu đạm nhé!`,
+          recommendedItems:
+            recommendedItems.length > 0
+              ? recommendedItems
+              : allItems.slice(0, 2),
+          summaryAdvice:
+            parsed.summaryAdvice ||
+            `Hôm nay bạn còn ${remainingCalories} kcal và ${remainingProtein}g protein. Hãy chọn món giàu đạm nhé!`,
         };
       } catch (err) {
-        this.logger.error(`Lỗi khi gọi Gemini Scan Menu: ${err.message}. Chuyển sang Smart Fallback.`);
+        this.logger.error(
+          `Lỗi khi gọi Gemini Scan Menu: ${err.message}. Chuyển sang Smart Fallback.`,
+        );
       }
     }
 
@@ -975,7 +1189,10 @@ Nhiệm vụ:
     return this.getSmartMenuFallback(remainingCalories, remainingProtein);
   }
 
-  private getSmartMenuFallback(remainingCalories: number, remainingProtein: number): ScanMenuResponseDto {
+  private getSmartMenuFallback(
+    remainingCalories: number,
+    remainingProtein: number,
+  ): ScanMenuResponseDto {
     const mockItems: MenuItemDto[] = [
       {
         name: 'Phở bò tái nạc',
@@ -984,7 +1201,8 @@ Nhiệm vụ:
         protein: 34,
         carbs: 60,
         fat: 10,
-        description: 'Bánh phở tươi, thịt bò tái nạc mềm ngọt, nước dùng thanh ít béo.',
+        description:
+          'Bánh phở tươi, thịt bò tái nạc mềm ngọt, nước dùng thanh ít béo.',
         isRecommended: true,
         recommendationReason: `Lựa chọn tuyệt vời! Món này cung cấp 34g protein chất lượng cao, rất phù hợp với chỉ tiêu thiếu ~${remainingProtein}g protein của bạn hôm nay.`,
       },
@@ -995,7 +1213,8 @@ Nhiệm vụ:
         protein: 26,
         carbs: 65,
         fat: 16,
-        description: 'Chả viên nướng than hoa, bún tươi, nước mắm chấm dưa góp.',
+        description:
+          'Chả viên nướng than hoa, bún tươi, nước mắm chấm dưa góp.',
         isRecommended: false,
       },
       {
@@ -1005,7 +1224,8 @@ Nhiệm vụ:
         protein: 30,
         carbs: 72,
         fat: 22,
-        description: 'Cơm tấm dẻo thơm, sườn heo ướp đậm đà, trứng ốp la lòng đào.',
+        description:
+          'Cơm tấm dẻo thơm, sườn heo ướp đậm đà, trứng ốp la lòng đào.',
         isRecommended: false,
       },
       {
@@ -1015,9 +1235,11 @@ Nhiệm vụ:
         protein: 18,
         carbs: 32,
         fat: 4,
-        description: 'Tôm tươi, thịt nạc luộc cuộn bánh tráng và rau sống chấm tương đậu.',
+        description:
+          'Tôm tươi, thịt nạc luộc cuộn bánh tráng và rau sống chấm tương đậu.',
         isRecommended: true,
-        recommendationReason: 'Calo thấp, thanh mát và giàu protein nạc. Rất lý tưởng nếu bạn muốn ăn nhẹ mà không lo quá calo.',
+        recommendationReason:
+          'Calo thấp, thanh mát và giàu protein nạc. Rất lý tưởng nếu bạn muốn ăn nhẹ mà không lo quá calo.',
       },
     ];
 
@@ -1028,8 +1250,6 @@ Nhiệm vụ:
       summaryAdvice: `Bạn còn ${remainingCalories} kcal và ${remainingProtein}g Protein hôm nay. Món Phở bò tái nạc hoặc Gỏi cuốn tôm thịt là lựa chọn tối ưu nhất!`,
     };
   }
-
-
 
   // =========================================================================
   // PHẦN 7: CÁC HÀM NHẬN DIỆN ẢNH CƠ BẢN (FOOD RECOGNITION)
@@ -1049,18 +1269,24 @@ Nhiệm vụ:
     mimeType: string = 'image/jpeg',
     userId: string,
   ): Promise<FoodRecognitionResultDto> {
-    const { quota, usedQuotaType } = await this.checkAndDetermineQuotaType(userId);
+    const { quota, usedQuotaType } =
+      await this.checkAndDetermineQuotaType(userId);
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
     if (this.genAI) {
       try {
         const result = await this.callGeminiVision(cleanBase64, mimeType);
         if (result) {
-          const remaining = await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
-            promptTokens: 500,
-            outputTokens: 200,
-            costUsd: 0.0005,
-          });
+          const remaining = await this.deductQuotaAfterSuccess(
+            userId,
+            usedQuotaType,
+            quota,
+            {
+              promptTokens: 500,
+              outputTokens: 200,
+              costUsd: 0.0005,
+            },
+          );
 
           return {
             ...result,
@@ -1077,15 +1303,22 @@ Nhiệm vụ:
         if (error instanceof BadRequestException) {
           throw error;
         }
-        this.logger.error(`Lỗi khi gọi Gemini Vision API: ${error.message}. Chuyển sang Smart Fallback.`);
+        this.logger.error(
+          `Lỗi khi gọi Gemini Vision API: ${error.message}. Chuyển sang Smart Fallback.`,
+        );
       }
     }
 
-    const remaining = await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
-      promptTokens: 100,
-      outputTokens: 50,
-      costUsd: 0,
-    });
+    const remaining = await this.deductQuotaAfterSuccess(
+      userId,
+      usedQuotaType,
+      quota,
+      {
+        promptTokens: 100,
+        outputTokens: 50,
+        costUsd: 0,
+      },
+    );
 
     const fallback = this.getSmartFallbackRecognition();
     return {
@@ -1100,7 +1333,10 @@ Nhiệm vụ:
     };
   }
 
-  private async callGeminiVision(base64Data: string, mimeType: string): Promise<FoodRecognitionResultDto | null> {
+  private async callGeminiVision(
+    base64Data: string,
+    mimeType: string,
+  ): Promise<FoodRecognitionResultDto | null> {
     if (!this.genAI) return null;
     const model = this.genAI.getGenerativeModel({
       model: this.modelName,
@@ -1165,18 +1401,25 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
     const responseText = response.response.text();
 
     try {
-      const cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const cleanJson = responseText
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
       const parsed = JSON.parse(cleanJson);
 
       if (parsed.isFood === false) {
         throw new BadRequestException(
-          parsed.message || 'Hình ảnh không phải là món ăn hoặc quá mờ. Vui lòng chụp rõ món ăn hơn nhé!',
+          parsed.message ||
+            'Hình ảnh không phải là món ăn hoặc quá mờ. Vui lòng chụp rõ món ăn hơn nhé!',
         );
       }
 
       return {
         foodName: parsed.foodName || 'Món ăn hỗn hợp',
-        confidenceScore: typeof parsed.confidenceScore === 'number' ? parsed.confidenceScore : 0.9,
+        confidenceScore:
+          typeof parsed.confidenceScore === 'number'
+            ? parsed.confidenceScore
+            : 0.9,
         servingSize: parsed.servingSize || '1 phần tiêu chuẩn',
         totalCalories: Math.round(parsed.totalCalories || 0),
         totalProtein: Math.round(parsed.totalProtein || 0),
@@ -1199,7 +1442,9 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
       };
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
-      this.logger.error(`Failed to parse Gemini JSON response: ${responseText}`);
+      this.logger.error(
+        `Failed to parse Gemini JSON response: ${responseText}`,
+      );
       return null;
     }
   }
@@ -1215,9 +1460,30 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
         totalCarb: 62,
         totalFat: 12,
         items: [
-          { name: 'Bánh phở tươi', servingSize: '200g', calories: 220, protein: 4, carb: 48, fat: 1 },
-          { name: 'Thịt bò tái & nạm', servingSize: '120g', calories: 200, protein: 26, carb: 0, fat: 10 },
-          { name: 'Nước dùng & hành ngò', servingSize: '1 tô', calories: 60, protein: 2, carb: 14, fat: 1 },
+          {
+            name: 'Bánh phở tươi',
+            servingSize: '200g',
+            calories: 220,
+            protein: 4,
+            carb: 48,
+            fat: 1,
+          },
+          {
+            name: 'Thịt bò tái & nạm',
+            servingSize: '120g',
+            calories: 200,
+            protein: 26,
+            carb: 0,
+            fat: 10,
+          },
+          {
+            name: 'Nước dùng & hành ngò',
+            servingSize: '1 tô',
+            calories: 60,
+            protein: 2,
+            carb: 14,
+            fat: 1,
+          },
         ],
         healthTip:
           'Món ăn giàu đạm chất lượng cao và năng lượng dễ hấp thu. Có thể thêm giá đỗ, húng quế và vắt thêm chanh để bổ sung vitamin C.',
@@ -1232,10 +1498,38 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
         totalCarb: 70,
         totalFat: 18,
         items: [
-          { name: 'Cơm tấm trắng', servingSize: '1 chén (~160g)', calories: 220, protein: 4, carb: 48, fat: 1 },
-          { name: 'Sườn heo nướng', servingSize: '1 miếng (~120g)', calories: 280, protein: 22, carb: 6, fat: 17 },
-          { name: 'Đồ chua & dưa leo', servingSize: '1 phần', calories: 30, protein: 1, carb: 6, fat: 0 },
-          { name: 'Mỡ hành', servingSize: '1 thìa', calories: 30, protein: 0, carb: 0, fat: 3 },
+          {
+            name: 'Cơm tấm trắng',
+            servingSize: '1 chén (~160g)',
+            calories: 220,
+            protein: 4,
+            carb: 48,
+            fat: 1,
+          },
+          {
+            name: 'Sườn heo nướng',
+            servingSize: '1 miếng (~120g)',
+            calories: 280,
+            protein: 22,
+            carb: 6,
+            fat: 17,
+          },
+          {
+            name: 'Đồ chua & dưa leo',
+            servingSize: '1 phần',
+            calories: 30,
+            protein: 1,
+            carb: 6,
+            fat: 0,
+          },
+          {
+            name: 'Mỡ hành',
+            servingSize: '1 thìa',
+            calories: 30,
+            protein: 0,
+            carb: 0,
+            fat: 3,
+          },
         ],
         healthTip:
           'Bữa ăn ngon miệng và giàu protein. Nếu đang kiểm soát calo nghiêm ngặt, bạn có thể yêu cầu giảm lượng mỡ hành chan lên cơm.',
@@ -1254,7 +1548,10 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
   // TIỆN ÍCH HỆ THỐNG
   // =========================================================================
 
-  private getTimezoneDayBounds(timezone: string = 'Asia/Ho_Chi_Minh'): { startOfDay: Date; resetsAt: Date } {
+  private getTimezoneDayBounds(timezone: string = 'Asia/Ho_Chi_Minh'): {
+    startOfDay: Date;
+    resetsAt: Date;
+  } {
     const now = new Date();
     const ymd = now.toLocaleDateString('en-CA', { timeZone: timezone });
     const startOfDay = new Date(`${ymd}T00:00:00+07:00`);

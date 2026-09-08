@@ -11,7 +11,13 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { WorkoutsService } from './workouts.service';
@@ -27,7 +33,8 @@ export class WorkoutsController {
   @Get('categories')
   @ApiOperation({
     summary: 'Lấy danh mục các bài tập và hệ số MET tham khảo',
-    description: 'Trả về danh sách 10 loại hình tập luyện phổ biến kèm hệ số MET chuẩn để tính calo tiêu hao.',
+    description:
+      'Trả về danh sách 10 loại hình tập luyện phổ biến kèm hệ số MET chuẩn để tính calo tiêu hao.',
   })
   @ApiResponse({ status: 200, description: 'Lấy danh mục thành công' })
   getCategories() {
@@ -38,11 +45,20 @@ export class WorkoutsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Tổng hợp vận động trong ngày (Active Calories, thời lượng, số buổi)',
+    summary:
+      'Tổng hợp vận động trong ngày (Active Calories, thời lượng, số buổi)',
   })
-  @ApiQuery({ name: 'date', required: false, example: '2026-09-05', description: 'Ngày cần tra cứu (YYYY-MM-DD)' })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    example: '2026-09-05',
+    description: 'Ngày cần tra cứu (YYYY-MM-DD)',
+  })
   @ApiResponse({ status: 200, description: 'Lấy tóm tắt vận động thành công' })
-  getDailySummary(@CurrentUser('id') userId: string, @Query('date') date?: string) {
+  getDailySummary(
+    @CurrentUser('id') userId: string,
+    @Query('date') date?: string,
+  ) {
     return this.workoutsService.getDailySummary(userId, date);
   }
 
@@ -55,7 +71,10 @@ export class WorkoutsController {
       'Ghi nhận buổi tập kèm bài tập chi tiết và sets. Nếu không truyền caloriesBurned, hệ thống sẽ tự động tính dựa trên hệ số MET và cân nặng hiện tại của người dùng.',
   })
   @ApiResponse({ status: 201, description: 'Tạo buổi tập thành công' })
-  createWorkout(@CurrentUser('id') userId: string, @Body() dto: CreateWorkoutLogDto) {
+  createWorkout(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateWorkoutLogDto,
+  ) {
     return this.workoutsService.createWorkout(userId, dto);
   }
 
@@ -66,7 +85,10 @@ export class WorkoutsController {
     summary: 'Lấy danh sách các buổi tập của người dùng',
   })
   @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
-  getWorkouts(@CurrentUser('id') userId: string, @Query() query: QueryWorkoutDto) {
+  getWorkouts(
+    @CurrentUser('id') userId: string,
+    @Query() query: QueryWorkoutDto,
+  ) {
     return this.workoutsService.getWorkouts(userId, query);
   }
 

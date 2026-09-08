@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateWeightLogDto {
@@ -9,12 +16,18 @@ export class CreateWeightLogDto {
   @IsNotEmpty({ message: 'Cân nặng không được để trống' })
   weightKg: number;
 
-  @ApiPropertyOptional({ example: 'Cân vào buổi sáng sau khi ngủ dậy', description: 'Ghi chú thêm' })
+  @ApiPropertyOptional({
+    example: 'Cân vào buổi sáng sau khi ngủ dậy',
+    description: 'Ghi chú thêm',
+  })
   @IsOptional()
   @IsString()
   note?: string;
 
-  @ApiPropertyOptional({ example: '2026-09-04T07:00:00.000Z', description: 'Thời điểm ghi nhận cân nặng (mặc định là hiện tại)' })
+  @ApiPropertyOptional({
+    example: '2026-09-04T07:00:00.000Z',
+    description: 'Thời điểm ghi nhận cân nặng (mặc định là hiện tại)',
+  })
   @IsOptional()
   @IsString()
   date?: string;

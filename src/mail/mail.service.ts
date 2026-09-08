@@ -10,7 +10,8 @@ export class MailService {
 
   constructor(private readonly configService: ConfigService) {
     this.fromAddress =
-      this.configService.get<string>('SMTP_FROM') || 'NutriWise <no-reply@nutriwise.app>';
+      this.configService.get<string>('SMTP_FROM') ||
+      'NutriWise <no-reply@nutriwise.app>';
 
     this.transporter = nodemailer.createTransport({
       host: this.configService.get<string>('SMTP_HOST'),

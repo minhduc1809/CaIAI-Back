@@ -14,9 +14,9 @@ export interface ExerciseGuide {
   imageUrl?: string;
   instructions: {
     preparation: string; // Chuẩn bị
-    execution: string;   // Thực hiện
+    execution: string; // Thực hiện
     commonMistakes: string; // Lỗi sai phổ biến cần tránh
-    breathing: string;   // Cách hít thở chuẩn
+    breathing: string; // Cách hít thở chuẩn
   };
 }
 
@@ -37,9 +37,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Quỳ 2 gối trên thảm, 2 tay chống rộng hơn vai một chút, thân người từ đầu đến gối tạo thành đường thẳng.',
-      execution: 'Hạ ngực xuống gần chạm đất bằng cách gập khuỷu tay góc 45 độ, sau đó dùng lực cơ ngực đẩy người về vị trí ban đầu.',
-      commonMistakes: 'Để võng lưng hoặc khuỷu tay mở rộng 90 độ gây đau khớp vai.',
+      preparation:
+        'Quỳ 2 gối trên thảm, 2 tay chống rộng hơn vai một chút, thân người từ đầu đến gối tạo thành đường thẳng.',
+      execution:
+        'Hạ ngực xuống gần chạm đất bằng cách gập khuỷu tay góc 45 độ, sau đó dùng lực cơ ngực đẩy người về vị trí ban đầu.',
+      commonMistakes:
+        'Để võng lưng hoặc khuỷu tay mở rộng 90 độ gây đau khớp vai.',
       breathing: 'Hạ xuống hít sâu bằng mũi, đẩy lên thở mạnh ra bằng miệng.',
     },
   },
@@ -55,9 +58,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Đứng thẳng, hai chân rộng bằng vai, mũi chân hơi chếch ra ngoài 15-30 độ.',
-      execution: 'Đẩy hông ra sau và hạ đùi xuống đến khi song song với mặt sàn, giữ ngực ưỡn thẳng rồi ấn gót đứng lên.',
-      commonMistakes: 'Đầu gối chụm vào trong hoặc gót chân bị nhấc khỏi mặt đất.',
+      preparation:
+        'Đứng thẳng, hai chân rộng bằng vai, mũi chân hơi chếch ra ngoài 15-30 độ.',
+      execution:
+        'Đẩy hông ra sau và hạ đùi xuống đến khi song song với mặt sàn, giữ ngực ưỡn thẳng rồi ấn gót đứng lên.',
+      commonMistakes:
+        'Đầu gối chụm vào trong hoặc gót chân bị nhấc khỏi mặt đất.',
       breathing: 'Hạ xuống hít vào, đứng lên thở ra.',
     },
   },
@@ -73,8 +79,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 25,
     instructions: {
-      preparation: 'Chống 2 cùi chỏ vuông góc dưới vai, 2 chân duỗi thẳng phía sau rộng bằng hông.',
-      execution: 'Siết chặt cơ bụng và cơ mông, giữ toàn thân từ đầu đến gót chân thành một đường thẳng tắp.',
+      preparation:
+        'Chống 2 cùi chỏ vuông góc dưới vai, 2 chân duỗi thẳng phía sau rộng bằng hông.',
+      execution:
+        'Siết chặt cơ bụng và cơ mông, giữ toàn thân từ đầu đến gót chân thành một đường thẳng tắp.',
       commonMistakes: 'Nhô mông lên quá cao hoặc thả lỏng để võng lưng dưới.',
       breathing: 'Hít thở đều đặn và nhịp nhàng, không được nín thở.',
     },
@@ -91,9 +99,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 40,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Nằm ngửa gập gối, đặt hai bàn chân phẳng trên sàn rộng bằng hông.',
-      execution: 'Ấn mạnh gót chân xuống sàn để nâng hông lên cao cho đến khi đùi và thân tạo đường thẳng, siết mông 1 giây ở đỉnh.',
-      commonMistakes: 'Ưỡn lưng quá mức làm đau thắt lưng thay vì dùng lực mông.',
+      preparation:
+        'Nằm ngửa gập gối, đặt hai bàn chân phẳng trên sàn rộng bằng hông.',
+      execution:
+        'Ấn mạnh gót chân xuống sàn để nâng hông lên cao cho đến khi đùi và thân tạo đường thẳng, siết mông 1 giây ở đỉnh.',
+      commonMistakes:
+        'Ưỡn lưng quá mức làm đau thắt lưng thay vì dùng lực mông.',
       breathing: 'Nâng lên thở ra, hạ xuống hít vào.',
     },
   },
@@ -109,8 +120,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 20,
     instructions: {
-      preparation: 'Đứng cách tường một cánh tay, đặt hai lòng bàn tay lên tường ngang tầm ngực.',
-      execution: 'Gập khuỷu tay đưa ngực lại gần tường, sau đó đẩy mạnh tay trở về tư thế ban đầu.',
+      preparation:
+        'Đứng cách tường một cánh tay, đặt hai lòng bàn tay lên tường ngang tầm ngực.',
+      execution:
+        'Gập khuỷu tay đưa ngực lại gần tường, sau đó đẩy mạnh tay trở về tư thế ban đầu.',
       commonMistakes: 'Cong lưng hoặc nhấc gót chân khỏi sàn quá sớm.',
       breathing: 'Ép vào tường hít sâu, đẩy ra thở mạnh.',
     },
@@ -127,8 +140,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 35,
     instructions: {
-      preparation: 'Đứng thẳng, mỗi tay cầm một quả tạ đơn, lòng bàn tay hướng về phía trước, cùi chỏ áp sát sườn.',
-      execution: 'Giữ cố định cánh tay trên, gồng cơ bắp tay cuộn tạ lên ngang vai, hạ tạ xuống chậm trong 2 giây.',
+      preparation:
+        'Đứng thẳng, mỗi tay cầm một quả tạ đơn, lòng bàn tay hướng về phía trước, cùi chỏ áp sát sườn.',
+      execution:
+        'Giữ cố định cánh tay trên, gồng cơ bắp tay cuộn tạ lên ngang vai, hạ tạ xuống chậm trong 2 giây.',
       commonMistakes: 'Đung đưa người lấy đà hoặc vung cùi chỏ ra phía trước.',
       breathing: 'Cuộn tạ lên thở ra, hạ tạ xuống hít vào.',
     },
@@ -145,9 +160,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Ngồi thẳng lưng trên ghế tựa, cầm 2 quả tạ đơn ngang tầm tai, cùi chỏ gập 90 độ.',
-      execution: 'Đẩy tạ thẳng lên trên đầu theo đường vòng cung nhẹ cho đến khi 2 tạ gần chạm nhau, sau đó hạ chậm về vị trí cũ.',
-      commonMistakes: 'Ưỡn lưng dưới quá mức hoặc khóa chặt khớp cùi chỏ ở đỉnh.',
+      preparation:
+        'Ngồi thẳng lưng trên ghế tựa, cầm 2 quả tạ đơn ngang tầm tai, cùi chỏ gập 90 độ.',
+      execution:
+        'Đẩy tạ thẳng lên trên đầu theo đường vòng cung nhẹ cho đến khi 2 tạ gần chạm nhau, sau đó hạ chậm về vị trí cũ.',
+      commonMistakes:
+        'Ưỡn lưng dưới quá mức hoặc khóa chặt khớp cùi chỏ ở đỉnh.',
       breathing: 'Đẩy lên thở ra, hạ xuống hít vào.',
     },
   },
@@ -163,8 +181,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 50,
     instructions: {
-      preparation: 'Nằm ngửa trên ghế phẳng, cầm 2 quả tạ ngang ngực, bàn chân áp chặt trên sàn.',
-      execution: 'Đẩy tạ lên cao qua ngực, mở rộng lồng ngực khi hạ tạ xuống vuông góc.',
+      preparation:
+        'Nằm ngửa trên ghế phẳng, cầm 2 quả tạ ngang ngực, bàn chân áp chặt trên sàn.',
+      execution:
+        'Đẩy tạ lên cao qua ngực, mở rộng lồng ngực khi hạ tạ xuống vuông góc.',
       commonMistakes: 'Hạ tạ quá sâu làm căng rách bao khớp vai.',
       breathing: 'Đẩy tạ lên thở ra, hạ tạ xuống hít vào.',
     },
@@ -181,9 +201,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Ngồi vào máy kéo xô, đùi cố định dưới đệm, hai tay nắm thanh bar rộng hơn vai.',
-      execution: 'Ưỡn ngực, dùng cơ lưng xô kéo thanh bar xuống chạm nhẹ xương quai xanh rồi nhả lên có kiểm soát.',
-      commonMistakes: 'Ngả người ra sau quá nhiều để lấy đà kéo bằng tay thay vì cơ xô.',
+      preparation:
+        'Ngồi vào máy kéo xô, đùi cố định dưới đệm, hai tay nắm thanh bar rộng hơn vai.',
+      execution:
+        'Ưỡn ngực, dùng cơ lưng xô kéo thanh bar xuống chạm nhẹ xương quai xanh rồi nhả lên có kiểm soát.',
+      commonMistakes:
+        'Ngả người ra sau quá nhiều để lấy đà kéo bằng tay thay vì cơ xô.',
       breathing: 'Kéo xuống thở ra, đưa lên hít vào.',
     },
   },
@@ -199,8 +222,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Ngồi trên máy kéo cáp, gối hơi co, lưng thẳng đứng, nắm tay cầm V-Bar.',
-      execution: 'Kéo tay cầm về phía rốn, ép chặt hai bả vai ra phía sau trong 1 giây.',
+      preparation:
+        'Ngồi trên máy kéo cáp, gối hơi co, lưng thẳng đứng, nắm tay cầm V-Bar.',
+      execution:
+        'Kéo tay cầm về phía rốn, ép chặt hai bả vai ra phía sau trong 1 giây.',
       commonMistakes: 'Gù lưng hoặc vung thân người tới lui.',
       breathing: 'Kéo vào thở ra, nhả ra hít vào.',
     },
@@ -217,9 +242,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 35,
     instructions: {
-      preparation: 'Đứng thẳng người hơi nghiêng về trước, hai tay cầm dây thừng máy cáp trên cao.',
-      execution: 'Khóa chặt cùi chỏ sát sườn, duỗi thẳng cẳng tay xuống dưới và tách 2 đầu dây ở cuối chuyển động.',
-      commonMistakes: 'Di chuyển cùi chỏ về trước ra sau làm mất lực vào tay sau.',
+      preparation:
+        'Đứng thẳng người hơi nghiêng về trước, hai tay cầm dây thừng máy cáp trên cao.',
+      execution:
+        'Khóa chặt cùi chỏ sát sườn, duỗi thẳng cẳng tay xuống dưới và tách 2 đầu dây ở cuối chuyển động.',
+      commonMistakes:
+        'Di chuyển cùi chỏ về trước ra sau làm mất lực vào tay sau.',
       breathing: 'Duỗi tay thở ra, gập tay hít vào.',
     },
   },
@@ -235,8 +263,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Ngồi áp sát lưng vào ghế đệm, đặt hai bàn chân rộng bằng vai trên bàn đạp.',
-      execution: 'Mở khóa an toàn, hạ bàn đạp xuống tạo góc đùi 90 độ rồi ấn lực bàn chân đẩy lên (không khóa khớp gối).',
+      preparation:
+        'Ngồi áp sát lưng vào ghế đệm, đặt hai bàn chân rộng bằng vai trên bàn đạp.',
+      execution:
+        'Mở khóa an toàn, hạ bàn đạp xuống tạo góc đùi 90 độ rồi ấn lực bàn chân đẩy lên (không khóa khớp gối).',
       commonMistakes: 'Duỗi thẳng và khóa cứng khớp gối khi đẩy lên cao.',
       breathing: 'Hạ xuống hít vào, đạp lên thở ra.',
     },
@@ -253,8 +283,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Nằm sấp trên máy, đặt đệm tròn phía sau gót chân ngay dưới bắp chân.',
-      execution: 'Gồng cơ đùi sau cuộn chân lên phía mông hết biên độ rồi hạ xuống từ từ.',
+      preparation:
+        'Nằm sấp trên máy, đặt đệm tròn phía sau gót chân ngay dưới bắp chân.',
+      execution:
+        'Gồng cơ đùi sau cuộn chân lên phía mông hết biên độ rồi hạ xuống từ từ.',
       commonMistakes: 'Nhấc hông khỏi đệm khi cuộn tạ.',
       breathing: 'Cuộn chân thở ra, duỗi chân hít vào.',
     },
@@ -271,8 +303,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 40,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Nằm ngửa gập gối, hai tay chạm nhẹ vào mang tai (không kéo gáy).',
-      execution: 'Dùng cơ bụng cuộn phần thân trên nâng vai rời khỏi sàn khoảng 10-15 cm, siết chặt bụng.',
+      preparation:
+        'Nằm ngửa gập gối, hai tay chạm nhẹ vào mang tai (không kéo gáy).',
+      execution:
+        'Dùng cơ bụng cuộn phần thân trên nâng vai rời khỏi sàn khoảng 10-15 cm, siết chặt bụng.',
       commonMistakes: 'Dùng tay kéo giật cổ về phía trước gây đau đốt sống cổ.',
       breathing: 'Cuộn bụng thở ra, hạ người hít vào.',
     },
@@ -289,8 +323,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 25,
     instructions: {
-      preparation: 'Đứng thẳng cạnh tường hoặc tay vịn, hai chân rộng bằng hông.',
-      execution: 'Nhón tối đa gót chân lên cao bằng ức bàn chân, giữ 1 giây rồi hạ xuống chậm.',
+      preparation:
+        'Đứng thẳng cạnh tường hoặc tay vịn, hai chân rộng bằng hông.',
+      execution:
+        'Nhón tối đa gót chân lên cao bằng ức bàn chân, giữ 1 giây rồi hạ xuống chậm.',
       commonMistakes: 'Nhún nhảy quá nhanh không có điểm dừng siết cơ.',
       breathing: 'Nhón lên thở ra, hạ xuống hít vào.',
     },
@@ -308,7 +344,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 50,
     instructions: {
       preparation: 'Đứng thẳng, hai tay thả lỏng ngang hông.',
-      execution: 'Chạy tại chỗ và nâng cao đùi liên tục sao cho đùi vuông góc với thân người.',
+      execution:
+        'Chạy tại chỗ và nâng cao đùi liên tục sao cho đùi vuông góc với thân người.',
       commonMistakes: 'Ngả người ra sau khi nâng chân.',
       breathing: 'Hít thở nhịp nhàng theo bước chạy.',
     },
@@ -325,8 +362,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 35,
     instructions: {
-      preparation: 'Đứng thẳng cầm 2 quả tạ đơn, lòng bàn tay hướng vào nhau như cầm búa.',
-      execution: 'Cuộn tạ lên giữ nguyên hướng lòng bàn tay, siết chặt cơ cẳng tay và bắp tay.',
+      preparation:
+        'Đứng thẳng cầm 2 quả tạ đơn, lòng bàn tay hướng vào nhau như cầm búa.',
+      execution:
+        'Cuộn tạ lên giữ nguyên hướng lòng bàn tay, siết chặt cơ cẳng tay và bắp tay.',
       commonMistakes: 'Xoay cổ tay khi nâng tạ.',
       breathing: 'Nâng lên thở ra, hạ xuống hít vào.',
     },
@@ -345,8 +384,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 50,
     instructions: {
-      preparation: 'Tư thế plank cao, hai tay chống rộng bằng vai, mũi chân chạm sàn.',
-      execution: 'Hạ thân người xuống đến khi ngực cách sàn 2-3 cm, đẩy dứt khoát lên trên.',
+      preparation:
+        'Tư thế plank cao, hai tay chống rộng bằng vai, mũi chân chạm sàn.',
+      execution:
+        'Hạ thân người xuống đến khi ngực cách sàn 2-3 cm, đẩy dứt khoát lên trên.',
       commonMistakes: 'Võng lưng hoặc không hạ đủ biên độ.',
       breathing: 'Xuống hít sâu, đẩy lên thở mạnh.',
     },
@@ -363,8 +404,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 80,
     instructions: {
-      preparation: 'Nằm trên ghế phẳng, mắt thẳng dưới đòn tạ, nắm thanh đòn rộng gấp 1.5 lần vai.',
-      execution: 'Nhấc tạ ra khỏi giá, hạ đòn chạm nhẹ ngực giữa, dùng lực ngực đẩy thẳng lên.',
+      preparation:
+        'Nằm trên ghế phẳng, mắt thẳng dưới đòn tạ, nắm thanh đòn rộng gấp 1.5 lần vai.',
+      execution:
+        'Nhấc tạ ra khỏi giá, hạ đòn chạm nhẹ ngực giữa, dùng lực ngực đẩy thẳng lên.',
       commonMistakes: 'Để đòn tạ nảy trên xương ức hoặc nhấc mông khỏi ghế.',
       breathing: 'Hạ đòn hít vào gồng core, đẩy lên thở ra qua miệng.',
     },
@@ -381,8 +424,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 120,
     caloriesBurnedEstimate: 110,
     instructions: {
-      preparation: 'Đặt đòn tạ lên cơ cầu vai (không đặt lên đốt sống cổ), bước ra rộng bằng vai.',
-      execution: 'Hít sâu gồng bụng, hạ hông xuống sâu ngang đùi rồi đạp mạnh đứng lên.',
+      preparation:
+        'Đặt đòn tạ lên cơ cầu vai (không đặt lên đốt sống cổ), bước ra rộng bằng vai.',
+      execution:
+        'Hít sâu gồng bụng, hạ hông xuống sâu ngang đùi rồi đạp mạnh đứng lên.',
       commonMistakes: 'Cong lưng dưới (butt wink) hoặc gối sụp vào trong.',
       breathing: 'Lấy hơi sâu nén bụng khi hạ, đứng lên 2/3 đường thở ra mạnh.',
     },
@@ -399,9 +444,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 65,
     instructions: {
-      preparation: 'Điều chỉnh ghế dốc 30-45 độ, cầm 2 quả tạ đơn ngồi tựa chắc chắn.',
-      execution: 'Đẩy tạ lên hướng lên trần nhà, ép cơ ngực trên ở điểm cao nhất.',
-      commonMistakes: 'Chỉnh ghế quá dốc (>60 độ) làm ăn vào cơ vai thay vì ngực trên.',
+      preparation:
+        'Điều chỉnh ghế dốc 30-45 độ, cầm 2 quả tạ đơn ngồi tựa chắc chắn.',
+      execution:
+        'Đẩy tạ lên hướng lên trần nhà, ép cơ ngực trên ở điểm cao nhất.',
+      commonMistakes:
+        'Chỉnh ghế quá dốc (>60 độ) làm ăn vào cơ vai thay vì ngực trên.',
       breathing: 'Đẩy lên thở ra, hạ xuống hít sâu.',
     },
   },
@@ -417,9 +465,12 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 75,
     instructions: {
-      preparation: 'Đứng thẳng cầm tạ trước đùi, chân rộng bằng hông, gối hơi chùng nhẹ cố định.',
-      execution: 'Đẩy mông ra sau tối đa, trượt tạ dọc sát đùi xuống dưới gối cho đến khi căng đùi sau.',
-      commonMistakes: 'Gập gối quá nhiều thành squat hoặc gù lưng làm chấn thương cột sống.',
+      preparation:
+        'Đứng thẳng cầm tạ trước đùi, chân rộng bằng hông, gối hơi chùng nhẹ cố định.',
+      execution:
+        'Đẩy mông ra sau tối đa, trượt tạ dọc sát đùi xuống dưới gối cho đến khi căng đùi sau.',
+      commonMistakes:
+        'Gập gối quá nhiều thành squat hoặc gù lưng làm chấn thương cột sống.',
       breathing: 'Hạ xuống hít vào, kéo tạ lên siết mông thở ra.',
     },
   },
@@ -435,8 +486,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Đứng thẳng người hơi đổ về trước 10 độ, cầm 2 tạ đơn nhẹ ở hai bên đùi.',
-      execution: 'Nâng hai tay sang ngang đến khi cánh tay song song sàn, cùi chỏ luôn cao hơn cổ tay.',
+      preparation:
+        'Đứng thẳng người hơi đổ về trước 10 độ, cầm 2 tạ đơn nhẹ ở hai bên đùi.',
+      execution:
+        'Nâng hai tay sang ngang đến khi cánh tay song song sàn, cùi chỏ luôn cao hơn cổ tay.',
       commonMistakes: 'Dùng tạ quá nặng và nhún nhảy thân người để vung tạ.',
       breathing: 'Dang tay thở ra, hạ tạ hít vào.',
     },
@@ -453,8 +506,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 55,
     instructions: {
-      preparation: 'Gập hông 45 độ, lưng giữ thẳng tắp, hai tay cầm tạ buông thõng tự nhiên.',
-      execution: 'Dùng cơ lưng kéo tạ về sát hông, ép chặt hai bả vai lại với nhau.',
+      preparation:
+        'Gập hông 45 độ, lưng giữ thẳng tắp, hai tay cầm tạ buông thõng tự nhiên.',
+      execution:
+        'Dùng cơ lưng kéo tạ về sát hông, ép chặt hai bả vai lại với nhau.',
       commonMistakes: 'Gù lưng hoặc kéo tạ bằng lực cẳng tay.',
       breathing: 'Kéo lên thở ra, nhả tạ hít vào.',
     },
@@ -471,8 +526,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Treo người trên xà, lòng bàn tay hướng về phía trước rộng hơn vai.',
-      execution: 'Ưỡn ngực kéo thân người lên đến khi cằm vượt qua thanh xà, hạ người xuống chậm.',
+      preparation:
+        'Treo người trên xà, lòng bàn tay hướng về phía trước rộng hơn vai.',
+      execution:
+        'Ưỡn ngực kéo thân người lên đến khi cằm vượt qua thanh xà, hạ người xuống chậm.',
       commonMistakes: 'Đung đưa chân lấy đà giật cục.',
       breathing: 'Kéo lên thở ra, hạ xuống hít sâu.',
     },
@@ -489,8 +546,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 50,
     instructions: {
-      preparation: 'Chống 2 tay trên xà kép, thân người nghiêng về trước 30 độ để ăn vào ngực.',
-      execution: 'Hạ người xuống đến khi cùi chỏ tạo góc 90 độ, đẩy thẳng tay nâng người lên.',
+      preparation:
+        'Chống 2 tay trên xà kép, thân người nghiêng về trước 30 độ để ăn vào ngực.',
+      execution:
+        'Hạ người xuống đến khi cùi chỏ tạo góc 90 độ, đẩy thẳng tay nâng người lên.',
       commonMistakes: 'Hạ quá sâu gây tổn thương dây chằng khớp vai.',
       breathing: 'Hạ xuống hít vào, đẩy lên thở ra.',
     },
@@ -508,7 +567,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 60,
     instructions: {
       preparation: 'Đứng cách ghế 1 bước dài, gác mu bàn chân sau lên ghế.',
-      execution: 'Hạ đầu gối chân sau xuống gần sàn, giữ thân người hơi nghiêng rồi ấn chân trước đứng dậy.',
+      execution:
+        'Hạ đầu gối chân sau xuống gần sàn, giữ thân người hơi nghiêng rồi ấn chân trước đứng dậy.',
       commonMistakes: 'Chân trước đặt quá gần ghế làm đầu gối bị ép gập nhọn.',
       breathing: 'Hạ gối hít vào, đứng lên thở ra.',
     },
@@ -525,8 +585,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 35,
     instructions: {
-      preparation: 'Treo người vững vàng trên thanh xà đơn, hai chân khép chặt.',
-      execution: 'Dùng cơ bụng cuộn gối lên cao ngang ngực, siết 1 giây rồi hạ chân xuống từ từ.',
+      preparation:
+        'Treo người vững vàng trên thanh xà đơn, hai chân khép chặt.',
+      execution:
+        'Dùng cơ bụng cuộn gối lên cao ngang ngực, siết 1 giây rồi hạ chân xuống từ từ.',
       commonMistakes: 'Dùng lực đung đưa hông để vung chân.',
       breathing: 'Co gối thở ra, hạ chân hít vào.',
     },
@@ -544,7 +606,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 40,
     instructions: {
       preparation: 'Nằm ngửa nâng 2 chân vuông góc, 2 tay đặt sau đầu.',
-      execution: 'Xoay thân trên đưa cùi chỏ trái chạm đầu gối phải, đồng thời duỗi thẳng chân trái.',
+      execution:
+        'Xoay thân trên đưa cùi chỏ trái chạm đầu gối phải, đồng thời duỗi thẳng chân trái.',
       commonMistakes: 'Xoay cổ quá nhanh thay vì xoay toàn bộ lồng ngực.',
       breathing: 'Thở ra mỗi lần chạm gối, hít vào khi đổi bên.',
     },
@@ -562,7 +625,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 60,
     instructions: {
       preparation: 'Tư thế plank cao, hai tay chống vững dưới vai.',
-      execution: 'Chạy kéo luân phiên hai đầu gối về phía ngực với nhịp độ nhanh và đều đặn.',
+      execution:
+        'Chạy kéo luân phiên hai đầu gối về phía ngực với nhịp độ nhanh và đều đặn.',
       commonMistakes: 'Nhô hông lên cao làm mất lực vào bụng.',
       breathing: 'Duy trì nhịp thở nhanh và sâu.',
     },
@@ -580,7 +644,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 40,
     instructions: {
       preparation: 'Nằm trên ghế cầm tạ đơn giơ thẳng tay lên trần nhà.',
-      execution: 'Giữ cố định bắp tay trên, chỉ gập cẳng tay hạ tạ về phía hai bên trán/mang tai rồi duỗi thẳng lại.',
+      execution:
+        'Giữ cố định bắp tay trên, chỉ gập cẳng tay hạ tạ về phía hai bên trán/mang tai rồi duỗi thẳng lại.',
       commonMistakes: 'Vung cùi chỏ về trước làm giảm áp lực lên tay sau.',
       breathing: 'Hạ tạ hít vào, đẩy thẳng tay thở ra.',
     },
@@ -597,8 +662,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Chỉnh ròng rọc cáp ngang tầm mắt, cầm hai đầu dây thừng bằng ngón cái hướng ra sau.',
-      execution: 'Kéo dây thừng về ngang sống mũi, xoay mở hai cùi chỏ ra sau hết cỡ.',
+      preparation:
+        'Chỉnh ròng rọc cáp ngang tầm mắt, cầm hai đầu dây thừng bằng ngón cái hướng ra sau.',
+      execution:
+        'Kéo dây thừng về ngang sống mũi, xoay mở hai cùi chỏ ra sau hết cỡ.',
       commonMistakes: 'Kéo bằng cơ xô xuống phía ngực thay vì kéo ngang mắt.',
       breathing: 'Kéo vào thở ra, nhả ra hít vào.',
     },
@@ -616,8 +683,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 65,
     instructions: {
       preparation: 'Cầm 2 tạ đơn nhẹ hai bên sườn, đứng thẳng người.',
-      execution: 'Bước 1 bước dài về trước, hạ gối sau cách sàn 2cm rồi bước tiếp chân sau lên liên tục.',
-      commonMistakes: 'Bước quá ngắn làm đầu gối chân trước lao về trước quá mũi chân.',
+      execution:
+        'Bước 1 bước dài về trước, hạ gối sau cách sàn 2cm rồi bước tiếp chân sau lên liên tục.',
+      commonMistakes:
+        'Bước quá ngắn làm đầu gối chân trước lao về trước quá mũi chân.',
       breathing: 'Hạ gối hít vào, bước lên thở ra.',
     },
   },
@@ -634,8 +703,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 70,
     instructions: {
       preparation: 'Đứng thẳng, hai chân rộng bằng vai.',
-      execution: 'Ngồi xổm đặt tay xuống sàn, bật 2 chân ra sau thành tư thế hít đất, chống đẩy 1 cái rồi bật chân về và nhảy cao vỗ tay.',
-      commonMistakes: 'Bỏ qua bước siết core làm võng lưng khi bật chân ra sau.',
+      execution:
+        'Ngồi xổm đặt tay xuống sàn, bật 2 chân ra sau thành tư thế hít đất, chống đẩy 1 cái rồi bật chân về và nhảy cao vỗ tay.',
+      commonMistakes:
+        'Bỏ qua bước siết core làm võng lưng khi bật chân ra sau.',
       breathing: 'Hít sâu khi xuống, thở mạnh khi bật nhảy.',
     },
   },
@@ -653,8 +724,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 150,
     caloriesBurnedEstimate: 120,
     instructions: {
-      preparation: 'Đứng sát thanh đòn, cẳng chân chạm nhẹ vào tạ, cúi người nắm thanh đòn chặt chẽ, siết lưng xô.',
-      execution: 'Hít sâu gồng chặt ổ bụng, đạp chân kéo tạ đứng thẳng dậy, khóa khớp hông ở đỉnh.',
+      preparation:
+        'Đứng sát thanh đòn, cẳng chân chạm nhẹ vào tạ, cúi người nắm thanh đòn chặt chẽ, siết lưng xô.',
+      execution:
+        'Hít sâu gồng chặt ổ bụng, đạp chân kéo tạ đứng thẳng dậy, khóa khớp hông ở đỉnh.',
       commonMistakes: 'Gù lưng khi nhấc tạ làm tổn thương đĩa đệm.',
       breathing: 'Nén hơi siết bụng khi kéo lên, qua gối thở dứt khoát.',
     },
@@ -671,8 +744,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 75,
     instructions: {
-      preparation: 'Đứng thẳng, đặt đòn tạ lên xương quai xanh, siết chặt mông và cơ bụng.',
-      execution: 'Đẩy đòn tạ thẳng đứng qua đầu, hơi rụt đầu về sau khi đòn đi qua rồi đẩy đầu về trước.',
+      preparation:
+        'Đứng thẳng, đặt đòn tạ lên xương quai xanh, siết chặt mông và cơ bụng.',
+      execution:
+        'Đẩy đòn tạ thẳng đứng qua đầu, hơi rụt đầu về sau khi đòn đi qua rồi đẩy đầu về trước.',
       commonMistakes: 'Ưỡn ngả lưng ra sau lấy đà.',
       breathing: 'Đẩy lên thở ra, hạ tạ hít vào.',
     },
@@ -689,8 +764,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 120,
     caloriesBurnedEstimate: 80,
     instructions: {
-      preparation: 'Đeo đai kẹp tạ hoặc kẹp tạ đơn giữa hai đùi, treo người trên xà.',
-      execution: 'Dùng lực lưng kéo ngực chạm thanh xà, hạ xuống chậm trong 3 giây.',
+      preparation:
+        'Đeo đai kẹp tạ hoặc kẹp tạ đơn giữa hai đùi, treo người trên xà.',
+      execution:
+        'Dùng lực lưng kéo ngực chạm thanh xà, hạ xuống chậm trong 3 giây.',
       commonMistakes: 'Không thả hết biên độ cánh tay ở đáy chuyển động.',
       breathing: 'Kéo lên thở ra, nhả xuống hít sâu.',
     },
@@ -708,7 +785,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 70,
     instructions: {
       preparation: 'Đeo đai tạ, chống 2 tay thẳng trên xà kép.',
-      execution: 'Nghiêng người về trước, hạ vuông góc cùi chỏ rồi đẩy thẳng lên dứt khoát.',
+      execution:
+        'Nghiêng người về trước, hạ vuông góc cùi chỏ rồi đẩy thẳng lên dứt khoát.',
       commonMistakes: 'Đung đưa đai tạ làm mất thăng bằng.',
       breathing: 'Xuống hít vào, lên thở ra.',
     },
@@ -725,8 +803,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 120,
     caloriesBurnedEstimate: 100,
     instructions: {
-      preparation: 'Đặt đòn tạ lên vai trước, nâng cao hai cùi chỏ song song với sàn.',
-      execution: 'Giữ thân người thẳng đứng tối đa, hạ hông sâu rồi đạp gót chân đứng dậy.',
+      preparation:
+        'Đặt đòn tạ lên vai trước, nâng cao hai cùi chỏ song song với sàn.',
+      execution:
+        'Giữ thân người thẳng đứng tối đa, hạ hông sâu rồi đạp gót chân đứng dậy.',
       commonMistakes: 'Hạ thấp cùi chỏ làm đòn tạ lăn tuột khỏi vai.',
       breathing: 'Hít sâu gồng bụng khi xuống, đứng lên thở ra.',
     },
@@ -743,8 +823,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Đứng thẳng trên 1 chân, duỗi thẳng chân còn lại về phía trước.',
-      execution: 'Hạ người ngồi xổm sâu xuống trên 1 chân cho đến khi đùi chạm bắp chuối rồi đẩy đứng lên.',
+      preparation:
+        'Đứng thẳng trên 1 chân, duỗi thẳng chân còn lại về phía trước.',
+      execution:
+        'Hạ người ngồi xổm sâu xuống trên 1 chân cho đến khi đùi chạm bắp chuối rồi đẩy đứng lên.',
       commonMistakes: 'Nhấc gót chân hoặc cong vẹo hông.',
       breathing: 'Xuống hít vào, lên thở ra.',
     },
@@ -761,8 +843,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Nằm tựa trên ghế dốc 45-60 độ, hai tay cầm tạ buông thõng ra sau vai.',
-      execution: 'Giữ cùi chỏ cố định hướng xuống đất, cuộn tạ lên siết bắp tay căng cực đại.',
+      preparation:
+        'Nằm tựa trên ghế dốc 45-60 độ, hai tay cầm tạ buông thõng ra sau vai.',
+      execution:
+        'Giữ cùi chỏ cố định hướng xuống đất, cuộn tạ lên siết bắp tay căng cực đại.',
       commonMistakes: 'Vung cùi chỏ về phía trước làm mất độ căng cơ.',
       breathing: 'Cuộn lên thở ra, hạ xuống hít vào.',
     },
@@ -780,7 +864,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 50,
     instructions: {
       preparation: 'Treo người trên xà đơn, hai chân duỗi thẳng.',
-      execution: 'Dùng lực cơ bụng gập người đưa 2 mũi chân chạm vào thanh xà phía trên đầu.',
+      execution:
+        'Dùng lực cơ bụng gập người đưa 2 mũi chân chạm vào thanh xà phía trên đầu.',
       commonMistakes: 'Đung đưa thân người lấy trớn từ lưng.',
       breathing: 'Nâng chân chạm xà thở ra, hạ chân hít vào.',
     },
@@ -798,7 +883,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 55,
     instructions: {
       preparation: 'Nằm trên ghế, hai tay nắm chặt mép ghế sau đầu.',
-      execution: 'Khóa cứng toàn thân thành 1 khối thẳng, nâng toàn bộ lưng và chân lên cao chỉ tỳ trên vai, sau đó hạ xuống chậm rãi.',
+      execution:
+        'Khóa cứng toàn thân thành 1 khối thẳng, nâng toàn bộ lưng và chân lên cao chỉ tỳ trên vai, sau đó hạ xuống chậm rãi.',
       commonMistakes: 'Gập gãy hông khi hạ thân người.',
       breathing: 'Hạ xuống hít vào siết cứng cơ, nâng lên thở ra.',
     },
@@ -815,8 +901,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 80,
     instructions: {
-      preparation: 'Thân người gập song song 90 độ với sàn, thanh tạ nằm yên dưới đất.',
-      execution: 'Kéo bùng nổ thanh tạ chạm ngực dưới rồi đặt hẳn tạ xuống sàn dừng 1 giây mỗi rep.',
+      preparation:
+        'Thân người gập song song 90 độ với sàn, thanh tạ nằm yên dưới đất.',
+      execution:
+        'Kéo bùng nổ thanh tạ chạm ngực dưới rồi đặt hẳn tạ xuống sàn dừng 1 giây mỗi rep.',
       commonMistakes: 'Nhấc cao thân người khi kéo tạ.',
       breathing: 'Kéo lên thở ra, hạ chạm sàn hít vào.',
     },
@@ -833,8 +921,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Trồng chuối dựa tường hoặc gác chân lên ghế cao ở tư thế gập người chữ V ngược.',
-      execution: 'Hạ đầu xuống chạm nhẹ sàn rồi dùng lực vai đẩy thẳng thân người lên.',
+      preparation:
+        'Trồng chuối dựa tường hoặc gác chân lên ghế cao ở tư thế gập người chữ V ngược.',
+      execution:
+        'Hạ đầu xuống chạm nhẹ sàn rồi dùng lực vai đẩy thẳng thân người lên.',
       commonMistakes: 'Mở rộng cùi chỏ sang ngang quá mức.',
       breathing: 'Hạ đầu hít vào, đẩy lên thở ra.',
     },
@@ -852,8 +942,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 85,
     instructions: {
       preparation: 'Cầm 2 tạ đơn đặt giữa hai chân ở tư thế squat.',
-      execution: 'Dùng lực bật hông giật tạ lên ngang vai, sau đó đẩy dứt khoát tạ qua đầu.',
-      commonMistakes: 'Dùng lực tay kéo tạ thay vì lực bộc phát từ hông và đùi.',
+      execution:
+        'Dùng lực bật hông giật tạ lên ngang vai, sau đó đẩy dứt khoát tạ qua đầu.',
+      commonMistakes:
+        'Dùng lực tay kéo tạ thay vì lực bộc phát từ hông và đùi.',
       breathing: 'Bật lên thở ra mạnh, hạ tạ hít vào.',
     },
   },
@@ -869,8 +961,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Chỉnh 2 ròng rọc cáp lên cao, đứng bước 1 chân tới trước, thân người hơi nghiêng.',
-      execution: 'Kéo 2 tay cầm cáp chụm lại phía trước bụng dưới hình cánh cung, siết ngực 1 giây.',
+      preparation:
+        'Chỉnh 2 ròng rọc cáp lên cao, đứng bước 1 chân tới trước, thân người hơi nghiêng.',
+      execution:
+        'Kéo 2 tay cầm cáp chụm lại phía trước bụng dưới hình cánh cung, siết ngực 1 giây.',
       commonMistakes: 'Gập cùi chỏ quá nhiều biến thành bài đẩy ngực.',
       breathing: 'Ép cáp thở ra, mở tay hít vào.',
     },
@@ -887,8 +981,10 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 70,
     instructions: {
-      preparation: 'Cầm 2 quả tạ đơn rất nặng ở hai bên thân, ưỡn ngực, khóa chặt khớp vai.',
-      execution: 'Bước đi với những bước ngắn, giữ lưng thẳng đứng tuyệt đối, không để tạ đung đưa.',
+      preparation:
+        'Cầm 2 quả tạ đơn rất nặng ở hai bên thân, ưỡn ngực, khóa chặt khớp vai.',
+      execution:
+        'Bước đi với những bước ngắn, giữ lưng thẳng đứng tuyệt đối, không để tạ đung đưa.',
       commonMistakes: 'Nghiêng ngả người hoặc thả lỏng vai.',
       breathing: 'Hít thở ngắn và sâu bằng cơ bụng.',
     },
@@ -906,7 +1002,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 80,
     instructions: {
       preparation: 'Nắm xà bằng kỹ thuật false grip hoặc ngón cái trên xà.',
-      execution: 'Kéo người bùng nổ lên cao, chuyển trọng tâm qua thanh xà và dùng lực tay sau đẩy thẳng người lên.',
+      execution:
+        'Kéo người bùng nổ lên cao, chuyển trọng tâm qua thanh xà và dùng lực tay sau đẩy thẳng người lên.',
       commonMistakes: 'Lên từng tay một gây chấn thương khớp vai.',
       breathing: 'Kéo lên thở mạnh, đẩy lên hoàn thành thở dứt khoát.',
     },
@@ -924,7 +1021,8 @@ export const MALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 130,
     instructions: {
       preparation: 'Khởi động kỹ các khớp chân và cơ háng.',
-      execution: 'Chạy nước rút 100% tốc lực trong 30 giây, sau đó đi bộ chậm 45 giây để hạ nhịp tim.',
+      execution:
+        'Chạy nước rút 100% tốc lực trong 30 giây, sau đó đi bộ chậm 45 giây để hạ nhịp tim.',
       commonMistakes: 'Dừng lại đột ngột sau khi chạy nước rút.',
       breathing: 'Hít thở sâu qua cả mũi và miệng.',
     },
@@ -948,8 +1046,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Nằm ngửa gập gối 90 độ, hai bàn chân phẳng trên sàn rộng bằng hông.',
-      execution: 'Dồn lực vào gót chân đẩy hông lên cao, siết chặt cơ mông 2 giây ở đỉnh rồi hạ xuống nhẹ nhàng.',
+      preparation:
+        'Nằm ngửa gập gối 90 độ, hai bàn chân phẳng trên sàn rộng bằng hông.',
+      execution:
+        'Dồn lực vào gót chân đẩy hông lên cao, siết chặt cơ mông 2 giây ở đỉnh rồi hạ xuống nhẹ nhàng.',
       commonMistakes: 'Ưỡn cong thắt lưng làm đau lưng thay vì siết mông.',
       breathing: 'Đẩy lên thở ra, hạ xuống hít vào.',
     },
@@ -967,7 +1067,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 35,
     instructions: {
       preparation: 'Tư thế quỳ 4 điểm (2 tay dưới vai, 2 gối dưới hông).',
-      execution: 'Giữ gối gập 90 độ, đá gót chân thẳng lên phía trần nhà, siết cơ mông ở điểm cao nhất.',
+      execution:
+        'Giữ gối gập 90 độ, đá gót chân thẳng lên phía trần nhà, siết cơ mông ở điểm cao nhất.',
       commonMistakes: 'Võng lưng hoặc xoay lệch hông sang một bên.',
       breathing: 'Đá lên thở ra, thu chân hít vào.',
     },
@@ -985,7 +1086,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 30,
     instructions: {
       preparation: 'Quỳ 4 điểm, giữ lưng thẳng cố định.',
-      execution: 'Nâng 1 đầu gối sang ngang lên cao như hình chú chó, siết cơ mông bên ngoài.',
+      execution:
+        'Nâng 1 đầu gối sang ngang lên cao như hình chú chó, siết cơ mông bên ngoài.',
       commonMistakes: 'Nghiêng cả người sang bên đối diện để bù lực.',
       breathing: 'Mở chân thở ra, khép chân hít vào.',
     },
@@ -1002,8 +1104,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Đứng chân rộng gấp 1.5 lần vai, mũi chân mở rộng 45 độ hướng ra ngoài.',
-      execution: 'Hạ hông thẳng đứng xuống sâu, cảm nhận căng đùi trong, ấn gót chân đứng lên siết mông.',
+      preparation:
+        'Đứng chân rộng gấp 1.5 lần vai, mũi chân mở rộng 45 độ hướng ra ngoài.',
+      execution:
+        'Hạ hông thẳng đứng xuống sâu, cảm nhận căng đùi trong, ấn gót chân đứng lên siết mông.',
       commonMistakes: 'Đổ người quá nhiều về phía trước.',
       breathing: 'Hạ xuống hít vào, đứng lên thở ra.',
     },
@@ -1020,8 +1124,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 20,
     instructions: {
-      preparation: 'Chống cùi chỏ trên thảm, hạ 2 gối chạm sàn, thân người từ đầu đến gối thẳng hàng.',
-      execution: 'Hóp bụng nhẹ và siết chặt cơ bụng, giữ lưng thẳng không võng.',
+      preparation:
+        'Chống cùi chỏ trên thảm, hạ 2 gối chạm sàn, thân người từ đầu đến gối thẳng hàng.',
+      execution:
+        'Hóp bụng nhẹ và siết chặt cơ bụng, giữ lưng thẳng không võng.',
       commonMistakes: 'Thả lỏng bụng làm sụp eo xuống thảm.',
       breathing: 'Hít thở đều đặn bằng ngực.',
     },
@@ -1039,7 +1145,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 25,
     instructions: {
       preparation: 'Quỳ 4 điểm trên thảm.',
-      execution: 'Đồng thời duỗi thẳng tay phải về trước và chân trái ra sau song song sàn, giữ 1 giây rồi đổi bên.',
+      execution:
+        'Đồng thời duỗi thẳng tay phải về trước và chân trái ra sau song song sàn, giữ 1 giây rồi đổi bên.',
       commonMistakes: 'Nâng tay chân quá cao làm cong vẹo cột sống.',
       breathing: 'Duỗi ra thở ra, thu về hít vào.',
     },
@@ -1057,7 +1164,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 25,
     instructions: {
       preparation: 'Đứng thẳng vịn nhẹ tay vào tường để giữ thăng bằng.',
-      execution: 'Đá 1 chân sang ngang với mũi chân hướng thẳng về trước, siết cơ hông.',
+      execution:
+        'Đá 1 chân sang ngang với mũi chân hướng thẳng về trước, siết cơ hông.',
       commonMistakes: 'Xoay mũi chân lên trần nhà.',
       breathing: 'Đá lên thở ra, hạ chân hít vào.',
     },
@@ -1074,7 +1182,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Chống 2 tay lên bậc thang hoặc mép bàn cao, người tạo góc nghiêng 45 độ.',
+      preparation:
+        'Chống 2 tay lên bậc thang hoặc mép bàn cao, người tạo góc nghiêng 45 độ.',
       execution: 'Hạ ngực chạm nhẹ mép bàn rồi đẩy thẳng tay lên.',
       commonMistakes: 'Để xệ hông khi hạ thân người.',
       breathing: 'Xuống hít sâu, lên thở mạnh.',
@@ -1092,8 +1201,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Hai tay ôm 1 quả tạ đơn 2-4kg trước ngực, chân rộng bằng vai.',
-      execution: 'Ngồi xổm hạ đùi song song sàn, giữ tạ sát ngực rồi đứng lên siết mông.',
+      preparation:
+        'Hai tay ôm 1 quả tạ đơn 2-4kg trước ngực, chân rộng bằng vai.',
+      execution:
+        'Ngồi xổm hạ đùi song song sàn, giữ tạ sát ngực rồi đứng lên siết mông.',
       commonMistakes: 'Để tạ xa ngực làm mỏi tay và gù lưng.',
       breathing: 'Hạ xuống hít vào, đứng lên thở ra.',
     },
@@ -1110,8 +1221,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Cầm 2 tạ đơn nhẹ trước đùi, chân rộng bằng hông, gối chùng nhẹ.',
-      execution: 'Đẩy hông ra sau cúi người xuống đến khi cảm nhận đùi sau căng dãn, đứng dậy siết mông.',
+      preparation:
+        'Cầm 2 tạ đơn nhẹ trước đùi, chân rộng bằng hông, gối chùng nhẹ.',
+      execution:
+        'Đẩy hông ra sau cúi người xuống đến khi cảm nhận đùi sau căng dãn, đứng dậy siết mông.',
       commonMistakes: 'Gù lưng hoặc cúi đầu quá thấp.',
       breathing: 'Cúi xuống hít vào, đứng lên thở ra.',
     },
@@ -1147,7 +1260,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 30,
     instructions: {
       preparation: 'Hai tay cầm 1 quả tạ đơn giơ thẳng qua đầu.',
-      execution: 'Chỉ gập cùi chỏ hạ tạ ra sau gáy, sau đó dùng lực bắp tay sau duỗi thẳng tay lên.',
+      execution:
+        'Chỉ gập cùi chỏ hạ tạ ra sau gáy, sau đó dùng lực bắp tay sau duỗi thẳng tay lên.',
       commonMistakes: 'Mở rộng 2 cùi chỏ sang hai bên.',
       breathing: 'Hạ tạ hít vào, duỗi tay thở ra.',
     },
@@ -1164,8 +1278,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 25,
     instructions: {
-      preparation: 'Nằm ngửa giơ 2 tay thẳng lên trần, nâng 2 chân gập gối 90 độ, áp sát lưng dưới xuống sàn.',
-      execution: 'Hạ tay phải ra sau đầu đồng thời duỗi thẳng chân trái gần chạm sàn rồi thu về đổi bên.',
+      preparation:
+        'Nằm ngửa giơ 2 tay thẳng lên trần, nâng 2 chân gập gối 90 độ, áp sát lưng dưới xuống sàn.',
+      execution:
+        'Hạ tay phải ra sau đầu đồng thời duỗi thẳng chân trái gần chạm sàn rồi thu về đổi bên.',
       commonMistakes: 'Lưng dưới bị nhấc khỏi thảm.',
       breathing: 'Duỗi tay chân thở ra, thu về hít vào.',
     },
@@ -1183,7 +1299,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 25,
     instructions: {
       preparation: 'Nằm nghiêng gập gối 90 độ, hai gót chân chụm vào nhau.',
-      execution: 'Mở đầu gối chân trên lên cao tối đa trong khi 2 gót chân vẫn dính chặt vào nhau.',
+      execution:
+        'Mở đầu gối chân trên lên cao tối đa trong khi 2 gót chân vẫn dính chặt vào nhau.',
       commonMistakes: 'Lật toàn bộ xương chậu ra sau.',
       breathing: 'Mở gối thở ra, khép gối hít vào.',
     },
@@ -1201,7 +1318,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 45,
     instructions: {
       preparation: 'Đứng thẳng khép 2 chân, 2 tay buông xuôi.',
-      execution: 'Nhảy mở 2 chân sang ngang đồng thời vỗ 2 tay lên cao qua đầu, tiếp đất êm bằng mũi chân.',
+      execution:
+        'Nhảy mở 2 chân sang ngang đồng thời vỗ 2 tay lên cao qua đầu, tiếp đất êm bằng mũi chân.',
       commonMistakes: 'Tiếp đất bằng gót chân gây chấn động khớp.',
       breathing: 'Duy trì nhịp thở đều theo bước nhảy.',
     },
@@ -1219,7 +1337,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 35,
     instructions: {
       preparation: 'Đứng thẳng, 2 tay đặt sau gáy.',
-      execution: 'Nâng cao đầu gối phải chéo sang trái đồng thời vặn thân trên đưa cùi chỏ trái chạm gối.',
+      execution:
+        'Nâng cao đầu gối phải chéo sang trái đồng thời vặn thân trên đưa cùi chỏ trái chạm gối.',
       commonMistakes: 'Cúi gập lưng thay vì nâng cao đầu gối.',
       breathing: 'Chạm gối thở ra, hạ chân hít vào.',
     },
@@ -1237,7 +1356,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 35,
     instructions: {
       preparation: 'Ngồi vào máy, cầm thanh kéo rộng hơn vai.',
-      execution: 'Kéo nhẹ nhàng thanh bar xuống dưới cằm, ép bả vai lại rồi thả lên chậm.',
+      execution:
+        'Kéo nhẹ nhàng thanh bar xuống dưới cằm, ép bả vai lại rồi thả lên chậm.',
       commonMistakes: 'Kéo giật cục bằng cổ tay.',
       breathing: 'Kéo xuống thở ra, đưa lên hít vào.',
     },
@@ -1256,8 +1376,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 40,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Đeo dây kháng lực mini-band trên đầu gối 5cm, nằm ngửa gập gối.',
-      execution: 'Đẩy hông lên cao đồng thời mở nhẹ 2 đầu gối chống lại lực kéo của dây, siết chặt cơ mông.',
+      preparation:
+        'Đeo dây kháng lực mini-band trên đầu gối 5cm, nằm ngửa gập gối.',
+      execution:
+        'Đẩy hông lên cao đồng thời mở nhẹ 2 đầu gối chống lại lực kéo của dây, siết chặt cơ mông.',
       commonMistakes: 'Để dây chun ép 2 đầu gối chụm vào nhau.',
       breathing: 'Nâng lên thở ra, hạ xuống hít vào.',
     },
@@ -1274,8 +1396,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Tựa lưng trên vào mép ghế tập ngang tầm xương bả vai, đặt quả tạ đơn 5-10kg trên xương chậu có đệm lót.',
-      execution: 'Hạ hông xuống sâu rồi dùng lực mông đẩy hông lên ngang người, giữ cằm gập nhìn về phía trước.',
+      preparation:
+        'Tựa lưng trên vào mép ghế tập ngang tầm xương bả vai, đặt quả tạ đơn 5-10kg trên xương chậu có đệm lót.',
+      execution:
+        'Hạ hông xuống sâu rồi dùng lực mông đẩy hông lên ngang người, giữ cằm gập nhìn về phía trước.',
       commonMistakes: 'Ngửa cổ nhìn lên trần nhà làm võng lưng dưới.',
       breathing: 'Đẩy lên thở mạnh siết mông, hạ xuống hít sâu.',
     },
@@ -1293,7 +1417,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 50,
     instructions: {
       preparation: 'Đứng thẳng hai chân rộng bằng hông.',
-      execution: 'Bước 1 chân chéo ra phía sau chân kia như động tác chào quý tộc, hạ gối sau vuông góc sàn rồi bước lên.',
+      execution:
+        'Bước 1 chân chéo ra phía sau chân kia như động tác chào quý tộc, hạ gối sau vuông góc sàn rồi bước lên.',
       commonMistakes: 'Bước chéo quá xa làm vặn xoắn khớp gối trước.',
       breathing: 'Hạ xuống hít vào, bước lên thở ra.',
     },
@@ -1310,8 +1435,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Đeo đai cổ chân vào máy cáp thấp, đứng đối diện máy vịn tay chắc chắn.',
-      execution: 'Đá thẳng chân ra sau theo đường chéo nhẹ, siết chặt cơ mông 1 giây ở điểm cao nhất.',
+      preparation:
+        'Đeo đai cổ chân vào máy cáp thấp, đứng đối diện máy vịn tay chắc chắn.',
+      execution:
+        'Đá thẳng chân ra sau theo đường chéo nhẹ, siết chặt cơ mông 1 giây ở điểm cao nhất.',
       commonMistakes: 'Võng lưng đung đưa cả người để quăng tạ.',
       breathing: 'Đá ra sau thở ra, thu chân hít vào.',
     },
@@ -1328,8 +1455,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 50,
     instructions: {
-      preparation: 'Đứng quay lưng lại máy cáp thấp, luồn dây thừng qua hai chân, bước tới 1 bước.',
-      execution: 'Đẩy hông ra sau hạ tạ luồn qua háng, sau đó đẩy hông về trước đứng thẳng siết mông.',
+      preparation:
+        'Đứng quay lưng lại máy cáp thấp, luồn dây thừng qua hai chân, bước tới 1 bước.',
+      execution:
+        'Đẩy hông ra sau hạ tạ luồn qua háng, sau đó đẩy hông về trước đứng thẳng siết mông.',
       commonMistakes: 'Dùng tay kéo tạ thay vì lực duỗi hông từ cơ mông.',
       breathing: 'Hạ hông hít vào, đẩy hông thở ra.',
     },
@@ -1346,9 +1475,12 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Gác mu bàn chân sau lên ghế, cầm 2 tạ đơn nhẹ 2-4kg hai bên tay.',
-      execution: 'Hơi đổ người về trước 15 độ để dồn lực vào mông, hạ gối sau vuông góc sàn rồi đứng lên.',
-      commonMistakes: 'Đứng quá thẳng người làm ăn vào đùi trước thay vì cơ mông.',
+      preparation:
+        'Gác mu bàn chân sau lên ghế, cầm 2 tạ đơn nhẹ 2-4kg hai bên tay.',
+      execution:
+        'Hơi đổ người về trước 15 độ để dồn lực vào mông, hạ gối sau vuông góc sàn rồi đứng lên.',
+      commonMistakes:
+        'Đứng quá thẳng người làm ăn vào đùi trước thay vì cơ mông.',
       breathing: 'Hạ xuống hít vào, đẩy lên thở ra.',
     },
   },
@@ -1382,8 +1514,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 30,
     caloriesBurnedEstimate: 30,
     instructions: {
-      preparation: 'Nằm nghiêng, chống 1 cùi chỏ vuông góc dưới vai, 2 chân xếp chồng lên nhau.',
-      execution: 'Nâng hông lên cao tạo thân người thành đường thẳng nghiêng, giữ cố định.',
+      preparation:
+        'Nằm nghiêng, chống 1 cùi chỏ vuông góc dưới vai, 2 chân xếp chồng lên nhau.',
+      execution:
+        'Nâng hông lên cao tạo thân người thành đường thẳng nghiêng, giữ cố định.',
       commonMistakes: 'Để hông bị chùng võng xuống sàn.',
       breathing: 'Hít thở nhịp nhàng.',
     },
@@ -1400,7 +1534,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 40,
     instructions: {
-      preparation: 'Ngồi trên thảm, co nhẹ gối, ngả lưng sau 45 độ, hai tay cầm tạ nhỏ 2kg trước ngực.',
+      preparation:
+        'Ngồi trên thảm, co nhẹ gối, ngả lưng sau 45 độ, hai tay cầm tạ nhỏ 2kg trước ngực.',
       execution: 'Xoay toàn bộ thân trên sang phải rồi sang trái có kiểm soát.',
       commonMistakes: 'Chỉ vung tay qua lại mà không xoay lồng ngực.',
       breathing: 'Thở ra mỗi lần xoay chạm tạ sang bên.',
@@ -1418,8 +1553,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Đứng chân rộng gấp đôi vai, mũi chân mở 45 độ, cầm 1 quả tạ đơn nặng ở giữa 2 chân.',
-      execution: 'Hạ mông xuống sâu, lưng thẳng, dùng lực mông và đùi trong kéo tạ đứng thẳng dậy.',
+      preparation:
+        'Đứng chân rộng gấp đôi vai, mũi chân mở 45 độ, cầm 1 quả tạ đơn nặng ở giữa 2 chân.',
+      execution:
+        'Hạ mông xuống sâu, lưng thẳng, dùng lực mông và đùi trong kéo tạ đứng thẳng dậy.',
       commonMistakes: 'Cong lưng khi nhặt tạ dưới đất.',
       breathing: 'Hạ tạ hít vào, kéo lên thở ra siết mông.',
     },
@@ -1437,7 +1574,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 40,
     instructions: {
       preparation: 'Ngồi thẳng lưng trên máy kéo cáp, cầm tay cầm V-Bar.',
-      execution: 'Kéo tay cầm về phía rốn, ép chặt 2 bả vai ra sau rồi nhả ra chậm.',
+      execution:
+        'Kéo tay cầm về phía rốn, ép chặt 2 bả vai ra sau rồi nhả ra chậm.',
       commonMistakes: 'Rụt vai lên tai khi kéo.',
       breathing: 'Kéo vào thở ra, nhả ra hít vào.',
     },
@@ -1455,7 +1593,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 30,
     instructions: {
       preparation: 'Đứng thẳng cầm 2 quả tạ đơn nhẹ hai bên đùi.',
-      execution: 'Nâng 2 tay sang ngang đến ngang vai, giữ cổ tay thấp hơn khuỷu tay.',
+      execution:
+        'Nâng 2 tay sang ngang đến ngang vai, giữ cổ tay thấp hơn khuỷu tay.',
       commonMistakes: 'Dùng tạ quá nặng làm cổ bị gồng cứng.',
       breathing: 'Nâng lên thở ra, hạ xuống hít vào.',
     },
@@ -1472,8 +1611,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 45,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Ngồi trên máy banh đùi, hơi nhổm người nghiêng về trước 30 độ.',
-      execution: 'Dùng lực mông mở rộng 2 chân sang hai bên tối đa, giữ 1 giây rồi khép lại từ từ.',
+      preparation:
+        'Ngồi trên máy banh đùi, hơi nhổm người nghiêng về trước 30 độ.',
+      execution:
+        'Dùng lực mông mở rộng 2 chân sang hai bên tối đa, giữ 1 giây rồi khép lại từ từ.',
       commonMistakes: 'Khép chân quá nhanh không kìm tạ.',
       breathing: 'Banh đùi thở ra, khép đùi hít vào.',
     },
@@ -1491,7 +1632,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 60,
     instructions: {
       preparation: 'Đứng tư thế squat.',
-      execution: 'Hạ hông squat rồi dùng lực bật nhảy cao lên khỏi sàn, tiếp đất nhẹ nhàng bằng mũi chân và lập tức hạ squat tiếp.',
+      execution:
+        'Hạ hông squat rồi dùng lực bật nhảy cao lên khỏi sàn, tiếp đất nhẹ nhàng bằng mũi chân và lập tức hạ squat tiếp.',
       commonMistakes: 'Tiếp đất cứng gót chân gây đau gối.',
       breathing: 'Xuống hít vào, bật nhảy thở mạnh.',
     },
@@ -1509,7 +1651,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 35,
     instructions: {
       preparation: 'Plank cao tay dưới vai.',
-      execution: 'Kéo chậm rãi từng đầu gối về phía ngực, giữ 1 giây siết bụng dưới rồi đưa chân về.',
+      execution:
+        'Kéo chậm rãi từng đầu gối về phía ngực, giữ 1 giây siết bụng dưới rồi đưa chân về.',
       commonMistakes: 'Đẩy mông lên trời.',
       breathing: 'Kéo gối thở ra, hạ chân hít vào.',
     },
@@ -1527,8 +1670,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 50,
     instructions: {
       preparation: 'Đứng trước bục cao ngang gối.',
-      execution: 'Đặt trọn bàn chân phải lên bục, ấn gót chân nâng người đứng thẳng lên bục, hạ chân trái xuống chậm.',
-      commonMistakes: 'Nhún chân dưới đất để lấy đà thay vì dùng lực chân trên bục.',
+      execution:
+        'Đặt trọn bàn chân phải lên bục, ấn gót chân nâng người đứng thẳng lên bục, hạ chân trái xuống chậm.',
+      commonMistakes:
+        'Nhún chân dưới đất để lấy đà thay vì dùng lực chân trên bục.',
       breathing: 'Bước lên thở ra, bước xuống hít vào.',
     },
   },
@@ -1564,8 +1709,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 90,
     caloriesBurnedEstimate: 85,
     instructions: {
-      preparation: 'Tựa lưng vào ghế, lăn thanh đòn tạ bọc đệm êm vào xương hông, đặt chân vững chắc.',
-      execution: 'Đẩy mạnh thanh đòn lên cao, siết chặt cơ mông 2 giây ở đỉnh, giữ cằm gập mắt nhìn về trước.',
+      preparation:
+        'Tựa lưng vào ghế, lăn thanh đòn tạ bọc đệm êm vào xương hông, đặt chân vững chắc.',
+      execution:
+        'Đẩy mạnh thanh đòn lên cao, siết chặt cơ mông 2 giây ở đỉnh, giữ cằm gập mắt nhìn về trước.',
       commonMistakes: 'Ưỡn ngực và ngửa cổ làm đau cột sống.',
       breathing: 'Đẩy lên thở mạnh, hạ tạ hít sâu.',
     },
@@ -1583,7 +1730,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 95,
     instructions: {
       preparation: 'Gánh đòn tạ trên cơ cầu vai, đứng rộng bằng vai.',
-      execution: 'Hạ hông sâu qua song song mặt sàn rồi đạp mạnh gót chân đứng dậy siết mông.',
+      execution:
+        'Hạ hông sâu qua song song mặt sàn rồi đạp mạnh gót chân đứng dậy siết mông.',
       commonMistakes: 'Gối chụm vào trong khi đứng lên.',
       breathing: 'Hít sâu nén bụng khi hạ, đứng lên thở mạnh.',
     },
@@ -1600,8 +1748,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 75,
     instructions: {
-      preparation: 'Cầm thanh đòn ngang đùi, chân rộng bằng hông, khóa chặt bả vai.',
-      execution: 'Đẩy mông ra sau trượt đòn tạ sát chân xuống dưới gối rồi kéo lên siết mông.',
+      preparation:
+        'Cầm thanh đòn ngang đùi, chân rộng bằng hông, khóa chặt bả vai.',
+      execution:
+        'Đẩy mông ra sau trượt đòn tạ sát chân xuống dưới gối rồi kéo lên siết mông.',
       commonMistakes: 'Để đòn tạ xa người làm căng cơ lưng dưới.',
       breathing: 'Hạ xuống hít vào, kéo lên thở ra.',
     },
@@ -1619,7 +1769,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 50,
     instructions: {
       preparation: 'Đứng trên chân phải cầm 1 tạ đơn ở tay trái.',
-      execution: 'Đá chân trái thẳng ra sau đồng thời hạ thân trên về trước song song sàn, ấn gót chân phải đứng lên.',
+      execution:
+        'Đá chân trái thẳng ra sau đồng thời hạ thân trên về trước song song sàn, ấn gót chân phải đứng lên.',
       commonMistakes: 'Lật hông sang một bên.',
       breathing: 'Hạ người hít vào, đứng lên thở ra.',
     },
@@ -1636,8 +1787,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 60,
     instructions: {
-      preparation: 'Đeo mini-band trên gối, đứng quay lưng lại cáp thấp kéo dây thừng.',
-      execution: 'Hạ hông ra sau mở rộng gối, đẩy hông về trước siết cơ mông tối đa.',
+      preparation:
+        'Đeo mini-band trên gối, đứng quay lưng lại cáp thấp kéo dây thừng.',
+      execution:
+        'Hạ hông ra sau mở rộng gối, đẩy hông về trước siết cơ mông tối đa.',
       commonMistakes: 'Dùng tay giật tạ.',
       breathing: 'Hạ xuống hít vào, đẩy lên thở ra.',
     },
@@ -1655,7 +1808,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 55,
     instructions: {
       preparation: 'Tư thế plank cẳng tay.',
-      execution: 'Chống từng bàn tay lên thành plank cao rồi hạ từng cùi chỏ về plank thấp liên tục.',
+      execution:
+        'Chống từng bàn tay lên thành plank cao rồi hạ từng cùi chỏ về plank thấp liên tục.',
       commonMistakes: 'Lắc lư hông quá mạnh khi chuyển đổi.',
       breathing: 'Duy trì nhịp thở đều theo nhịp tay.',
     },
@@ -1672,8 +1826,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 60,
     caloriesBurnedEstimate: 45,
     instructions: {
-      preparation: 'Treo người trên xà đơn hoặc tựa cẳng tay trên ghế treo bụng.',
-      execution: 'Dùng cơ bụng nâng cao 2 chân thẳng lên tạo góc 90 độ với thân người rồi hạ chậm.',
+      preparation:
+        'Treo người trên xà đơn hoặc tựa cẳng tay trên ghế treo bụng.',
+      execution:
+        'Dùng cơ bụng nâng cao 2 chân thẳng lên tạo góc 90 độ với thân người rồi hạ chậm.',
       commonMistakes: 'Vung chân lấy đà.',
       breathing: 'Nâng chân thở ra, hạ chân hít vào.',
     },
@@ -1691,7 +1847,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 75,
     instructions: {
       preparation: 'Cầm 2 tạ đơn 4-6kg hai bên tay.',
-      execution: 'Bước từng bước dài chùng gối hạ mông vuông góc sàn liên tục không dừng.',
+      execution:
+        'Bước từng bước dài chùng gối hạ mông vuông góc sàn liên tục không dừng.',
       commonMistakes: 'Để thân người ngả nghiêng.',
       breathing: 'Hạ gối hít vào, bước lên thở ra.',
     },
@@ -1709,7 +1866,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 35,
     instructions: {
       preparation: 'Đứng nghiêng cạnh máy cáp thấp, 1 tay cầm tay cầm đơn.',
-      execution: 'Dang tay sang ngang lên ngang vai, nhả cáp xuống chậm trong 3 giây.',
+      execution:
+        'Dang tay sang ngang lên ngang vai, nhả cáp xuống chậm trong 3 giây.',
       commonMistakes: 'Dùng đà thân người để giật cáp.',
       breathing: 'Nâng lên thở ra, hạ xuống hít vào.',
     },
@@ -1727,7 +1885,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 45,
     instructions: {
       preparation: 'Nằm ngửa duỗi thẳng tay qua đầu và duỗi thẳng chân.',
-      execution: 'Đồng thời gập thân trên và nâng chân lên cao để tay chạm mũi chân tạo hình chữ V.',
+      execution:
+        'Đồng thời gập thân trên và nâng chân lên cao để tay chạm mũi chân tạo hình chữ V.',
       commonMistakes: 'Gập cong lưng quá nhiều.',
       breathing: 'Gập lên thở ra, hạ người hít vào.',
     },
@@ -1744,7 +1903,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     restSeconds: 75,
     caloriesBurnedEstimate: 70,
     instructions: {
-      preparation: 'Nằm ngửa đặt đòn tạ có đệm lót lên hông, chân co gập sát mông.',
+      preparation:
+        'Nằm ngửa đặt đòn tạ có đệm lót lên hông, chân co gập sát mông.',
       execution: 'Đẩy hông lên cao tối đa, siết mông 2 giây rồi hạ xuống.',
       commonMistakes: 'Nhấc mũi chân khỏi sàn.',
       breathing: 'Đẩy lên thở ra, hạ xuống hít vào.',
@@ -1781,7 +1941,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 70,
     instructions: {
       preparation: 'Đứng thẳng.',
-      execution: 'Chống tay xuống sàn bật 2 chân ra sau thành plank cao, lập tức bật chân về và nhảy cao vỗ tay.',
+      execution:
+        'Chống tay xuống sàn bật 2 chân ra sau thành plank cao, lập tức bật chân về và nhảy cao vỗ tay.',
       commonMistakes: 'Võng lưng khi bật chân ra sau.',
       breathing: 'Bật nhảy thở mạnh, xuống hít vào.',
     },
@@ -1799,7 +1960,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 65,
     instructions: {
       preparation: 'Cầm 2 tạ đơn 3-4kg ngang vai ở tư thế squat.',
-      execution: 'Hạ squat sâu rồi dùng lực đạp đứng lên đồng thời đẩy thẳng 2 tạ qua đầu trong 1 chuyển động liên tục.',
+      execution:
+        'Hạ squat sâu rồi dùng lực đạp đứng lên đồng thời đẩy thẳng 2 tạ qua đầu trong 1 chuyển động liên tục.',
       commonMistakes: 'Tách rời thành 2 động tác squat riêng và đẩy vai riêng.',
       breathing: 'Xuống hít sâu, đứng đẩy tạ thở mạnh.',
     },
@@ -1817,7 +1979,8 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 75,
     instructions: {
       preparation: 'Đứng rộng hơn vai cầm 1 quả tạ bằng 2 tay trước đùi.',
-      execution: 'Đẩy hông ra sau luồn tạ qua háng, sau đó búng hông mạnh về trước để tạ vung lên ngang ngực.',
+      execution:
+        'Đẩy hông ra sau luồn tạ qua háng, sau đó búng hông mạnh về trước để tạ vung lên ngang ngực.',
       commonMistakes: 'Dùng cơ vai để nâng tạ thay vì lực búng hông.',
       breathing: 'Búng hông thở ra mạnh, hạ tạ hít vào.',
     },
@@ -1835,8 +1998,10 @@ export const FEMALE_EXERCISES: ExerciseGuide[] = [
     caloriesBurnedEstimate: 200,
     instructions: {
       preparation: 'Chỉnh máy chạy bộ độ dốc 10-12%, tốc độ 4.0 - 5.0 km/h.',
-      execution: 'Đi bộ sải bước dài, ấn gót chân xuống thảm, giữ người thẳng tự nhiên (không vịn tay vào máy).',
-      commonMistakes: 'Vịn chặt tay vào tay vịn làm giảm 40% hiệu quả đốt calo.',
+      execution:
+        'Đi bộ sải bước dài, ấn gót chân xuống thảm, giữ người thẳng tự nhiên (không vịn tay vào máy).',
+      commonMistakes:
+        'Vịn chặt tay vào tay vịn làm giảm 40% hiệu quả đốt calo.',
       breathing: 'Hít thở đều đặn và sâu qua mũi.',
     },
   },

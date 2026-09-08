@@ -11,7 +11,8 @@ export enum ChatPlanPackageId {
 export class PurchaseChatQuotaDto {
   @ApiProperty({
     enum: ChatPlanPackageId,
-    description: 'Bản nâng cấp AI Coach: PLUS (Bản Plus), PRO (Bản Pro - Phổ biến nhất), MAX (Bản Max - Cao cấp nhất), CUSTOM',
+    description:
+      'Bản nâng cấp AI Coach: PLUS (Bản Plus), PRO (Bản Pro - Phổ biến nhất), MAX (Bản Max - Cao cấp nhất), CUSTOM',
     example: ChatPlanPackageId.PRO,
   })
   @IsEnum(ChatPlanPackageId)

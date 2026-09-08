@@ -24,8 +24,8 @@ export interface HealthCalculationsResult {
   tdee: number | null;
   targetCalories: number | null;
   targetProtein: number | null; // gram
-  targetCarb: number | null;    // gram
-  targetFat: number | null;     // gram
+  targetCarb: number | null; // gram
+  targetFat: number | null; // gram
   macroStyle: MacroStyle;
 }
 
@@ -56,14 +56,24 @@ export class HealthCalculatorService {
     const age = this.calculateAge(dateOfBirth);
 
     // 3. Tính BMR (Katch-McArdle nếu có % mỡ, hoặc Mifflin-St Jeor)
-    const bmrResult = this.calculateBMR(heightCm, weightKg, age, gender, bodyFatPercent);
+    const bmrResult = this.calculateBMR(
+      heightCm,
+      weightKg,
+      age,
+      gender,
+      bodyFatPercent,
+    );
 
     // 4. Tính TDEE
     const tdee = this.calculateTDEE(bmrResult.bmr, activityLevel);
 
     // 5. Tính Calo mục tiêu — ưu tiên Adaptive Expenditure (nếu đã hội tụ/đang cập nhật) thay vì TDEE công thức tĩnh
     const expenditureForTarget = expenditureOverride ?? tdee;
-    const targetCalories = this.calculateTargetCalories(expenditureForTarget, goal, weightRateKgPerWeek);
+    const targetCalories = this.calculateTargetCalories(
+      expenditureForTarget,
+      goal,
+      weightRateKgPerWeek,
+    );
 
     // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle)
     const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;
@@ -86,7 +96,10 @@ export class HealthCalculatorService {
   /**
    * BMI = Cân nặng (kg) / (Chiều cao (m))^2
    */
-  private calculateBMI(heightCm?: number | null, weightKg?: number | null): number | null {
+  private calculateBMI(
+    heightCm?: number | null,
+    weightKg?: number | null,
+  ): number | null {
     if (!heightCm || !weightKg || heightCm <= 0 || weightKg <= 0) return null;
     const heightM = heightCm / 100;
     const bmi = weightKg / (heightM * heightM);
@@ -115,7 +128,10 @@ export class HealthCalculatorService {
     const today = new Date();
     let age = today.getFullYear() - birth.getFullYear();
     const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birth.getDate())
+    ) {
       age--;
     }
     return age > 0 ? age : null;
@@ -139,7 +155,10 @@ export class HealthCalculatorService {
     if (bodyFatPercent && bodyFatPercent > 3 && bodyFatPercent < 60) {
       const lbm = weightKg * (1 - bodyFatPercent / 100);
       const bmr = 370 + 21.6 * lbm;
-      return { bmr: Math.round(bmr), formula: 'Katch-McArdle (Dựa trên Lean Body Mass)' };
+      return {
+        bmr: Math.round(bmr),
+        formula: 'Katch-McArdle (Dựa trên Lean Body Mass)',
+      };
     }
 
     if (!heightCm || !age || !gender) return { bmr: null, formula: 'None' };
@@ -153,7 +172,10 @@ export class HealthCalculatorService {
   /**
    * TDEE = BMR * Hệ số vận động (Physical Activity Level)
    */
-  private calculateTDEE(bmr: number | null, activityLevel?: ActivityLevel | null): number | null {
+  private calculateTDEE(
+    bmr: number | null,
+    activityLevel?: ActivityLevel | null,
+  ): number | null {
     if (!bmr) return null;
 
     let multiplier = 1.2;
@@ -193,7 +215,10 @@ export class HealthCalculatorService {
   ): number | null {
     if (!tdee) return null;
 
-    const rate = weightRateKgPerWeek && weightRateKgPerWeek > 0 ? weightRateKgPerWeek : 0.5;
+    const rate =
+      weightRateKgPerWeek && weightRateKgPerWeek > 0
+        ? weightRateKgPerWeek
+        : 0.5;
     const deltaPerDay = Math.round((rate * 7700) / 7);
 
     let target = tdee;

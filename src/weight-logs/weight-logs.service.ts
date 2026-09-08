@@ -73,7 +73,10 @@ export class WeightLogsService {
         activityLevel: user.activityLevel,
         goal: user.goal,
         macroStyle: user.macroStyle,
-        expenditureOverride: expenditureResult.method === 'ADAPTIVE' ? expenditureResult.estimatedExpenditure : null,
+        expenditureOverride:
+          expenditureResult.method === 'ADAPTIVE'
+            ? expenditureResult.estimatedExpenditure
+            : null,
       });
 
       await this.prisma.user.update({
@@ -232,18 +235,24 @@ export class WeightLogsService {
     }
 
     if (currentWeight && targetWeight) {
-      remainingToGoal = Math.round(Math.abs(currentWeight - targetWeight) * 10) / 10;
+      remainingToGoal =
+        Math.round(Math.abs(currentWeight - targetWeight) * 10) / 10;
 
       if (startWeight && startWeight !== targetWeight) {
         const totalSpan = Math.abs(startWeight - targetWeight);
         const achievedSpan = Math.abs(currentWeight - startWeight);
 
         // Kiểm tra xem có đang đi đúng hướng không
-        const isLosing = user.goal === 'LOSE_WEIGHT' && currentWeight <= startWeight;
-        const isGaining = user.goal === 'GAIN_WEIGHT' && currentWeight >= startWeight;
+        const isLosing =
+          user.goal === 'LOSE_WEIGHT' && currentWeight <= startWeight;
+        const isGaining =
+          user.goal === 'GAIN_WEIGHT' && currentWeight >= startWeight;
 
         if (isLosing || isGaining) {
-          progressPercent = Math.min(100, Math.round((achievedSpan / totalSpan) * 100));
+          progressPercent = Math.min(
+            100,
+            Math.round((achievedSpan / totalSpan) * 100),
+          );
         }
       }
     }
