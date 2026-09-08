@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   UseGuards,
@@ -17,11 +18,25 @@ import { AiService } from './ai.service';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { RecognizeFoodBase64Dto } from './dto/recognize-food-base64.dto';
 import { ChatAiDto } from './dto/chat-ai.dto';
+import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
 
 @ApiTags('AI Engine')
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
+
+  @Get('quota')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Kiểm tra hạn mức chụp ảnh AI trong ngày (Tối đa 5 ảnh/ngày)',
+    description:
+      'Trả về số lượt nhận diện ảnh món ăn đã dùng hôm nay, số lượt còn lại và thời gian reset quota sang ngày mới.',
+  })
+  @ApiResponse({ status: 200, type: AiQuotaResponseDto })
+  async getQuota(@CurrentUser('id') userId: string): Promise<AiQuotaResponseDto> {
+    return this.aiService.getDailyPhotoQuota(userId);
+  }
 
   @Post('recognize-food')
   @UseGuards(JwtAuthGuard)
@@ -48,9 +63,13 @@ export class AiController {
   @ApiOperation({
     summary: 'Nhận diện món ăn qua ảnh chụp từ Camera (Multipart Form-Data)',
     description:
-      'Gửi file ảnh chụp món ăn, mô hình Google Gemini 2.0 Flash Vision sẽ phân tích và bóc tách calo, protein, carb, fat, danh sách thành phần và lời khuyên sức khỏe.',
+      'Gửi file ảnh chụp món ăn, mô hình Google Gemini Vision sẽ phân tích và bóc tách calo, protein, carb, fat, danh sách thành phần và lời khuyên sức khỏe. Giới hạn tối đa 5 ảnh/ngày.',
   })
   @ApiResponse({ status: 200, type: FoodRecognitionResultDto })
+  @ApiResponse({
+    status: 429,
+    description: 'Đã sử dụng hết hạn mức 5 ảnh trong ngày. Vui lòng quay lại vào ngày mai.',
+  })
   async recognizeFood(
     @CurrentUser('id') userId: string,
     @UploadedFile() file?: Express.Multer.File,
@@ -68,9 +87,14 @@ export class AiController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Nhận diện món ăn qua chuỗi Base64 (Dành cho Mobile App)',
-    description: 'Cho phép mobile app gửi trực tiếp chuỗi base64 của ảnh chụp từ Camera để nhận diện.',
+    description:
+      'Cho phép mobile app gửi trực tiếp chuỗi base64 của ảnh chụp từ Camera để nhận diện. Giới hạn tối đa 5 ảnh/ngày.',
   })
   @ApiResponse({ status: 200, type: FoodRecognitionResultDto })
+  @ApiResponse({
+    status: 429,
+    description: 'Đã sử dụng hết hạn mức 5 ảnh trong ngày. Vui lòng quay lại vào ngày mai.',
+  })
   async recognizeFoodBase64(
     @CurrentUser('id') userId: string,
     @Body() dto: RecognizeFoodBase64Dto,

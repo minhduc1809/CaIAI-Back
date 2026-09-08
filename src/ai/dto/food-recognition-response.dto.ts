@@ -59,4 +59,18 @@ export class FoodRecognitionResultDto {
     description: 'Cờ đánh dấu kết quả thực từ Gemini API hay Fallback Engine',
   })
   isFallback: boolean;
+
+  @ApiProperty({
+    example: 4,
+    description: 'Số lượt chụp ảnh nhận diện món ăn còn lại trong ngày (tối đa 5 lượt/ngày)',
+    required: false,
+  })
+  remainingDailyQuota?: number;
+
+  @ApiProperty({
+    example: 5,
+    description: 'Giới hạn số lượt chụp ảnh món ăn tối đa mỗi ngày',
+    required: false,
+  })
+  dailyLimit?: number;
 }
