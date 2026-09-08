@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
+import { MealsService } from '../meals/meals.service';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
+import { MenuItemDto, ScanMenuResponseDto } from './dto/scan-menu-response.dto';
+import { NutritionGapDto, SuggestMealResponseDto, SuggestedMealItemDto } from './dto/suggest-meal-response.dto';
 
 @Injectable()
 export class AiService {
@@ -13,6 +16,7 @@ export class AiService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly mealsService: MealsService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.modelName = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
@@ -221,6 +225,298 @@ Hãy trả lời trực tiếp câu hỏi, đưa ra gợi ý món ăn Việt Nam
     return {
       reply: `Chào bạn! Tôi là CalAI Nutrition Coach. Dựa trên mục tiêu dinh dưỡng của bạn, tôi khuyến nghị bạn nên ưu tiên nguồn protein nạc (ức gà, cá basa, đậu hũ, trứng luộc) kết hợp tinh bột hấp thu chậm (gạo lứt, khoai lang) và nhiều rau củ tươi. Đừng quên uống đủ 2-2.5 lít nước mỗi ngày nhé!`,
       isFallback: true,
+    };
+  }
+
+  /**
+   * Quét thực đơn nhà hàng từ Buffer (Multipart file) — nhận diện nhiều món cùng lúc
+   */
+  async scanMenuFromBuffer(
+    buffer: Buffer,
+    mimeType: string = 'image/jpeg',
+    userId: string,
+    note?: string,
+  ): Promise<ScanMenuResponseDto> {
+    const base64Data = buffer.toString('base64');
+    return this.scanMenuBase64(base64Data, mimeType, userId, note);
+  }
+
+  /**
+   * Quét thực đơn nhà hàng từ chuỗi Base64 — nhận diện nhiều món, đối chiếu ngân sách calo còn lại hôm nay
+   */
+  async scanMenuBase64(
+    base64Data: string,
+    mimeType: string = 'image/jpeg',
+    userId: string,
+    note?: string,
+  ): Promise<ScanMenuResponseDto> {
+    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const nutritionGap = await this.getRemainingNutritionGap(userId);
+
+    if (this.genAI) {
+      try {
+        const result = await this.callGeminiMenuVision(cleanBase64, mimeType, nutritionGap, note);
+        if (result) {
+          this.logApiUsage(userId, 'menu_scan', 800, 400, 0.001);
+          return result;
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi khi gọi Gemini Vision cho quét thực đơn: ${error.message}. Chuyển sang Smart Fallback.`);
+      }
+    }
+
+    return this.getSmartFallbackMenuScan();
+  }
+
+  private async callGeminiMenuVision(
+    base64Data: string,
+    mimeType: string,
+    nutritionGap: NutritionGapDto,
+    note?: string,
+  ): Promise<ScanMenuResponseDto | null> {
+    if (!this.genAI) return null;
+    const model = this.genAI.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.3,
+      },
+    });
+
+    const prompt = `
+Bạn là chuyên gia dinh dưỡng AI. Nhiệm vụ: đọc bức ảnh THỰC ĐƠN NHÀ HÀNG (menu) này, liệt kê TẤT CẢ các món ăn xuất hiện trong ảnh (không chỉ 1 món), ước lượng calo/macro cho mỗi món, và gợi ý những món phù hợp nhất với ngân sách dinh dưỡng còn lại của người dùng hôm nay.
+
+Ngân sách còn lại hôm nay: ${nutritionGap.remainingCalories} kcal, protein còn thiếu ${nutritionGap.remainingProtein}g, carb còn lại ${nutritionGap.remainingCarbs}g, fat còn lại ${nutritionGap.remainingFat}g.
+${note ? `Ghi chú thêm từ người dùng: ${note}` : ''}
+
+Trả về duy nhất JSON theo schema (không thêm văn bản ngoài JSON):
+{
+  "restaurantName": "Tên quán nếu đọc được trên menu, null nếu không rõ",
+  "items": [
+    {
+      "name": "Tên món",
+      "price": "Giá tiền nếu có trên menu, null nếu không có",
+      "estimatedCalories": 480,
+      "protein": 34,
+      "carbs": 60,
+      "fat": 10,
+      "description": "Mô tả ngắn món ăn",
+      "isRecommended": true,
+      "recommendationReason": "Vì sao món này phù hợp ngân sách hôm nay, null nếu không được đề xuất"
+    }
+  ],
+  "summaryAdvice": "Lời khuyên tổng quan 1-2 câu khi chọn món trong thực đơn này"
+}
+Đánh dấu isRecommended=true cho tối đa 3 món phù hợp nhất với ngân sách còn lại.
+`;
+
+    const imagePart = {
+      inlineData: {
+        data: base64Data,
+        mimeType: mimeType || 'image/jpeg',
+      },
+    };
+
+    const response = await model.generateContent([prompt, imagePart]);
+    const responseText = response.response.text();
+
+    try {
+      const parsed = JSON.parse(responseText);
+      const items: MenuItemDto[] = Array.isArray(parsed.items)
+        ? parsed.items.map((it: any) => ({
+            name: it.name || 'Món ăn',
+            price: it.price ?? null,
+            estimatedCalories: Math.round(it.estimatedCalories || 0),
+            protein: Math.round(it.protein || 0),
+            carbs: Math.round(it.carbs || 0),
+            fat: Math.round(it.fat || 0),
+            description: it.description || '',
+            isRecommended: Boolean(it.isRecommended),
+            recommendationReason: it.recommendationReason ?? null,
+          }))
+        : [];
+
+      return {
+        restaurantName: parsed.restaurantName ?? null,
+        items,
+        recommendedItems: items.filter((it) => it.isRecommended),
+        summaryAdvice: parsed.summaryAdvice || 'Ưu tiên món giàu đạm, ít dầu mỡ để cân đối ngân sách calo hôm nay.',
+      };
+    } catch (e) {
+      this.logger.error(`Failed to parse Gemini menu-scan JSON response: ${responseText}`);
+      return null;
+    }
+  }
+
+  private getSmartFallbackMenuScan(): ScanMenuResponseDto {
+    const items: MenuItemDto[] = [
+      {
+        name: 'Phở bò tái nạc',
+        price: '55.000đ',
+        estimatedCalories: 480,
+        protein: 34,
+        carbs: 60,
+        fat: 10,
+        description: 'Bò tái tươi ngon, nước dùng thanh',
+        isRecommended: true,
+        recommendationReason: 'Giàu protein chất lượng cao, phù hợp ngân sách dinh dưỡng hôm nay',
+      },
+      {
+        name: 'Cơm tấm sườn nướng',
+        price: '50.000đ',
+        estimatedCalories: 580,
+        protein: 28,
+        carbs: 70,
+        fat: 18,
+        description: 'Sườn nướng than hoa, cơm tấm dẻo',
+        isRecommended: false,
+        recommendationReason: null,
+      },
+      {
+        name: 'Bún chả Hà Nội',
+        price: '45.000đ',
+        estimatedCalories: 510,
+        protein: 27,
+        carbs: 65,
+        fat: 15,
+        description: 'Chả nướng thơm, nước chấm chua ngọt',
+        isRecommended: true,
+        recommendationReason: 'Cân bằng đạm/carb, khẩu phần vừa phải',
+      },
+    ];
+
+    return {
+      restaurantName: 'Thực Đơn Quán Cơm & Bún (Smart Fallback)',
+      items,
+      recommendedItems: items.filter((it) => it.isRecommended),
+      summaryAdvice:
+        'Ưu tiên các món nước có nước dùng thanh và nhiều đạm nạc. (💡 Lưu ý: Hệ thống đang chạy chế độ Smart Fallback vì chưa cấu hình GEMINI_API_KEY trong .env)',
+    };
+  }
+
+  /**
+   * Gợi ý bữa ăn tiếp theo dựa trên phần dinh dưỡng còn thiếu trong ngày của người dùng
+   */
+  async suggestMeal(userId: string): Promise<SuggestMealResponseDto> {
+    const nutritionGap = await this.getRemainingNutritionGap(userId);
+
+    if (this.genAI) {
+      try {
+        const result = await this.callGeminiSuggestMeal(nutritionGap);
+        if (result) {
+          this.logApiUsage(userId, 'suggest_meal', 400, 250, 0.0006);
+          return result;
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi khi gọi Gemini gợi ý bữa ăn: ${error.message}. Chuyển sang Smart Fallback.`);
+      }
+    }
+
+    return this.getSmartFallbackSuggestMeal(nutritionGap);
+  }
+
+  private async callGeminiSuggestMeal(nutritionGap: NutritionGapDto): Promise<SuggestMealResponseDto | null> {
+    if (!this.genAI) return null;
+    const model = this.genAI.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.5,
+      },
+    });
+
+    const prompt = `
+Bạn là chuyên gia dinh dưỡng AI. Người dùng còn lại trong ngày hôm nay: ${nutritionGap.remainingCalories} kcal, protein ${nutritionGap.remainingProtein}g, carb ${nutritionGap.remainingCarbs}g, fat ${nutritionGap.remainingFat}g.
+Hãy gợi ý 2-3 món ăn Việt Nam cụ thể giúp lấp đầy phần dinh dưỡng còn thiếu này mà không vượt quá calo còn lại.
+
+Trả về duy nhất JSON theo schema (không thêm văn bản ngoài JSON):
+{
+  "suggestions": [
+    {
+      "name": "Tên món cụ thể",
+      "mealType": "Bữa trưa/Bữa tối/Bữa phụ tuỳ thời điểm hợp lý",
+      "calories": 450,
+      "protein": 38,
+      "carbs": 42,
+      "fat": 12,
+      "reason": "Vì sao món này phù hợp phần dinh dưỡng còn thiếu",
+      "ingredients": ["Nguyên liệu 1", "Nguyên liệu 2"]
+    }
+  ],
+  "advice": "Lời khuyên tổng quan 1-2 câu"
+}
+`;
+
+    const response = await model.generateContent(prompt);
+    const responseText = response.response.text();
+
+    try {
+      const parsed = JSON.parse(responseText);
+      const suggestions: SuggestedMealItemDto[] = Array.isArray(parsed.suggestions)
+        ? parsed.suggestions.map((it: any) => ({
+            name: it.name || 'Món ăn gợi ý',
+            mealType: it.mealType || 'Bữa ăn',
+            calories: Math.round(it.calories || 0),
+            protein: Math.round(it.protein || 0),
+            carbs: Math.round(it.carbs || 0),
+            fat: Math.round(it.fat || 0),
+            reason: it.reason || '',
+            ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+          }))
+        : [];
+
+      return {
+        nutritionGap,
+        suggestions,
+        advice: parsed.advice || 'Hãy ưu tiên bổ sung phần dinh dưỡng còn thiếu ở bữa ăn tiếp theo nhé!',
+      };
+    } catch (e) {
+      this.logger.error(`Failed to parse Gemini suggest-meal JSON response: ${responseText}`);
+      return null;
+    }
+  }
+
+  private getSmartFallbackSuggestMeal(nutritionGap: NutritionGapDto): SuggestMealResponseDto {
+    return {
+      nutritionGap,
+      suggestions: [
+        {
+          name: 'Phở gà ức ít bánh + 2 trứng chần',
+          mealType: 'Bữa tối',
+          calories: 450,
+          protein: 38,
+          carbs: 42,
+          fat: 12,
+          reason: 'Bổ sung protein chất lượng cao mà không vượt calo còn lại trong ngày',
+          ingredients: ['Ức gà', 'Bánh phở', 'Trứng gà', 'Nước dùng gà'],
+        },
+        {
+          name: 'Salad ức gà áp chảo + khoai lang hấp',
+          mealType: 'Bữa phụ',
+          calories: 380,
+          protein: 32,
+          carbs: 35,
+          fat: 9,
+          reason: 'Giàu đạm, ít chất béo, phù hợp khi calo còn lại không nhiều',
+          ingredients: ['Ức gà', 'Khoai lang', 'Rau xà lách', 'Cà chua bi'],
+        },
+      ],
+      advice: `Bạn còn thiếu khoảng ${nutritionGap.remainingProtein}g protein hôm nay — hãy ưu tiên bổ sung ở bữa ăn tiếp theo nhé! (💡 Lưu ý: Hệ thống đang chạy chế độ Smart Fallback vì chưa cấu hình GEMINI_API_KEY trong .env)`,
+    };
+  }
+
+  /**
+   * Tính phần dinh dưỡng còn lại trong ngày hôm nay của user — dùng chung cho scan-menu và suggest-meal
+   */
+  private async getRemainingNutritionGap(userId: string): Promise<NutritionGapDto> {
+    const summaryResponse = await this.mealsService.getDailyNutritionSummary(userId);
+    const summary = summaryResponse.data.summary;
+
+    return {
+      remainingCalories: summary.remainingCalories,
+      remainingProtein: Math.max(0, summary.macros.protein.target - summary.macros.protein.consumed),
+      remainingCarbs: Math.max(0, summary.macros.carb.target - summary.macros.carb.consumed),
+      remainingFat: Math.max(0, summary.macros.fat.target - summary.macros.fat.consumed),
     };
   }
 
