@@ -19,20 +19,32 @@ export class CreateMealItemDto {
   @IsNotEmpty({ message: 'Tên món ăn không được để trống' })
   name: string;
 
-  @ApiPropertyOptional({ example: '1 tô vừa (~350g)', description: 'Khẩu phần / Đơn vị tính (mô tả tự do, hiển thị)' })
+  @ApiPropertyOptional({
+    example: '1 tô vừa (~350g)',
+    description: 'Khẩu phần / Đơn vị tính (mô tả tự do, hiển thị)',
+  })
   @IsOptional()
   @IsString()
   servingSize?: string;
 
-  @ApiPropertyOptional({ example: 350, description: 'Số lượng khẩu phần chuẩn hóa (đi kèm servingUnit)' })
+  @ApiPropertyOptional({
+    example: 350,
+    description: 'Số lượng khẩu phần chuẩn hóa (đi kèm servingUnit)',
+  })
   @IsOptional()
   @IsNumber({}, { message: 'Số lượng khẩu phần phải là số' })
   @Min(0, { message: 'Số lượng khẩu phần tối thiểu 0' })
   servingAmount?: number;
 
-  @ApiPropertyOptional({ enum: ServingUnit, example: ServingUnit.GRAM, description: 'Đơn vị khẩu phần chuẩn hóa (GRAM, ML, PORTION)' })
+  @ApiPropertyOptional({
+    enum: ServingUnit,
+    example: ServingUnit.GRAM,
+    description: 'Đơn vị khẩu phần chuẩn hóa (GRAM, ML, PORTION)',
+  })
   @IsOptional()
-  @IsEnum(ServingUnit, { message: 'Đơn vị khẩu phần không hợp lệ (GRAM, ML, PORTION)' })
+  @IsEnum(ServingUnit, {
+    message: 'Đơn vị khẩu phần không hợp lệ (GRAM, ML, PORTION)',
+  })
   servingUnit?: ServingUnit;
 
   @ApiPropertyOptional({ example: 1, description: 'Số lượng' })
@@ -64,27 +76,45 @@ export class CreateMealItemDto {
   @Min(0)
   fat?: number;
 
-  @ApiPropertyOptional({ example: 'manual', description: 'Nguồn (manual, ai_vision, diet_plan)' })
+  @ApiPropertyOptional({
+    example: 'manual',
+    description: 'Nguồn (manual, ai_vision, diet_plan)',
+  })
   @IsOptional()
   @IsString()
   source?: string;
 }
 
 export class CreateMealDto {
-  @ApiProperty({ enum: MealType, example: MealType.LUNCH, description: 'Loại bữa ăn' })
-  @IsEnum(MealType, { message: 'Loại bữa ăn không hợp lệ (BREAKFAST, LUNCH, DINNER, SNACK)' })
+  @ApiProperty({
+    enum: MealType,
+    example: MealType.LUNCH,
+    description: 'Loại bữa ăn',
+  })
+  @IsEnum(MealType, {
+    message: 'Loại bữa ăn không hợp lệ (BREAKFAST, LUNCH, DINNER, SNACK)',
+  })
   mealType: MealType;
 
-  @ApiProperty({ example: '2026-08-19', description: 'Ngày ghi nhận bữa ăn (YYYY-MM-DD)' })
+  @ApiProperty({
+    example: '2026-08-19',
+    description: 'Ngày ghi nhận bữa ăn (YYYY-MM-DD)',
+  })
   @IsDateString({}, { message: 'Ngày phải có định dạng YYYY-MM-DD' })
   date: string;
 
-  @ApiPropertyOptional({ example: 'https://example.com/meal.jpg', description: 'Link ảnh món ăn' })
+  @ApiPropertyOptional({
+    example: 'https://example.com/meal.jpg',
+    description: 'Link ảnh món ăn',
+  })
   @IsOptional()
   @IsString()
   imageUrl?: string;
 
-  @ApiProperty({ type: [CreateMealItemDto], description: 'Danh sách các món ăn trong bữa' })
+  @ApiProperty({
+    type: [CreateMealItemDto],
+    description: 'Danh sách các món ăn trong bữa',
+  })
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
   @ValidateNested({ each: true })
   @Type(() => CreateMealItemDto)

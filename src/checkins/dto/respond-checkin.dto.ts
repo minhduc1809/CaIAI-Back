@@ -5,7 +5,10 @@ import { Mood } from '@prisma/client';
 export type CheckInAction = 'ACCEPT' | 'DECLINE' | 'DISMISS';
 
 export class RespondCheckinDto {
-  @ApiProperty({ enum: ['ACCEPT', 'DECLINE', 'DISMISS'], description: 'Hành động của người dùng với đề xuất check-in' })
+  @ApiProperty({
+    enum: ['ACCEPT', 'DECLINE', 'DISMISS'],
+    description: 'Hành động của người dùng với đề xuất check-in',
+  })
   @IsEnum(['ACCEPT', 'DECLINE', 'DISMISS'])
   action: CheckInAction;
 

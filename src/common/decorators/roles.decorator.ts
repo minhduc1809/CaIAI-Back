@@ -8,4 +8,3 @@ export enum UserRole {
 export const ROLES_KEY = 'roles';
 export const Roles = (...roles: (UserRole | 'USER' | 'ADMIN')[]) =>
   SetMetadata(ROLES_KEY, roles);
-

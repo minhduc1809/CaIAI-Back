@@ -1,11 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { Gender, GoalType, WorkoutLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { VIETNAMESE_DIET_PLANS, VietnameseDietPlan } from './data/vietnamese-diet.data';
-import { VIETNAMESE_WORKOUT_PLANS, WorkoutTemplatePlan } from './data/vietnamese-workout.data';
+import {
+  VIETNAMESE_DIET_PLANS,
+  VietnameseDietPlan,
+} from './data/vietnamese-diet.data';
+import {
+  VIETNAMESE_WORKOUT_PLANS,
+  WorkoutTemplatePlan,
+} from './data/vietnamese-workout.data';
 import { MALE_EXERCISES, FEMALE_EXERCISES } from './data/gender-exercises.data';
-import { generateAdvancedMonthDiet, MonthDietPlanItem } from './data/vietnamese-month-diet.data';
-import { VIETNAMESE_FOODS_DATA, SeedFoodItem } from './data/vietnamese-food-database.data';
+import {
+  generateAdvancedMonthDiet,
+  MonthDietPlanItem,
+} from './data/vietnamese-month-diet.data';
+import {
+  VIETNAMESE_FOODS_DATA,
+  SeedFoodItem,
+} from './data/vietnamese-food-database.data';
 
 @Injectable()
 export class RecommendationsService {
@@ -19,7 +31,11 @@ export class RecommendationsService {
 
     if (query) {
       const q = query.toLowerCase().trim();
-      results = results.filter((f) => f.name.toLowerCase().includes(q) || (f.note && f.note.toLowerCase().includes(q)));
+      results = results.filter(
+        (f) =>
+          f.name.toLowerCase().includes(q) ||
+          (f.note && f.note.toLowerCase().includes(q)),
+      );
     }
 
     if (category) {
@@ -76,8 +92,11 @@ export class RecommendationsService {
     const userTargetCalo = user?.targetCalories || 1500;
 
     // 1. Lọc thực đơn theo Goal của User
-    const filteredByGoal = VIETNAMESE_DIET_PLANS.filter((plan) => plan.goal === userGoal);
-    const plansPool = filteredByGoal.length > 0 ? filteredByGoal : VIETNAMESE_DIET_PLANS;
+    const filteredByGoal = VIETNAMESE_DIET_PLANS.filter(
+      (plan) => plan.goal === userGoal,
+    );
+    const plansPool =
+      filteredByGoal.length > 0 ? filteredByGoal : VIETNAMESE_DIET_PLANS;
 
     // 2. Tìm thực đơn có mức calo gần nhất với User Target Calories
     let bestPlan = plansPool[0];
@@ -139,8 +158,12 @@ export class RecommendationsService {
     let selectedGoal = user?.goal || GoalType.LOSE_WEIGHT;
     if (goalQuery) {
       const upperGoal = goalQuery.toUpperCase();
-      if (upperGoal === 'LOSE_WEIGHT' || upperGoal === 'GAIN_WEIGHT' || upperGoal === 'MAINTAIN') {
-        selectedGoal = upperGoal as GoalType;
+      if (
+        upperGoal === 'LOSE_WEIGHT' ||
+        upperGoal === 'GAIN_WEIGHT' ||
+        upperGoal === 'MAINTAIN'
+      ) {
+        selectedGoal = upperGoal;
       }
     }
 
@@ -148,19 +171,31 @@ export class RecommendationsService {
     let selectedLevel: WorkoutLevel = WorkoutLevel.BEGINNER;
     if (levelQuery) {
       const upperLevel = levelQuery.toUpperCase();
-      if (upperLevel === 'BEGINNER' || upperLevel === 'INTERMEDIATE' || upperLevel === 'ADVANCED') {
-        selectedLevel = upperLevel as WorkoutLevel;
+      if (
+        upperLevel === 'BEGINNER' ||
+        upperLevel === 'INTERMEDIATE' ||
+        upperLevel === 'ADVANCED'
+      ) {
+        selectedLevel = upperLevel;
       }
     }
 
-    const userTargetCalo = user?.targetCalories || (selectedGoal === GoalType.GAIN_WEIGHT ? 2200 : 1400);
+    const userTargetCalo =
+      user?.targetCalories ||
+      (selectedGoal === GoalType.GAIN_WEIGHT ? 2200 : 1400);
 
     // 3. Sinh thực đơn 30 ngày chuyên biệt
-    const monthlyPlans = generateAdvancedMonthDiet(userTargetCalo, selectedGoal, selectedLevel);
+    const monthlyPlans = generateAdvancedMonthDiet(
+      userTargetCalo,
+      selectedGoal,
+      selectedLevel,
+    );
 
     // Nếu có query ngày cụ thể (VD: day=5)
     if (dayNumberQuery) {
-      const selectedDay = monthlyPlans.find((p) => p.dayNumber === Number(dayNumberQuery)) || monthlyPlans[0];
+      const selectedDay =
+        monthlyPlans.find((p) => p.dayNumber === Number(dayNumberQuery)) ||
+        monthlyPlans[0];
       return {
         message: `Lấy thực đơn Ngày ${selectedDay.dayNumber} cho ${selectedGoal} (${selectedLevel}) thành công`,
         data: {
@@ -204,12 +239,18 @@ export class RecommendationsService {
     let suitablePlan: WorkoutTemplatePlan | undefined;
 
     if (userGoal === GoalType.GAIN_WEIGHT) {
-      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find((w) => w.goal === GoalType.GAIN_WEIGHT);
+      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find(
+        (w) => w.goal === GoalType.GAIN_WEIGHT,
+      );
     } else if (userGoal === GoalType.MAINTAIN) {
-      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find((w) => w.goal === GoalType.MAINTAIN);
+      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find(
+        (w) => w.goal === GoalType.MAINTAIN,
+      );
     } else {
       // LOSE_WEIGHT: Chọn bài tập an toàn cho khớp gối nếu BMI cao
-      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find((w) => w.goal === GoalType.LOSE_WEIGHT);
+      suitablePlan = VIETNAMESE_WORKOUT_PLANS.find(
+        (w) => w.goal === GoalType.LOSE_WEIGHT,
+      );
     }
 
     if (!suitablePlan) {
@@ -257,7 +298,11 @@ export class RecommendationsService {
   /**
    * Lấy danh sách 50 bài tập được tối ưu riêng theo giới tính (Nam / Nữ) và cấp độ (Beginner / Intermediate / Advanced)
    */
-  async getGenderExercises(userId: string, genderQuery?: string, levelQuery?: string) {
+  async getGenderExercises(
+    userId: string,
+    genderQuery?: string,
+    levelQuery?: string,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -268,18 +313,24 @@ export class RecommendationsService {
     // Xác định giới tính mục tiêu
     let targetGender: Gender = Gender.MALE;
     if (genderQuery) {
-      targetGender = genderQuery.toUpperCase() === 'FEMALE' ? Gender.FEMALE : Gender.MALE;
+      targetGender =
+        genderQuery.toUpperCase() === 'FEMALE' ? Gender.FEMALE : Gender.MALE;
     } else if (user?.gender === Gender.FEMALE) {
       targetGender = Gender.FEMALE;
     }
 
-    const exercisePool = targetGender === Gender.FEMALE ? FEMALE_EXERCISES : MALE_EXERCISES;
+    const exercisePool =
+      targetGender === Gender.FEMALE ? FEMALE_EXERCISES : MALE_EXERCISES;
 
     // Lọc theo level nếu có query
     let filteredList = exercisePool;
     if (levelQuery) {
       const upperLevel = levelQuery.toUpperCase();
-      if (upperLevel === 'BEGINNER' || upperLevel === 'INTERMEDIATE' || upperLevel === 'ADVANCED') {
+      if (
+        upperLevel === 'BEGINNER' ||
+        upperLevel === 'INTERMEDIATE' ||
+        upperLevel === 'ADVANCED'
+      ) {
         filteredList = exercisePool.filter((ex) => ex.level === upperLevel);
       }
     }
@@ -291,9 +342,15 @@ export class RecommendationsService {
         totalCount: exercisePool.length,
         filteredCount: filteredList.length,
         levelsSummary: {
-          beginner: exercisePool.filter((e) => e.level === WorkoutLevel.BEGINNER).length,
-          intermediate: exercisePool.filter((e) => e.level === WorkoutLevel.INTERMEDIATE).length,
-          advanced: exercisePool.filter((e) => e.level === WorkoutLevel.ADVANCED).length,
+          beginner: exercisePool.filter(
+            (e) => e.level === WorkoutLevel.BEGINNER,
+          ).length,
+          intermediate: exercisePool.filter(
+            (e) => e.level === WorkoutLevel.INTERMEDIATE,
+          ).length,
+          advanced: exercisePool.filter(
+            (e) => e.level === WorkoutLevel.ADVANCED,
+          ).length,
         },
         exercises: filteredList,
       },
@@ -386,7 +443,9 @@ export class RecommendationsService {
    */
   async lookupBarcode(barcode: string) {
     try {
-      const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const response = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
+      );
       const json = await response.json();
 
       if (json.status !== 1 || !json.product) {
@@ -403,7 +462,10 @@ export class RecommendationsService {
         message: 'Tra cứu mã vạch thành công',
         data: {
           barcode,
-          name: product.product_name || product.product_name_vi || 'Sản phẩm không tên',
+          name:
+            product.product_name ||
+            product.product_name_vi ||
+            'Sản phẩm không tên',
           brand: product.brands || null,
           imageUrl: product.image_url || null,
           servingSize: product.serving_size || '100g',

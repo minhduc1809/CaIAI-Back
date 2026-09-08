@@ -54,7 +54,11 @@ export class AdaptiveExpenditureService {
    * Tính lại Expenditure thích ứng cho 1 user. Không tự lưu — nơi gọi (WeightLogsService,
    * UsersService) chịu trách nhiệm persist kết quả vào User và dùng để tính lại Target Calories.
    */
-  async recalculate(userId: string, staticTdee: number | null, previousEstimate: number | null): Promise<AdaptiveExpenditureResult> {
+  async recalculate(
+    userId: string,
+    staticTdee: number | null,
+    previousEstimate: number | null,
+  ): Promise<AdaptiveExpenditureResult> {
     const since = new Date();
     since.setDate(since.getDate() - LOOKBACK_DAYS);
 
@@ -87,7 +91,10 @@ export class AdaptiveExpenditureService {
     const lastLog = weightLogs[weightLogs.length - 1];
     const windowDays = Math.max(
       1,
-      Math.round((lastLog.date.getTime() - firstLog.date.getTime()) / (1000 * 60 * 60 * 24)),
+      Math.round(
+        (lastLog.date.getTime() - firstLog.date.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
     );
 
     if (windowDays < MIN_WINDOW_SPAN_DAYS) {
@@ -113,7 +120,10 @@ export class AdaptiveExpenditureService {
     const caloriesByDay = new Map<string, number>();
     for (const meal of meals) {
       const key = meal.date.toISOString().split('T')[0];
-      caloriesByDay.set(key, (caloriesByDay.get(key) || 0) + meal.totalCalories);
+      caloriesByDay.set(
+        key,
+        (caloriesByDay.get(key) || 0) + meal.totalCalories,
+      );
     }
     const loggedDaysCount = caloriesByDay.size;
 
@@ -123,12 +133,16 @@ export class AdaptiveExpenditureService {
       );
     }
 
-    const totalCaloriesLogged = Array.from(caloriesByDay.values()).reduce((sum, cal) => sum + cal, 0);
+    const totalCaloriesLogged = Array.from(caloriesByDay.values()).reduce(
+      (sum, cal) => sum + cal,
+      0,
+    );
     const avgDailyCaloriesConsumed = totalCaloriesLogged / loggedDaysCount;
 
     // Phương trình cân bằng năng lượng
     const deltaWeightKg = trendWeightEnd - trendWeightStart;
-    let rawExpenditure = avgDailyCaloriesConsumed - (deltaWeightKg * KCAL_PER_KG) / windowDays;
+    let rawExpenditure =
+      avgDailyCaloriesConsumed - (deltaWeightKg * KCAL_PER_KG) / windowDays;
 
     // Sanity clamp quanh TDEE công thức tĩnh (nếu có) để tránh ước tính phi thực tế từ dữ liệu ngắn/nhiễu
     if (staticTdee) {
@@ -139,11 +153,15 @@ export class AdaptiveExpenditureService {
 
     // Hội tụ dần theo thời gian: trộn với ước tính trước đó thay vì nhảy đột ngột mỗi lần tính lại
     const converged = previousEstimate
-      ? previousEstimate + CONVERGENCE_ALPHA * (rawExpenditure - previousEstimate)
+      ? previousEstimate +
+        CONVERGENCE_ALPHA * (rawExpenditure - previousEstimate)
       : (rawExpenditure + (staticTdee ?? rawExpenditure)) / 2;
 
     const status: ExpenditureStatus =
-      windowDays >= HOLDING_MIN_SPAN_DAYS && loggedDaysCount >= HOLDING_MIN_LOGGED_DAYS ? 'HOLDING' : 'UPDATING';
+      windowDays >= HOLDING_MIN_SPAN_DAYS &&
+      loggedDaysCount >= HOLDING_MIN_LOGGED_DAYS
+        ? 'HOLDING'
+        : 'UPDATING';
 
     return {
       method: 'ADAPTIVE',

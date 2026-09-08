@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkoutLogDto } from './dto/create-workout-log.dto';
 import { UpdateWorkoutLogDto } from './dto/update-workout-log.dto';
@@ -12,16 +16,56 @@ export interface MetConfig {
 }
 
 export const MET_TABLE: Record<WorkoutCategory, MetConfig> = {
-  RUNNING: { met: 9.8, nameVi: 'Chạy bộ', description: 'Chạy ngoài trời hoặc máy chạy bộ tốc độ ~8.5 km/h' },
-  CYCLING: { met: 7.5, nameVi: 'Đạp xe', description: 'Đạp xe ngoài trời hoặc máy đạp xe cường độ vừa' },
-  SWIMMING: { met: 8.0, nameVi: 'Bơi lội', description: 'Bơi sải hoặc bơi ếch nhịp độ liên tục' },
-  HIIT: { met: 8.5, nameVi: 'HIIT / Tabata', description: 'Tập luyện ngắt quãng cường độ cao' },
-  STRENGTH: { met: 5.0, nameVi: 'Tập tạ / Gym', description: 'Tập kháng lực, nâng tạ nghỉ giữa các hiệp' },
-  SPORTS: { met: 7.0, nameVi: 'Thể thao đối kháng', description: 'Cầu lông, bóng đá, bóng rổ, tennis, võ thuật' },
-  WALKING: { met: 3.8, nameVi: 'Đi bộ', description: 'Đi bộ nhanh tốc độ ~5 km/h' },
-  YOGA: { met: 2.8, nameVi: 'Yoga / Giãn cơ', description: 'Hatha/Vinyasa yoga, kéo giãn cơ bắp' },
-  CARDIO: { met: 6.5, nameVi: 'Cardio tổng hợp', description: 'Aerobic, nhảy dây, leo cầu thang' },
-  OTHER: { met: 4.0, nameVi: 'Hoạt động thể chất khác', description: 'Lao động tay chân, vận động tự do' },
+  RUNNING: {
+    met: 9.8,
+    nameVi: 'Chạy bộ',
+    description: 'Chạy ngoài trời hoặc máy chạy bộ tốc độ ~8.5 km/h',
+  },
+  CYCLING: {
+    met: 7.5,
+    nameVi: 'Đạp xe',
+    description: 'Đạp xe ngoài trời hoặc máy đạp xe cường độ vừa',
+  },
+  SWIMMING: {
+    met: 8.0,
+    nameVi: 'Bơi lội',
+    description: 'Bơi sải hoặc bơi ếch nhịp độ liên tục',
+  },
+  HIIT: {
+    met: 8.5,
+    nameVi: 'HIIT / Tabata',
+    description: 'Tập luyện ngắt quãng cường độ cao',
+  },
+  STRENGTH: {
+    met: 5.0,
+    nameVi: 'Tập tạ / Gym',
+    description: 'Tập kháng lực, nâng tạ nghỉ giữa các hiệp',
+  },
+  SPORTS: {
+    met: 7.0,
+    nameVi: 'Thể thao đối kháng',
+    description: 'Cầu lông, bóng đá, bóng rổ, tennis, võ thuật',
+  },
+  WALKING: {
+    met: 3.8,
+    nameVi: 'Đi bộ',
+    description: 'Đi bộ nhanh tốc độ ~5 km/h',
+  },
+  YOGA: {
+    met: 2.8,
+    nameVi: 'Yoga / Giãn cơ',
+    description: 'Hatha/Vinyasa yoga, kéo giãn cơ bắp',
+  },
+  CARDIO: {
+    met: 6.5,
+    nameVi: 'Cardio tổng hợp',
+    description: 'Aerobic, nhảy dây, leo cầu thang',
+  },
+  OTHER: {
+    met: 4.0,
+    nameVi: 'Hoạt động thể chất khác',
+    description: 'Lao động tay chân, vận động tự do',
+  },
 };
 
 @Injectable()
@@ -32,7 +76,11 @@ export class WorkoutsService {
    * Tính toán năng lượng tiêu hao chuẩn theo hệ số MET và cân nặng người dùng
    * Công thức: Calo = MET * weightKg * (durationMinutes / 60)
    */
-  calculateCalories(category: WorkoutCategory, durationMinutes: number, userWeightKg: number): number {
+  calculateCalories(
+    category: WorkoutCategory,
+    durationMinutes: number,
+    userWeightKg: number,
+  ): number {
     const met = MET_TABLE[category]?.met || 4.0;
     const calories = met * userWeightKg * (durationMinutes / 60);
     return Math.round(calories * 10) / 10;
@@ -54,7 +102,16 @@ export class WorkoutsService {
    * Ghi nhận một buổi tập mới
    */
   async createWorkout(userId: string, dto: CreateWorkoutLogDto) {
-    const { name, category, date, durationMinutes, caloriesBurned, rpe, note, exercises } = dto;
+    const {
+      name,
+      category,
+      date,
+      durationMinutes,
+      caloriesBurned,
+      rpe,
+      note,
+      exercises,
+    } = dto;
 
     // 1. Lấy thông tin cân nặng của user để tự động tính calo nếu không nhập
     const user = await this.prisma.user.findUnique({
@@ -193,7 +250,9 @@ export class WorkoutsService {
     });
 
     if (!workout) {
-      throw new NotFoundException('Không tìm thấy buổi tập hoặc bạn không có quyền truy cập');
+      throw new NotFoundException(
+        'Không tìm thấy buổi tập hoặc bạn không có quyền truy cập',
+      );
     }
 
     return {
@@ -214,7 +273,8 @@ export class WorkoutsService {
       throw new NotFoundException('Không tìm thấy buổi tập để cập nhật');
     }
 
-    const { name, category, date, durationMinutes, caloriesBurned, rpe, note } = dto;
+    const { name, category, date, durationMinutes, caloriesBurned, rpe, note } =
+      dto;
 
     let finalCalories = existing.caloriesBurned;
     if (caloriesBurned !== undefined && caloriesBurned !== null) {
@@ -227,7 +287,11 @@ export class WorkoutsService {
       const weightKg = user?.weightKg || 65;
       const targetCategory = category || existing.category;
       const targetDuration = durationMinutes || existing.durationMinutes;
-      finalCalories = this.calculateCalories(targetCategory, targetDuration, weightKg);
+      finalCalories = this.calculateCalories(
+        targetCategory,
+        targetDuration,
+        weightKg,
+      );
     }
 
     const updated = await this.prisma.workoutLog.update({
@@ -307,7 +371,10 @@ export class WorkoutsService {
     const totalActiveCalories = Math.round(
       workouts.reduce((sum, w) => sum + (w.caloriesBurned || 0), 0),
     );
-    const totalDurationMinutes = workouts.reduce((sum, w) => sum + w.durationMinutes, 0);
+    const totalDurationMinutes = workouts.reduce(
+      (sum, w) => sum + w.durationMinutes,
+      0,
+    );
     const workoutCount = workouts.length;
     const categories = Array.from(new Set(workouts.map((w) => w.category)));
 

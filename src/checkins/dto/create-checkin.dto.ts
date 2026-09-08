@@ -3,7 +3,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Mood } from '@prisma/client';
 
 export class CreateCheckinDto {
-  @ApiPropertyOptional({ enum: Mood, description: 'Tâm trạng người dùng tuần qua' })
+  @ApiPropertyOptional({
+    enum: Mood,
+    description: 'Tâm trạng người dùng tuần qua',
+  })
   @IsOptional()
   @IsEnum(Mood)
   mood?: Mood;
