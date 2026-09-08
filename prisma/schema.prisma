@@ -230,6 +230,7 @@ model User {
   expenditureUpdatedAt DateTime?
 
   dailyAiQuota     Int     @default(10)
+  purchasedAiQuota Int     @default(0)
   refreshTokenHash String?
   timezone         String  @default("Asia/Ho_Chi_Minh")
 

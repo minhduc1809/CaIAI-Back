@@ -4,13 +4,50 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
+import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dto';
 
 @Injectable()
 export class AiService {
   /**
-   * Giới hạn số lượt nhận diện ảnh món ăn tối đa mỗi ngày của một người dùng
+   * Giới hạn số lượt nhận diện ảnh món ăn miễn phí mỗi ngày của người dùng
    */
-  public static readonly DAILY_PHOTO_LIMIT = 5;
+  public static readonly DAILY_FREE_LIMIT = 5;
+
+  /**
+   * Danh mục các gói mua thêm lượt chụp ảnh AI
+   */
+  public static readonly SCAN_PACKAGES: AiScanPackageDto[] = [
+    {
+      id: 'PACKAGE_10',
+      name: 'Gói Khởi Động',
+      credits: 10,
+      priceVnd: 29000,
+      description: '10 lượt chụp ảnh AI nhận diện món ăn (không hết hạn, dùng sau khi hết 5 lượt free/ngày)',
+    },
+    {
+      id: 'PACKAGE_20',
+      name: 'Gói Tiêu Chuẩn',
+      credits: 20,
+      priceVnd: 49000,
+      description: '20 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 15%, không giới hạn thời gian)',
+      isPopular: true,
+    },
+    {
+      id: 'PACKAGE_50',
+      name: 'Gói Nâng Cao',
+      credits: 50,
+      priceVnd: 99000,
+      description: '50 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 30%, không giới hạn thời gian)',
+    },
+    {
+      id: 'PACKAGE_100',
+      name: 'Gói Siêu Cấp',
+      credits: 100,
+      priceVnd: 179000,
+      description: '100 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 40%, giá tốt nhất)',
+      bestValue: true,
+    },
+  ];
 
   private readonly logger = new Logger(AiService.name);
   private genAI: GoogleGenerativeAI | null = null;
@@ -38,18 +75,65 @@ export class AiService {
   }
 
   /**
-   * Lấy thông tin hạn mức chụp ảnh nhận diện món ăn trong ngày của người dùng
+   * Lấy danh sách các gói nạp lượt chụp ảnh AI có sẵn
+   */
+  getAvailablePackages(): AiScanPackageDto[] {
+    return AiService.SCAN_PACKAGES;
+  }
+
+  /**
+   * Mua / Nạp thêm lượt chụp ảnh AI cho người dùng.
+   * Lượt mua này được cộng dồn vào `purchasedAiQuota` và KHÔNG BAO GIỜ hết hạn.
+   * Mỗi ngày người dùng vẫn được hưởng trọn vẹn 5 lượt miễn phí độc lập.
+   */
+  async purchaseScanCredits(userId: string, dto: PurchaseAiQuotaDto): Promise<AiQuotaResponseDto> {
+    let creditsToAdd = 0;
+
+    const packageId = dto.packageId?.trim();
+    if (packageId) {
+      const pkg = AiService.SCAN_PACKAGES.find((p) => p.id === packageId);
+      if (!pkg) {
+        throw new BadRequestException(
+          `Gói '${packageId}' không tồn tại. Vui lòng chọn: ${AiService.SCAN_PACKAGES.map((p) => p.id).join(', ')}`,
+        );
+      }
+      creditsToAdd = pkg.credits;
+    } else if (dto.customCredits && dto.customCredits > 0) {
+      creditsToAdd = dto.customCredits;
+    } else {
+      throw new BadRequestException('Vui lòng cung cấp packageId hoặc customCredits hợp lệ.');
+    }
+
+    // Cộng lượt mua vào tài khoản người dùng
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        purchasedAiQuota: { increment: creditsToAdd },
+      },
+    });
+
+    this.logger.log(`User ${userId} đã mua thành công ${creditsToAdd} lượt chụp ảnh AI`);
+
+    return this.getDailyPhotoQuota(userId);
+  }
+
+  /**
+   * Lấy thông tin hạn mức toàn diện:
+   * - 5 lượt miễn phí mỗi ngày (tự làm mới lúc 00:00:00).
+   * - Số lượt mua thêm vĩnh viễn (chỉ bị trừ khi đã dùng hết 5 lượt miễn phí của ngày).
+   * - Tổng số lượt có thể sử dụng ngay lúc này.
    */
   async getDailyPhotoQuota(userId: string): Promise<AiQuotaResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { timezone: true },
+      select: { timezone: true, purchasedAiQuota: true },
     });
 
     const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
     const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
 
-    const usedToday = await this.prisma.apiUsageLog.count({
+    // Đếm số lượt miễn phí đã dùng trong ngày hôm nay
+    const freeUsedToday = await this.prisma.apiUsageLog.count({
       where: {
         userId,
         feature: 'food_recognition',
@@ -57,39 +141,98 @@ export class AiService {
       },
     });
 
-    const dailyLimit = AiService.DAILY_PHOTO_LIMIT;
-    const remainingQuota = Math.max(0, dailyLimit - usedToday);
+    const dailyFreeLimit = AiService.DAILY_FREE_LIMIT;
+    const freeRemaining = Math.max(0, dailyFreeLimit - freeUsedToday);
+    const purchasedCredits = Math.max(0, user?.purchasedAiQuota ?? 0);
+    const totalRemaining = freeRemaining + purchasedCredits;
 
     return {
       feature: 'food_recognition',
-      dailyLimit,
-      usedToday,
-      remainingQuota,
+      dailyFreeLimit,
+      freeUsedToday,
+      freeRemaining,
+      purchasedCredits,
+      totalRemaining,
       resetsAt: resetsAt.toISOString(),
     };
   }
 
   /**
-   * Kiểm tra hạn mức sử dụng trước khi phân tích ảnh.
-   * Nếu đã dùng hết 5 ảnh/ngày -> ném HttpException 429 (Too Many Requests).
+   * Kiểm tra quota trước khi quét ảnh:
+   * 1. Ưu tiên trừ lượt miễn phí (nếu hôm nay freeRemaining > 0).
+   * 2. Nếu đã hết lượt miễn phí, kiểm tra lượt mua thêm (purchasedCredits > 0).
+   * 3. Nếu cả hai đều hết (= 0) -> ném lỗi 429 Too Many Requests.
    */
-  private async checkDailyPhotoQuota(userId: string): Promise<AiQuotaResponseDto> {
+  private async checkAndDetermineQuotaType(
+    userId: string,
+  ): Promise<{ quota: AiQuotaResponseDto; usedQuotaType: 'FREE' | 'PURCHASED' }> {
     const quota = await this.getDailyPhotoQuota(userId);
-    if (quota.usedToday >= quota.dailyLimit) {
+
+    if (quota.totalRemaining <= 0) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: `Bạn đã sử dụng hết giới hạn nhận diện ảnh trong ngày (${quota.dailyLimit}/${quota.dailyLimit} ảnh). Hãy quay lại vào ngày mai hoặc nhập món ăn thủ công nhé!`,
+          message:
+            'Bạn đã sử dụng hết 5 lượt chụp ảnh miễn phí hôm nay và không còn lượt mua thêm. Hãy mua thêm gói lượt chụp hoặc quay lại vào ngày mai nhé!',
           error: 'Too Many Requests',
-          dailyLimit: quota.dailyLimit,
-          usedToday: quota.usedToday,
-          remainingQuota: 0,
+          dailyFreeLimit: quota.dailyFreeLimit,
+          freeUsedToday: quota.freeUsedToday,
+          freeRemaining: 0,
+          purchasedCredits: 0,
+          totalRemaining: 0,
           resetsAt: quota.resetsAt,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return quota;
+
+    // Ưu tiên sử dụng 5 lượt miễn phí hàng ngày trước!
+    const usedQuotaType: 'FREE' | 'PURCHASED' = quota.freeRemaining > 0 ? 'FREE' : 'PURCHASED';
+
+    return { quota, usedQuotaType };
+  }
+
+  /**
+   * Khấu trừ lượt sau khi nhận diện ảnh thành công
+   */
+  private async deductQuotaAfterSuccess(
+    userId: string,
+    usedQuotaType: 'FREE' | 'PURCHASED',
+    quota: AiQuotaResponseDto,
+    tokens: { promptTokens: number; outputTokens: number; costUsd: number },
+  ): Promise<{ freeRemaining: number; purchasedCredits: number; totalRemaining: number }> {
+    if (usedQuotaType === 'FREE') {
+      // Ghi log lượt miễn phí hôm nay (feature = 'food_recognition')
+      await this.logApiUsage(userId, 'food_recognition', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+
+      const newFreeRemaining = Math.max(0, quota.freeRemaining - 1);
+      const newPurchased = quota.purchasedCredits;
+
+      return {
+        freeRemaining: newFreeRemaining,
+        purchasedCredits: newPurchased,
+        totalRemaining: newFreeRemaining + newPurchased,
+      };
+    } else {
+      // Đã hết 5 lượt free hôm nay -> Khấu trừ 1 lượt mua vĩnh viễn (purchasedAiQuota)
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          purchasedAiQuota: { decrement: 1 },
+        },
+      });
+
+      // Ghi log lượt có phí (feature = 'food_recognition_paid') để không cộng dồn vào 5 lượt free của ngày
+      await this.logApiUsage(userId, 'food_recognition_paid', tokens.promptTokens, tokens.outputTokens, tokens.costUsd);
+
+      const newPurchased = Math.max(0, quota.purchasedCredits - 1);
+
+      return {
+        freeRemaining: 0,
+        purchasedCredits: newPurchased,
+        totalRemaining: newPurchased,
+      };
+    }
   }
 
   /**
@@ -123,8 +266,8 @@ export class AiService {
     mimeType: string = 'image/jpeg',
     userId: string,
   ): Promise<FoodRecognitionResultDto> {
-    // 1. Kiểm tra hạn mức 5 ảnh / ngày
-    const quota = await this.checkDailyPhotoQuota(userId);
+    // 1. Kiểm tra hạn mức & xác định loại lượt sử dụng (FREE hay PURCHASED)
+    const { quota, usedQuotaType } = await this.checkAndDetermineQuotaType(userId);
 
     // Làm sạch tiền tố base64 (ví dụ: "data:image/jpeg;base64,") nếu có
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
@@ -134,18 +277,27 @@ export class AiService {
       try {
         const result = await this.callGeminiVision(cleanBase64, mimeType);
         if (result) {
-          // Nhận diện thành công -> tiêu tốn 1 lượt quota
-          await this.logApiUsage(userId, 'food_recognition', 500, 200, 0.0005);
+          // Nhận diện thành công -> Khấu trừ lượt tương ứng
+          const remaining = await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
+            promptTokens: 500,
+            outputTokens: 200,
+            costUsd: 0.0005,
+          });
+
           return {
             ...result,
-            remainingDailyQuota: Math.max(0, quota.remainingQuota - 1),
-            dailyLimit: quota.dailyLimit,
+            usedQuotaType,
+            freeRemaining: remaining.freeRemaining,
+            purchasedCredits: remaining.purchasedCredits,
+            totalRemaining: remaining.totalRemaining,
+            remainingDailyQuota: remaining.totalRemaining,
+            dailyLimit: AiService.DAILY_FREE_LIMIT,
             isFallback: false,
           };
         }
       } catch (error) {
         if (error instanceof BadRequestException) {
-          // Lỗi do người dùng gửi ảnh không phải đồ ăn -> ném ra ngoài, KHÔNG trừ quota
+          // Người dùng gửi ảnh không phải đồ ăn -> ném ra ngoài, KHÔNG trừ lượt
           throw error;
         }
         this.logger.error(`Lỗi khi gọi Gemini Vision API: ${error.message}. Chuyển sang Smart Fallback.`);
@@ -153,12 +305,21 @@ export class AiService {
     }
 
     // 3. Kích hoạt Smart Fallback Engine (khi chưa cấu hình API key hoặc mạng lỗi)
-    await this.logApiUsage(userId, 'food_recognition', 100, 50, 0);
+    const remaining = await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
+      promptTokens: 100,
+      outputTokens: 50,
+      costUsd: 0,
+    });
+
     const fallback = this.getSmartFallbackRecognition();
     return {
       ...fallback,
-      remainingDailyQuota: Math.max(0, quota.remainingQuota - 1),
-      dailyLimit: quota.dailyLimit,
+      usedQuotaType,
+      freeRemaining: remaining.freeRemaining,
+      purchasedCredits: remaining.purchasedCredits,
+      totalRemaining: remaining.totalRemaining,
+      remainingDailyQuota: remaining.totalRemaining,
+      dailyLimit: AiService.DAILY_FREE_LIMIT,
       isFallback: true,
     };
   }

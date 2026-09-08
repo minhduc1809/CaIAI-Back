@@ -61,15 +61,44 @@ export class FoodRecognitionResultDto {
   isFallback: boolean;
 
   @ApiProperty({
+    example: 'FREE',
+    enum: ['FREE', 'PURCHASED'],
+    description: 'Lượt nhận diện vừa sử dụng: FREE (5 lượt miễn phí hàng ngày) hoặc PURCHASED (lượt mua thêm)',
+    required: false,
+  })
+  usedQuotaType?: 'FREE' | 'PURCHASED';
+
+  @ApiProperty({
     example: 4,
-    description: 'Số lượt chụp ảnh nhận diện món ăn còn lại trong ngày (tối đa 5 lượt/ngày)',
+    description: 'Số lượt miễn phí còn lại trong ngày hôm nay',
+    required: false,
+  })
+  freeRemaining?: number;
+
+  @ApiProperty({
+    example: 10,
+    description: 'Số lượt mua thêm còn lại (không hết hạn)',
+    required: false,
+  })
+  purchasedCredits?: number;
+
+  @ApiProperty({
+    example: 14,
+    description: 'Tổng số lượt chụp ảnh AI còn lại hiện có',
+    required: false,
+  })
+  totalRemaining?: number;
+
+  @ApiProperty({
+    example: 14,
+    description: 'Alias tổng số lượt chụp ảnh còn lại',
     required: false,
   })
   remainingDailyQuota?: number;
 
   @ApiProperty({
     example: 5,
-    description: 'Giới hạn số lượt chụp ảnh món ăn tối đa mỗi ngày',
+    description: 'Giới hạn số lượt chụp ảnh miễn phí mỗi ngày',
     required: false,
   })
   dailyLimit?: number;
