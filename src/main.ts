@@ -39,7 +39,9 @@ async function bootstrap() {
   // 6. Swagger API Documentation
   const config = new DocumentBuilder()
     .setTitle('CalAI API')
-    .setDescription('Tài liệu API Backend cho ứng dụng CalAI (Health Tracking & AI Nutritionist)')
+    .setDescription(
+      'Tài liệu API Backend cho ứng dụng CalAI (Health Tracking & AI Nutritionist)',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

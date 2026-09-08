@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HealthCalculatorService } from './health-calculator.service';
 import { AdaptiveExpenditureService } from './adaptive-expenditure.service';
@@ -31,6 +27,8 @@ export class UsersService {
         name: true,
         avatar: true,
         role: true,
+        authProvider: true,
+        isEmailVerified: true,
         gender: true,
         dateOfBirth: true,
         heightCm: true,
@@ -50,6 +48,27 @@ export class UsersService {
         targetFat: true,
         adaptiveExpenditure: true,
         expenditureStatus: true,
+        sleepHours: true,
+        stressLevel: true,
+        takesSupplements: true,
+        dietType: true,
+        mealsPerDay: true,
+        cookTimeMinutes: true,
+        foodBudgetLevel: true,
+        trainingExperience: true,
+        trainingGoal: true,
+        sessionsPerWeek: true,
+        equipmentAccess: true,
+        injuries: true,
+        injuriesOtherNote: true,
+        oneRepMaxSquatKg: true,
+        oneRepMaxBenchKg: true,
+        oneRepMaxDeadliftKg: true,
+        programType: true,
+        proteinPreference: true,
+        isIntermittentFasting: true,
+        ifWindowStart: true,
+        ifWindowEnd: true,
         dailyAiQuota: true,
         timezone: true,
         createdAt: true,
@@ -81,16 +100,36 @@ export class UsersService {
     }
 
     // 2. Gom các thông số mới (hoặc giữ lại thông số cũ nếu không truyền)
-    const heightCm = dto.heightCm !== undefined ? dto.heightCm : currentUser.heightCm;
-    const weightKg = dto.weightKg !== undefined ? dto.weightKg : currentUser.weightKg;
-    const targetWeightKg = dto.targetWeightKg !== undefined ? dto.targetWeightKg : currentUser.targetWeightKg;
-    const weightRateKgPerWeek = dto.weightRateKgPerWeek !== undefined ? dto.weightRateKgPerWeek : currentUser.weightRateKgPerWeek;
-    const bodyFatPercent = dto.bodyFatPercent !== undefined ? dto.bodyFatPercent : currentUser.bodyFatPercent;
-    const dateOfBirth = dto.dateOfBirth !== undefined ? (dto.dateOfBirth ? new Date(dto.dateOfBirth) : null) : currentUser.dateOfBirth;
+    const heightCm =
+      dto.heightCm !== undefined ? dto.heightCm : currentUser.heightCm;
+    const weightKg =
+      dto.weightKg !== undefined ? dto.weightKg : currentUser.weightKg;
+    const targetWeightKg =
+      dto.targetWeightKg !== undefined
+        ? dto.targetWeightKg
+        : currentUser.targetWeightKg;
+    const weightRateKgPerWeek =
+      dto.weightRateKgPerWeek !== undefined
+        ? dto.weightRateKgPerWeek
+        : currentUser.weightRateKgPerWeek;
+    const bodyFatPercent =
+      dto.bodyFatPercent !== undefined
+        ? dto.bodyFatPercent
+        : currentUser.bodyFatPercent;
+    const dateOfBirth =
+      dto.dateOfBirth !== undefined
+        ? dto.dateOfBirth
+          ? new Date(dto.dateOfBirth)
+          : null
+        : currentUser.dateOfBirth;
     const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
-    const activityLevel = dto.activityLevel !== undefined ? dto.activityLevel : currentUser.activityLevel;
+    const activityLevel =
+      dto.activityLevel !== undefined
+        ? dto.activityLevel
+        : currentUser.activityLevel;
     const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
-    const macroStyle = dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
+    const macroStyle =
+      dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
 
     // 3a. Tính TDEE công thức tĩnh trước (baseline & sanity bound cho Adaptive Engine)
     const staticCalculations = this.healthCalculator.calculateAllMetrics({
@@ -125,7 +164,10 @@ export class UsersService {
       activityLevel,
       goal,
       macroStyle,
-      expenditureOverride: expenditureResult.method === 'ADAPTIVE' ? expenditureResult.estimatedExpenditure : null,
+      expenditureOverride:
+        expenditureResult.method === 'ADAPTIVE'
+          ? expenditureResult.estimatedExpenditure
+          : null,
     });
 
     // 4. Cập nhật vào Database
@@ -144,7 +186,88 @@ export class UsersService {
         activityLevel,
         goal,
         macroStyle: calculations.macroStyle,
-        timezone: dto.timezone !== undefined ? dto.timezone : currentUser.timezone,
+        timezone:
+          dto.timezone !== undefined ? dto.timezone : currentUser.timezone,
+        sleepHours:
+          dto.sleepHours !== undefined
+            ? dto.sleepHours
+            : currentUser.sleepHours,
+        stressLevel:
+          dto.stressLevel !== undefined
+            ? dto.stressLevel
+            : currentUser.stressLevel,
+        takesSupplements:
+          dto.takesSupplements !== undefined
+            ? dto.takesSupplements
+            : currentUser.takesSupplements,
+        dietType:
+          dto.dietType !== undefined ? dto.dietType : currentUser.dietType,
+        mealsPerDay:
+          dto.mealsPerDay !== undefined
+            ? dto.mealsPerDay
+            : currentUser.mealsPerDay,
+        cookTimeMinutes:
+          dto.cookTimeMinutes !== undefined
+            ? dto.cookTimeMinutes
+            : currentUser.cookTimeMinutes,
+        foodBudgetLevel:
+          dto.foodBudgetLevel !== undefined
+            ? dto.foodBudgetLevel
+            : currentUser.foodBudgetLevel,
+        trainingExperience:
+          dto.trainingExperience !== undefined
+            ? dto.trainingExperience
+            : currentUser.trainingExperience,
+        trainingGoal:
+          dto.trainingGoal !== undefined
+            ? dto.trainingGoal
+            : currentUser.trainingGoal,
+        sessionsPerWeek:
+          dto.sessionsPerWeek !== undefined
+            ? dto.sessionsPerWeek
+            : currentUser.sessionsPerWeek,
+        equipmentAccess:
+          dto.equipmentAccess !== undefined
+            ? dto.equipmentAccess
+            : currentUser.equipmentAccess,
+        injuries:
+          dto.injuries !== undefined ? dto.injuries : currentUser.injuries,
+        injuriesOtherNote:
+          dto.injuriesOtherNote !== undefined
+            ? dto.injuriesOtherNote
+            : currentUser.injuriesOtherNote,
+        oneRepMaxSquatKg:
+          dto.oneRepMaxSquatKg !== undefined
+            ? dto.oneRepMaxSquatKg
+            : currentUser.oneRepMaxSquatKg,
+        oneRepMaxBenchKg:
+          dto.oneRepMaxBenchKg !== undefined
+            ? dto.oneRepMaxBenchKg
+            : currentUser.oneRepMaxBenchKg,
+        oneRepMaxDeadliftKg:
+          dto.oneRepMaxDeadliftKg !== undefined
+            ? dto.oneRepMaxDeadliftKg
+            : currentUser.oneRepMaxDeadliftKg,
+        programType:
+          dto.programType !== undefined
+            ? dto.programType
+            : currentUser.programType,
+        proteinPreference:
+          dto.proteinPreference !== undefined
+            ? dto.proteinPreference
+            : currentUser.proteinPreference,
+        isIntermittentFasting:
+          dto.isIntermittentFasting !== undefined
+            ? dto.isIntermittentFasting
+            : currentUser.isIntermittentFasting,
+        ifWindowStart:
+          dto.ifWindowStart !== undefined
+            ? dto.ifWindowStart
+            : currentUser.ifWindowStart,
+        ifWindowEnd:
+          dto.ifWindowEnd !== undefined
+            ? dto.ifWindowEnd
+            : currentUser.ifWindowEnd,
         // Các chỉ số tính toán
         bmi: calculations.bmi,
         bmr: calculations.bmr,
@@ -164,6 +287,8 @@ export class UsersService {
         name: true,
         avatar: true,
         role: true,
+        authProvider: true,
+        isEmailVerified: true,
         gender: true,
         dateOfBirth: true,
         heightCm: true,
@@ -183,6 +308,27 @@ export class UsersService {
         targetFat: true,
         adaptiveExpenditure: true,
         expenditureStatus: true,
+        sleepHours: true,
+        stressLevel: true,
+        takesSupplements: true,
+        dietType: true,
+        mealsPerDay: true,
+        cookTimeMinutes: true,
+        foodBudgetLevel: true,
+        trainingExperience: true,
+        trainingGoal: true,
+        sessionsPerWeek: true,
+        equipmentAccess: true,
+        injuries: true,
+        injuriesOtherNote: true,
+        oneRepMaxSquatKg: true,
+        oneRepMaxBenchKg: true,
+        oneRepMaxDeadliftKg: true,
+        programType: true,
+        proteinPreference: true,
+        isIntermittentFasting: true,
+        ifWindowStart: true,
+        ifWindowEnd: true,
         dailyAiQuota: true,
         timezone: true,
         updatedAt: true,
@@ -295,7 +441,10 @@ export class UsersService {
     };
   }
 
-  private generateQuickHealthAdvice(goal: string | null, bmi: number | null): string {
+  private generateQuickHealthAdvice(
+    goal: string | null,
+    bmi: number | null,
+  ): string {
     if (!bmi) {
       return 'Vui lòng cập nhật đầy đủ chiều cao và cân nặng để nhận được lời khuyên cá nhân hóa.';
     }

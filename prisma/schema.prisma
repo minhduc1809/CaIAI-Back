@@ -12,6 +12,11 @@ enum Role {
   ADMIN
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -39,6 +44,34 @@ enum ActivityLevel {
   EXTRA_ACTIVE
 }
 
+enum StressLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DietType {
+  BALANCED
+  VEGETARIAN
+  VEGAN
+  KETO
+  LOW_CARB
+  PESCATARIAN
+  OTHER
+}
+
+enum FoodBudgetLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ServingUnit {
+  GRAM
+  ML
+  PORTION
+}
+
 enum MealType {
   BREAKFAST
   LUNCH
@@ -50,6 +83,64 @@ enum WorkoutLevel {
   BEGINNER
   INTERMEDIATE
   ADVANCED
+}
+
+enum TrainingGoal {
+  BUILD_MUSCLE
+  LOSE_FAT
+  STRENGTH
+  ENDURANCE
+  RECOMP
+  GENERAL_FITNESS
+}
+
+enum SessionsPerWeek {
+  ONE_TO_TWO
+  THREE_TO_FOUR
+  FIVE_TO_SIX
+  SEVEN
+}
+
+enum EquipmentAccess {
+  FULL_GYM
+  BASIC_GYM
+  HOME_DUMBBELL
+  BODYWEIGHT_ONLY
+}
+
+enum ProgramType {
+  COACHED
+  COLLABORATIVE
+  MANUAL
+}
+
+enum ProteinPreference {
+  LOW
+  MID
+  HIGH
+  VERY_HIGH
+}
+
+enum CheckInStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  DISMISSED
+}
+
+enum Mood {
+  GREAT
+  GOOD
+  OKAY
+  BAD
+  TERRIBLE
+}
+
+enum CheckInAdjustmentReason {
+  EXPENDITURE_CHANGE
+  GOAL_CHANGE
+  SMOOTHING
+  NO_CHANGE
 }
 
 enum WorkoutCategory {
@@ -66,14 +157,22 @@ enum WorkoutCategory {
 }
 
 model User {
-  id                  String         @id @default(uuid())
-  username            String         @unique
-  email               String?        @unique
-  password            String
-  name                String?
-  avatar              String?
-  role                Role           @default(USER)
-  isActive            Boolean        @default(true)
+  id       String  @id @default(uuid())
+  username String  @unique
+  email    String? @unique
+  password String?
+  name     String?
+  avatar   String?
+  role     Role    @default(USER)
+  isActive Boolean @default(true)
+
+  // Đăng nhập & xác thực email
+  authProvider               AuthProvider @default(LOCAL)
+  googleId                   String?      @unique
+  isEmailVerified            Boolean      @default(false)
+  emailVerifiedAt            DateTime?
+  emailVerificationCode      String?
+  emailVerificationExpiresAt DateTime?
 
   gender              Gender?
   dateOfBirth         DateTime?
@@ -86,70 +185,106 @@ model User {
   goal                GoalType?      @default(MAINTAIN)
   macroStyle          MacroStyle?    @default(BALANCED)
 
-  bmi                 Float?
-  bmr                 Float?
-  tdee                Float?
-  targetCalories      Float?
-  targetProtein       Float?
-  targetCarb          Float?
-  targetFat           Float?
+  // Lifestyle Profile (BRD Onboarding — nhóm 6/7)
+  sleepHours       Float?
+  stressLevel      StressLevel? @default(MEDIUM)
+  takesSupplements Boolean?     @default(false)
+
+  // Nutrition Profile (BRD Onboarding — nhóm 7/7)
+  dietType        DietType?        @default(BALANCED)
+  mealsPerDay     Int?             @default(3)
+  cookTimeMinutes Int?             @default(30)
+  foodBudgetLevel FoodBudgetLevel? @default(MEDIUM)
+
+  // Training Profile (BRD Onboarding)
+  trainingExperience  WorkoutLevel?    @default(BEGINNER)
+  trainingGoal        TrainingGoal?    @default(GENERAL_FITNESS)
+  sessionsPerWeek     SessionsPerWeek? @default(THREE_TO_FOUR)
+  equipmentAccess     EquipmentAccess? @default(BODYWEIGHT_ONLY)
+  injuries            String[]         @default([])
+  injuriesOtherNote   String?
+  oneRepMaxSquatKg    Float?
+  oneRepMaxBenchKg    Float?
+  oneRepMaxDeadliftKg Float?
+
+  // Program Setup (BRD Onboarding / Goals & Program)
+  programType       ProgramType?       @default(COACHED)
+  proteinPreference ProteinPreference? @default(MID)
+
+  // Nutrition Profile — Intermittent Fasting
+  isIntermittentFasting Boolean? @default(false)
+  ifWindowStart         String?
+  ifWindowEnd           String?
+
+  bmi            Float?
+  bmr            Float?
+  tdee           Float?
+  targetCalories Float?
+  targetProtein  Float?
+  targetCarb     Float?
+  targetFat      Float?
 
   // Adaptive Expenditure Engine — ước tính TDEE thích ứng theo dữ liệu thực tế (cân nặng + calo đã log)
-  adaptiveExpenditure   Float?
-  expenditureStatus     String    @default("UPDATING") // UPDATING | HOLDING
-  expenditureUpdatedAt  DateTime?
+  adaptiveExpenditure  Float?
+  expenditureStatus    String    @default("UPDATING") // UPDATING | HOLDING
+  expenditureUpdatedAt DateTime?
 
-  dailyAiQuota        Int            @default(10)
-  refreshTokenHash    String?
-  timezone            String         @default("Asia/Ho_Chi_Minh")
+  dailyAiQuota       Int     @default(10)
+  purchasedAiQuota   Int     @default(0)
+  purchasedChatQuota Int     @default(0)
+  refreshTokenHash   String?
+  timezone         String  @default("Asia/Ho_Chi_Minh")
 
-  meals               Meal[]
-  weightLogs          WeightLog[]
-  workoutLogs         WorkoutLog[]
-  customFoods         CustomFood[]
-  favoriteFoods       FavoriteFood[]
-  aiMessages          AiMessage[]
-  apiUsageLogs        ApiUsageLog[]
+  meals         Meal[]
+  weightLogs    WeightLog[]
+  workoutLogs   WorkoutLog[]
+  customFoods   CustomFood[]
+  favoriteFoods FavoriteFood[]
+  aiMessages    AiMessage[]
+  apiUsageLogs  ApiUsageLog[]
+  checkIns      CheckIn[]
 
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([role, isActive])
 }
 
 model Meal {
-  id            String       @id @default(uuid())
-  userId        String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mealType      MealType     @default(LUNCH)
-  date          DateTime
-  imageUrl      String?
-  
-  totalCalories Float        @default(0)
-  totalProtein  Float        @default(0)
-  totalCarb     Float        @default(0)
-  totalFat      Float        @default(0)
-  
-  items         MealItem[]
-  
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealType MealType @default(LUNCH)
+  date     DateTime
+  imageUrl String?
+
+  totalCalories Float @default(0)
+  totalProtein  Float @default(0)
+  totalCarb     Float @default(0)
+  totalFat      Float @default(0)
+
+  items MealItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, date])
 }
 
 model MealItem {
-  id           String   @id @default(uuid())
-  mealId       String
-  meal         Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
-  name         String
-  servingSize  String?
-  quantity     Float    @default(1)
-  calories     Float
-  protein      Float
-  carb         Float
-  fat          Float
-  source       String   @default("manual")
+  id            String       @id @default(uuid())
+  mealId        String
+  meal          Meal         @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  name          String
+  servingSize   String?
+  servingAmount Float?
+  servingUnit   ServingUnit? @default(PORTION)
+  quantity      Float        @default(1)
+  calories      Float
+  protein       Float
+  carb          Float
+  fat           Float
+  source        String       @default("manual")
 }
 
 model WeightLog {
@@ -164,17 +299,19 @@ model WeightLog {
 }
 
 model CustomFood {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  servingSize String?
-  calories    Float
-  protein     Float    @default(0)
-  carb        Float    @default(0)
-  fat         Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  servingSize   String?
+  servingAmount Float?
+  servingUnit   ServingUnit? @default(PORTION)
+  calories      Float
+  protein       Float        @default(0)
+  carb          Float        @default(0)
+  fat           Float        @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@index([userId])
 }
@@ -201,13 +338,13 @@ model DietPlanTemplate {
 }
 
 model WorkoutPlanTemplate {
-  id           String        @id @default(uuid())
-  goal         GoalType
-  level        WorkoutLevel  @default(BEGINNER)
-  title        String
-  description  String?
-  schedule     Json
-  createdAt    DateTime      @default(now())
+  id          String       @id @default(uuid())
+  goal        GoalType
+  level       WorkoutLevel @default(BEGINNER)
+  title       String
+  description String?
+  schedule    Json
+  createdAt   DateTime     @default(now())
 }
 
 model AiMessage {
@@ -247,10 +384,10 @@ model WorkoutLog {
   rpe             Int?
   note            String?
 
-  exercises       WorkoutExercise[]
+  exercises WorkoutExercise[]
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, date])
 }
@@ -276,4 +413,51 @@ model WorkoutSet {
   rpe        Int?
 
   @@index([exerciseId])
+}
+
+model CheckIn {
+  id          String  @id @default(uuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekNumber  Int     // Tuần thứ N kể từ khi tạo program
+  weekStartDate DateTime
+  weekEndDate   DateTime
+  status        CheckInStatus @default(PENDING)
+
+  // Tổng hợp dữ liệu tuần qua
+  avgDailyCalories Float?
+  avgDailyProtein  Float?
+  avgDailyCarb     Float?
+  avgDailyFat      Float?
+  weightAtCheckin  Float?     // Trend weight tại thời điểm check-in
+  compliancePct    Float?     // % ngày đạt ≥80% target calo
+
+  // Đề xuất mới (công thức C018 ±10% guardrail)
+  currentCalorieTarget  Int
+  proposedCalorieTarget Int
+  currentProteinTarget  Float?
+  proposedProteinTarget Float?
+  currentCarbTarget     Float?
+  proposedCarbTarget    Float?
+  currentFatTarget      Float?
+  proposedFatTarget     Float?
+
+  // Expenditure estimate mới
+  newExpenditure    Float?
+  adjustmentReason  CheckInAdjustmentReason @default(EXPENDITURE_CHANGE)
+
+  // Goal progress (% hướng tới goal weight)
+  goalProgressPct   Float @default(0)
+
+  // User input
+  mood  Mood?
+  note  String?
+
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, weekStartDate])
+  @@index([userId, status])
+  @@index([userId, createdAt])
 }

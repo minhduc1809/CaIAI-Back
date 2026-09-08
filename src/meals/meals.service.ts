@@ -48,6 +48,8 @@ export class MealsService {
           create: items.map((item) => ({
             name: item.name,
             servingSize: item.servingSize || null,
+            servingAmount: item.servingAmount ?? null,
+            servingUnit: item.servingUnit || null,
             quantity: item.quantity || 1,
             calories: item.calories,
             protein: item.protein || 0,
@@ -72,7 +74,15 @@ export class MealsService {
    * Ghi nhận bữa ăn nhanh (Quick Add Calo/Macros không cần chọn từng món)
    */
   async quickAddMeal(userId: string, dto: QuickAddMealDto) {
-    const { name, mealType, date, calories, protein = 0, carb = 0, fat = 0 } = dto;
+    const {
+      name,
+      mealType,
+      date,
+      calories,
+      protein = 0,
+      carb = 0,
+      fat = 0,
+    } = dto;
     const mealDate = new Date(date);
 
     const meal = await this.prisma.meal.create({
@@ -274,8 +284,20 @@ export class MealsService {
       targetDate = new Date(dateStr);
     }
 
-    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+    const startOfDay = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+    );
+    const endOfDay = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
 
     const meals = await this.prisma.meal.findMany({
       where: {
@@ -337,8 +359,20 @@ export class MealsService {
     if (dateStr) {
       targetDate = new Date(dateStr);
     }
-    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+    const startOfDay = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+    );
+    const endOfDay = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
 
     const workouts = await this.prisma.workoutLog.findMany({
       where: {
@@ -357,8 +391,14 @@ export class MealsService {
     );
 
     // Energy Balance: Remaining = Target - Consumed + Active Calories Burned
-    const remainingCalories = Math.max(0, targetCalo - consumedCalories + activeCaloriesBurned);
-    const progressPercent = Math.min(100, Math.round((consumedCalories / targetCalo) * 100));
+    const remainingCalories = Math.max(
+      0,
+      targetCalo - consumedCalories + activeCaloriesBurned,
+    );
+    const progressPercent = Math.min(
+      100,
+      Math.round((consumedCalories / targetCalo) * 100),
+    );
 
     return {
       message: 'Lấy tổng hợp dinh dưỡng trong ngày thành công',
@@ -372,9 +412,21 @@ export class MealsService {
           remainingCalories: Math.round(remainingCalories),
           progressPercent,
           macros: {
-            protein: { consumed: Math.round(consumedProtein), target: targetProtein, unit: 'g' },
-            carb: { consumed: Math.round(consumedCarb), target: targetCarb, unit: 'g' },
-            fat: { consumed: Math.round(consumedFat), target: targetFat, unit: 'g' },
+            protein: {
+              consumed: Math.round(consumedProtein),
+              target: targetProtein,
+              unit: 'g',
+            },
+            carb: {
+              consumed: Math.round(consumedCarb),
+              target: targetCarb,
+              unit: 'g',
+            },
+            fat: {
+              consumed: Math.round(consumedFat),
+              target: targetFat,
+              unit: 'g',
+            },
           },
         },
         mealsCount: meals.length,
@@ -387,13 +439,56 @@ export class MealsService {
   /**
    * Thống kê dinh dưỡng theo dải ngày (7 ngày gần nhất hoặc tùy chọn)
    */
-  async getNutritionStatistics(userId: string, startDateStr?: string, endDateStr?: string) {
+  async getNutritionStatistics(
+    userId: string,
+    startDateStr?: string,
+    endDateStr?: string,
+    preset?: 'week' | 'month' | 'quarter' | 'year' | 'all',
+  ) {
     const now = new Date();
     const endDate = endDateStr ? new Date(endDateStr) : now;
-    const startDate = startDateStr ? new Date(startDateStr) : new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
 
-    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+    let startDate: Date;
+    if (startDateStr) {
+      startDate = new Date(startDateStr);
+    } else if (preset && preset !== 'week') {
+      const presetDays: Record<'month' | 'quarter' | 'year', number> = {
+        month: 30,
+        quarter: 90,
+        year: 365,
+      };
+      if (preset === 'all') {
+        const earliestMeal = await this.prisma.meal.findFirst({
+          where: { userId },
+          orderBy: { date: 'asc' },
+        });
+        startDate = earliestMeal
+          ? earliestMeal.date
+          : new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      } else {
+        startDate = new Date(
+          now.getTime() - presetDays[preset] * 24 * 60 * 60 * 1000,
+        );
+      }
+    } else {
+      // Mặc định (không truyền gì hoặc preset='week'): 7 ngày gần nhất
+      startDate = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    }
+
+    const start = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      startDate.getDate(),
+    );
+    const end = new Date(
+      endDate.getFullYear(),
+      endDate.getMonth(),
+      endDate.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
 
     const meals = await this.prisma.meal.findMany({
       where: {
@@ -408,11 +503,26 @@ export class MealsService {
       },
     });
 
-    const daysMap = new Map<string, { calories: number; protein: number; carb: number; fat: number; count: number }>();
+    const daysMap = new Map<
+      string,
+      {
+        calories: number;
+        protein: number;
+        carb: number;
+        fat: number;
+        count: number;
+      }
+    >();
 
     for (const meal of meals) {
       const dateKey = meal.date.toISOString().split('T')[0];
-      const cur = daysMap.get(dateKey) || { calories: 0, protein: 0, carb: 0, fat: 0, count: 0 };
+      const cur = daysMap.get(dateKey) || {
+        calories: 0,
+        protein: 0,
+        carb: 0,
+        fat: 0,
+        count: 0,
+      };
       cur.calories += meal.totalCalories;
       cur.protein += meal.totalProtein;
       cur.carb += meal.totalCarb;
@@ -431,10 +541,18 @@ export class MealsService {
     }));
 
     const totalLoggedDays = dailyStats.length || 1;
-    const avgCalories = Math.round(dailyStats.reduce((sum, d) => sum + d.calories, 0) / totalLoggedDays);
-    const avgProtein = Math.round(dailyStats.reduce((sum, d) => sum + d.protein, 0) / totalLoggedDays);
-    const avgCarb = Math.round(dailyStats.reduce((sum, d) => sum + d.carb, 0) / totalLoggedDays);
-    const avgFat = Math.round(dailyStats.reduce((sum, d) => sum + d.fat, 0) / totalLoggedDays);
+    const avgCalories = Math.round(
+      dailyStats.reduce((sum, d) => sum + d.calories, 0) / totalLoggedDays,
+    );
+    const avgProtein = Math.round(
+      dailyStats.reduce((sum, d) => sum + d.protein, 0) / totalLoggedDays,
+    );
+    const avgCarb = Math.round(
+      dailyStats.reduce((sum, d) => sum + d.carb, 0) / totalLoggedDays,
+    );
+    const avgFat = Math.round(
+      dailyStats.reduce((sum, d) => sum + d.fat, 0) / totalLoggedDays,
+    );
 
     return {
       message: 'Lấy thống kê dinh dưỡng theo khoảng thời gian thành công',

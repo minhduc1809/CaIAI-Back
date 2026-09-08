@@ -4,7 +4,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class RecognizeFoodBase64Dto {
   @ApiProperty({
     example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
-    description: 'Chuỗi base64 của hình ảnh món ăn (kèm hoặc không kèm data prefix)',
+    description:
+      'Chuỗi base64 của hình ảnh món ăn (kèm hoặc không kèm data prefix)',
   })
   @IsString()
   @IsNotEmpty({ message: 'base64Image không được để trống' })

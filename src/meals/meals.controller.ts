@@ -11,7 +11,13 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { MealsService } from './meals.service';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
@@ -29,7 +35,9 @@ export class MealsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Ghi nhận bữa ăn mới (hỗ trợ nhiều món ăn trong 1 bữa)' })
+  @ApiOperation({
+    summary: 'Ghi nhận bữa ăn mới (hỗ trợ nhiều món ăn trong 1 bữa)',
+  })
   @ApiResponse({ status: 201, description: 'Tạo bữa ăn thành công' })
   async createMeal(
     @CurrentUser('id') userId: string,
@@ -40,7 +48,9 @@ export class MealsController {
 
   @Post('quick-add')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Ghi nhận calo/macro nhanh (không cần chọn từng món con)' })
+  @ApiOperation({
+    summary: 'Ghi nhận calo/macro nhanh (không cần chọn từng món con)',
+  })
   @ApiResponse({ status: 201, description: 'Ghi nhận calo nhanh thành công' })
   async quickAddMeal(
     @CurrentUser('id') userId: string,
@@ -51,7 +61,12 @@ export class MealsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách các bữa ăn theo ngày' })
-  @ApiQuery({ name: 'date', required: false, example: '2026-08-19', description: 'Ngày cần xem (YYYY-MM-DD)' })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    example: '2026-08-19',
+    description: 'Ngày cần xem (YYYY-MM-DD)',
+  })
   @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
   async getMeals(
     @CurrentUser('id') userId: string,
@@ -61,8 +76,15 @@ export class MealsController {
   }
 
   @Get('summary')
-  @ApiOperation({ summary: 'Thống kê tổng lượng Calo & Macros đã nạp trong ngày vs Mục tiêu' })
-  @ApiQuery({ name: 'date', required: false, example: '2026-08-19', description: 'Ngày cần xem (YYYY-MM-DD)' })
+  @ApiOperation({
+    summary: 'Thống kê tổng lượng Calo & Macros đã nạp trong ngày vs Mục tiêu',
+  })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    example: '2026-08-19',
+    description: 'Ngày cần xem (YYYY-MM-DD)',
+  })
   @ApiResponse({ status: 200, description: 'Lấy thống kê thành công' })
   async getDailySummary(
     @CurrentUser('id') userId: string,
@@ -72,16 +94,31 @@ export class MealsController {
   }
 
   @Get('statistics')
-  @ApiOperation({ summary: 'Thống kê dinh dưỡng theo dải ngày (mặc định 7 ngày gần nhất)' })
+  @ApiOperation({
+    summary:
+      'Thống kê dinh dưỡng theo dải ngày hoặc theo preset (mặc định 7 ngày gần nhất)',
+  })
   @ApiQuery({ name: 'startDate', required: false, example: '2026-08-13' })
   @ApiQuery({ name: 'endDate', required: false, example: '2026-08-19' })
+  @ApiQuery({
+    name: 'preset',
+    required: false,
+    enum: ['week', 'month', 'quarter', 'year', 'all'],
+    description: 'Bỏ qua nếu đã truyền startDate/endDate tường minh',
+  })
   @ApiResponse({ status: 200, description: 'Lấy thống kê thành công' })
   async getStatistics(
     @CurrentUser('id') userId: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('preset') preset?: 'week' | 'month' | 'quarter' | 'year' | 'all',
   ) {
-    return this.mealsService.getNutritionStatistics(userId, startDate, endDate);
+    return this.mealsService.getNutritionStatistics(
+      userId,
+      startDate,
+      endDate,
+      preset,
+    );
   }
 
   @Get(':id')
@@ -96,7 +133,9 @@ export class MealsController {
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cập nhật bữa ăn (sửa loại bữa, ngày hoặc danh sách món ăn)' })
+  @ApiOperation({
+    summary: 'Cập nhật bữa ăn (sửa loại bữa, ngày hoặc danh sách món ăn)',
+  })
   @ApiResponse({ status: 200, description: 'Cập nhật bữa ăn thành công' })
   async updateMeal(
     @CurrentUser('id') userId: string,

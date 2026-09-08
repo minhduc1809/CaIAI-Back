@@ -8,6 +8,8 @@ import { MealsModule } from './meals/meals.module';
 import { WeightLogsModule } from './weight-logs/weight-logs.module';
 import { WorkoutsModule } from './workouts/workouts.module';
 import { AiModule } from './ai/ai.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { CheckinsModule } from './checkins/checkins.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -25,6 +27,8 @@ import { AppService } from './app.service';
     WeightLogsModule,
     WorkoutsModule,
     AiModule,
+    AnalyticsModule,
+    CheckinsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
