@@ -15,9 +15,10 @@ export interface ApiResponse<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
@@ -31,10 +32,20 @@ export class TransformInterceptor<T>
         let message = 'Success';
         let responseData = data;
 
-        if (data && typeof data === 'object' && 'message' in data && 'data' in data) {
+        if (
+          data &&
+          typeof data === 'object' &&
+          'message' in data &&
+          'data' in data
+        ) {
           message = data.message;
           responseData = data.data;
-        } else if (data && typeof data === 'object' && 'message' in data && Object.keys(data).length === 1) {
+        } else if (
+          data &&
+          typeof data === 'object' &&
+          'message' in data &&
+          Object.keys(data).length === 1
+        ) {
           message = data.message;
           responseData = null;
         }

@@ -10,7 +10,13 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { CheckinsService } from './checkins.service';
 import { CreateCheckinDto } from './dto/create-checkin.dto';
 import { RespondCheckinDto } from './dto/respond-checkin.dto';
@@ -26,8 +32,13 @@ export class CheckinsController {
 
   @Post('generate')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Tạo/trigger check-in tuần hiện tại (Coached/Collaborative)' })
-  @ApiResponse({ status: 201, description: 'Check-in được tạo thành công với đề xuất điều chỉnh mục tiêu' })
+  @ApiOperation({
+    summary: 'Tạo/trigger check-in tuần hiện tại (Coached/Collaborative)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Check-in được tạo thành công với đề xuất điều chỉnh mục tiêu',
+  })
   async generateCheckin(
     @CurrentUser('id') userId: string,
     @Body() dto: CreateCheckinDto,
@@ -36,15 +47,24 @@ export class CheckinsController {
   }
 
   @Get('pending')
-  @ApiOperation({ summary: 'Lấy check-in đang chờ xử lý (PENDING hoặc DISMISSED) cùng coaching module' })
-  @ApiResponse({ status: 200, description: 'Check-in đang chờ hoặc null nếu không có' })
+  @ApiOperation({
+    summary:
+      'Lấy check-in đang chờ xử lý (PENDING hoặc DISMISSED) cùng coaching module',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Check-in đang chờ hoặc null nếu không có',
+  })
   async getPendingCheckin(@CurrentUser('id') userId: string) {
     return this.checkinsService.getPendingCheckin(userId);
   }
 
   @Patch(':id/respond')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Phản hồi check-in: Accept (áp target mới) / Decline (giữ nguyên) / Dismiss (hoãn lại)' })
+  @ApiOperation({
+    summary:
+      'Phản hồi check-in: Accept (áp target mới) / Decline (giữ nguyên) / Dismiss (hoãn lại)',
+  })
   @ApiResponse({ status: 200, description: 'Phản hồi check-in thành công' })
   async respondToCheckin(
     @CurrentUser('id') userId: string,
@@ -57,12 +77,18 @@ export class CheckinsController {
   @Get()
   @ApiOperation({ summary: 'Lịch sử check-in của người dùng' })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
-  @ApiResponse({ status: 200, description: 'Danh sách check-in theo thứ tự mới nhất' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách check-in theo thứ tự mới nhất',
+  })
   async getCheckinHistory(
     @CurrentUser('id') userId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.checkinsService.getCheckinHistory(userId, limit ? Number(limit) : 10);
+    return this.checkinsService.getCheckinHistory(
+      userId,
+      limit ? Number(limit) : 10,
+    );
   }
 
   @Get(':id')

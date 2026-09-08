@@ -29,22 +29,35 @@ import {
 } from '@prisma/client';
 
 export class UpdateProfileDto {
-  @ApiPropertyOptional({ example: 'Nguyễn Văn A', description: 'Họ và tên người dùng' })
+  @ApiPropertyOptional({
+    example: 'Nguyễn Văn A',
+    description: 'Họ và tên người dùng',
+  })
   @IsOptional()
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ example: 'https://example.com/avatar.png', description: 'Link ảnh đại diện' })
+  @ApiPropertyOptional({
+    example: 'https://example.com/avatar.png',
+    description: 'Link ảnh đại diện',
+  })
   @IsOptional()
   @IsUrl({}, { message: 'Avatar phải là URL hợp lệ' })
   avatar?: string;
 
-  @ApiPropertyOptional({ enum: Gender, example: Gender.MALE, description: 'Giới tính' })
+  @ApiPropertyOptional({
+    enum: Gender,
+    example: Gender.MALE,
+    description: 'Giới tính',
+  })
   @IsOptional()
   @IsEnum(Gender, { message: 'Giới tính không hợp lệ (MALE, FEMALE, OTHER)' })
   gender?: Gender;
 
-  @ApiPropertyOptional({ example: '2000-01-15', description: 'Ngày sinh (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: '2000-01-15',
+    description: 'Ngày sinh (YYYY-MM-DD)',
+  })
   @IsOptional()
   @IsDateString({}, { message: 'Ngày sinh phải đúng định dạng YYYY-MM-DD' })
   dateOfBirth?: string;
@@ -70,7 +83,10 @@ export class UpdateProfileDto {
   @Max(300, { message: 'Cân nặng mục tiêu tối đa 300 kg' })
   targetWeightKg?: number;
 
-  @ApiPropertyOptional({ example: 0.5, description: 'Tốc độ tăng/giảm cân (kg/tuần): 0.25, 0.5, 0.75, 1.0' })
+  @ApiPropertyOptional({
+    example: 0.5,
+    description: 'Tốc độ tăng/giảm cân (kg/tuần): 0.25, 0.5, 0.75, 1.0',
+  })
   @IsOptional()
   @IsNumber({}, { message: 'Tốc độ phải là số' })
   @Min(0.1, { message: 'Tốc độ tối thiểu 0.1 kg/tuần' })
@@ -99,13 +115,16 @@ export class UpdateProfileDto {
     description: 'Mục tiêu dinh dưỡng',
   })
   @IsOptional()
-  @IsEnum(GoalType, { message: 'Mục tiêu không hợp lệ (LOSE_WEIGHT, MAINTAIN, GAIN_WEIGHT)' })
+  @IsEnum(GoalType, {
+    message: 'Mục tiêu không hợp lệ (LOSE_WEIGHT, MAINTAIN, GAIN_WEIGHT)',
+  })
   goal?: GoalType;
 
   @ApiPropertyOptional({
     enum: MacroStyle,
     example: MacroStyle.BALANCED,
-    description: 'Trường phái phân bổ Macro (BALANCED, HIGH_CARB_LOW_FAT, LOW_CARB_HIGH_FAT, KETO)',
+    description:
+      'Trường phái phân bổ Macro (BALANCED, HIGH_CARB_LOW_FAT, LOW_CARB_HIGH_FAT, KETO)',
   })
   @IsOptional()
   @IsEnum(MacroStyle, { message: 'Trường phái Macro không hợp lệ' })
@@ -116,24 +135,40 @@ export class UpdateProfileDto {
   @IsString()
   timezone?: string;
 
-  @ApiPropertyOptional({ example: 7.5, description: 'Số giờ ngủ trung bình mỗi đêm' })
+  @ApiPropertyOptional({
+    example: 7.5,
+    description: 'Số giờ ngủ trung bình mỗi đêm',
+  })
   @IsOptional()
   @IsNumber({}, { message: 'Số giờ ngủ phải là số' })
   @Min(0, { message: 'Số giờ ngủ tối thiểu 0' })
   @Max(24, { message: 'Số giờ ngủ tối đa 24' })
   sleepHours?: number;
 
-  @ApiPropertyOptional({ enum: StressLevel, example: StressLevel.MEDIUM, description: 'Mức độ stress' })
+  @ApiPropertyOptional({
+    enum: StressLevel,
+    example: StressLevel.MEDIUM,
+    description: 'Mức độ stress',
+  })
   @IsOptional()
-  @IsEnum(StressLevel, { message: 'Mức độ stress không hợp lệ (LOW, MEDIUM, HIGH)' })
+  @IsEnum(StressLevel, {
+    message: 'Mức độ stress không hợp lệ (LOW, MEDIUM, HIGH)',
+  })
   stressLevel?: StressLevel;
 
-  @ApiPropertyOptional({ example: false, description: 'Có sử dụng thực phẩm bổ sung (supplements) hay không' })
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Có sử dụng thực phẩm bổ sung (supplements) hay không',
+  })
   @IsOptional()
   @IsBoolean({ message: 'takesSupplements phải là boolean' })
   takesSupplements?: boolean;
 
-  @ApiPropertyOptional({ enum: DietType, example: DietType.BALANCED, description: 'Loại chế độ ăn' })
+  @ApiPropertyOptional({
+    enum: DietType,
+    example: DietType.BALANCED,
+    description: 'Loại chế độ ăn',
+  })
   @IsOptional()
   @IsEnum(DietType, { message: 'Loại chế độ ăn không hợp lệ' })
   dietType?: DietType;
@@ -145,45 +180,76 @@ export class UpdateProfileDto {
   @Max(10, { message: 'Tối đa 10 bữa/ngày' })
   mealsPerDay?: number;
 
-  @ApiPropertyOptional({ example: 30, description: 'Thời gian nấu ăn có sẵn (phút)' })
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'Thời gian nấu ăn có sẵn (phút)',
+  })
   @IsOptional()
   @IsNumber({}, { message: 'Thời gian nấu ăn phải là số' })
   @Min(0, { message: 'Thời gian nấu ăn tối thiểu 0 phút' })
   @Max(300, { message: 'Thời gian nấu ăn tối đa 300 phút' })
   cookTimeMinutes?: number;
 
-  @ApiPropertyOptional({ enum: FoodBudgetLevel, example: FoodBudgetLevel.MEDIUM, description: 'Mức ngân sách ăn uống' })
+  @ApiPropertyOptional({
+    enum: FoodBudgetLevel,
+    example: FoodBudgetLevel.MEDIUM,
+    description: 'Mức ngân sách ăn uống',
+  })
   @IsOptional()
-  @IsEnum(FoodBudgetLevel, { message: 'Mức ngân sách không hợp lệ (LOW, MEDIUM, HIGH)' })
+  @IsEnum(FoodBudgetLevel, {
+    message: 'Mức ngân sách không hợp lệ (LOW, MEDIUM, HIGH)',
+  })
   foodBudgetLevel?: FoodBudgetLevel;
 
-  @ApiPropertyOptional({ enum: WorkoutLevel, example: WorkoutLevel.BEGINNER, description: 'Kinh nghiệm tập luyện' })
+  @ApiPropertyOptional({
+    enum: WorkoutLevel,
+    example: WorkoutLevel.BEGINNER,
+    description: 'Kinh nghiệm tập luyện',
+  })
   @IsOptional()
   @IsEnum(WorkoutLevel, { message: 'Kinh nghiệm tập luyện không hợp lệ' })
   trainingExperience?: WorkoutLevel;
 
-  @ApiPropertyOptional({ enum: TrainingGoal, example: TrainingGoal.GENERAL_FITNESS, description: 'Mục tiêu tập luyện' })
+  @ApiPropertyOptional({
+    enum: TrainingGoal,
+    example: TrainingGoal.GENERAL_FITNESS,
+    description: 'Mục tiêu tập luyện',
+  })
   @IsOptional()
   @IsEnum(TrainingGoal, { message: 'Mục tiêu tập luyện không hợp lệ' })
   trainingGoal?: TrainingGoal;
 
-  @ApiPropertyOptional({ enum: SessionsPerWeek, example: SessionsPerWeek.THREE_TO_FOUR, description: 'Số buổi tập mong muốn mỗi tuần' })
+  @ApiPropertyOptional({
+    enum: SessionsPerWeek,
+    example: SessionsPerWeek.THREE_TO_FOUR,
+    description: 'Số buổi tập mong muốn mỗi tuần',
+  })
   @IsOptional()
   @IsEnum(SessionsPerWeek, { message: 'Số buổi tập mỗi tuần không hợp lệ' })
   sessionsPerWeek?: SessionsPerWeek;
 
-  @ApiPropertyOptional({ enum: EquipmentAccess, example: EquipmentAccess.BODYWEIGHT_ONLY, description: 'Thiết bị/nơi tập sẵn có' })
+  @ApiPropertyOptional({
+    enum: EquipmentAccess,
+    example: EquipmentAccess.BODYWEIGHT_ONLY,
+    description: 'Thiết bị/nơi tập sẵn có',
+  })
   @IsOptional()
   @IsEnum(EquipmentAccess, { message: 'Thiết bị tập không hợp lệ' })
   equipmentAccess?: EquipmentAccess;
 
-  @ApiPropertyOptional({ example: ['KNEE', 'SHOULDER'], description: 'Danh sách chấn thương/hạn chế vận động' })
+  @ApiPropertyOptional({
+    example: ['KNEE', 'SHOULDER'],
+    description: 'Danh sách chấn thương/hạn chế vận động',
+  })
   @IsOptional()
   @IsArray({ message: 'Danh sách chấn thương phải là mảng' })
   @IsString({ each: true, message: 'Mỗi mục chấn thương phải là chuỗi' })
   injuries?: string[];
 
-  @ApiPropertyOptional({ example: 'Đau vai phải khi nâng tạ qua đầu', description: 'Ghi chú chấn thương khác' })
+  @ApiPropertyOptional({
+    example: 'Đau vai phải khi nâng tạ qua đầu',
+    description: 'Ghi chú chấn thương khác',
+  })
   @IsOptional()
   @IsString()
   injuriesOtherNote?: string;
@@ -195,44 +261,73 @@ export class UpdateProfileDto {
   @Max(500, { message: '1RM Squat tối đa 500' })
   oneRepMaxSquatKg?: number;
 
-  @ApiPropertyOptional({ example: 60, description: '1RM Bench Press hiện tại (kg)' })
+  @ApiPropertyOptional({
+    example: 60,
+    description: '1RM Bench Press hiện tại (kg)',
+  })
   @IsOptional()
   @IsNumber({}, { message: '1RM Bench phải là số' })
   @Min(0, { message: '1RM Bench tối thiểu 0' })
   @Max(500, { message: '1RM Bench tối đa 500' })
   oneRepMaxBenchKg?: number;
 
-  @ApiPropertyOptional({ example: 100, description: '1RM Deadlift hiện tại (kg)' })
+  @ApiPropertyOptional({
+    example: 100,
+    description: '1RM Deadlift hiện tại (kg)',
+  })
   @IsOptional()
   @IsNumber({}, { message: '1RM Deadlift phải là số' })
   @Min(0, { message: '1RM Deadlift tối thiểu 0' })
   @Max(500, { message: '1RM Deadlift tối đa 500' })
   oneRepMaxDeadliftKg?: number;
 
-  @ApiPropertyOptional({ enum: ProgramType, example: ProgramType.COACHED, description: 'Kiểu chương trình tập' })
+  @ApiPropertyOptional({
+    enum: ProgramType,
+    example: ProgramType.COACHED,
+    description: 'Kiểu chương trình tập',
+  })
   @IsOptional()
   @IsEnum(ProgramType, { message: 'Kiểu chương trình không hợp lệ' })
   programType?: ProgramType;
 
-  @ApiPropertyOptional({ enum: ProteinPreference, example: ProteinPreference.MID, description: 'Mức ưu tiên Protein' })
+  @ApiPropertyOptional({
+    enum: ProteinPreference,
+    example: ProteinPreference.MID,
+    description: 'Mức ưu tiên Protein',
+  })
   @IsOptional()
   @IsEnum(ProteinPreference, { message: 'Mức ưu tiên Protein không hợp lệ' })
   proteinPreference?: ProteinPreference;
 
-  @ApiPropertyOptional({ example: false, description: 'Có áp dụng nhịn ăn gián đoạn (Intermittent Fasting) hay không' })
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Có áp dụng nhịn ăn gián đoạn (Intermittent Fasting) hay không',
+  })
   @IsOptional()
   @IsBoolean({ message: 'isIntermittentFasting phải là boolean' })
   isIntermittentFasting?: boolean;
 
-  @ApiPropertyOptional({ example: '12:00', description: 'Giờ bắt đầu khung ăn (Intermittent Fasting), định dạng HH:mm' })
+  @ApiPropertyOptional({
+    example: '12:00',
+    description: 'Giờ bắt đầu khung ăn (Intermittent Fasting), định dạng HH:mm',
+  })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Định dạng giờ phải là HH:mm' })
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'Định dạng giờ phải là HH:mm',
+  })
   ifWindowStart?: string;
 
-  @ApiPropertyOptional({ example: '20:00', description: 'Giờ kết thúc khung ăn (Intermittent Fasting), định dạng HH:mm' })
+  @ApiPropertyOptional({
+    example: '20:00',
+    description:
+      'Giờ kết thúc khung ăn (Intermittent Fasting), định dạng HH:mm',
+  })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Định dạng giờ phải là HH:mm' })
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'Định dạng giờ phải là HH:mm',
+  })
   ifWindowEnd?: string;
 }
