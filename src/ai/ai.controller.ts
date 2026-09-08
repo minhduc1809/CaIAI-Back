@@ -126,10 +126,10 @@ export class AiController {
 
   @Get('chat/packages')
   @ApiOperation({
-    summary: 'Lấy danh sách các gói mua thêm tin nhắn AI Coach',
-    description: 'Danh sách các gói giúp người dùng nhắn được nhiều hơn với AI Coach (+20, +50, +100 tin nhắn).',
+    summary: 'Lấy danh sách các gói nạp thêm token AI Coach',
+    description: 'Danh sách các gói nạp token giúp người dùng trò chuyện nhiều hơn với AI Coach (+200k, +500k, +1 triệu tokens).',
   })
-  @ApiResponse({ status: 200, description: 'Danh sách gói tin nhắn' })
+  @ApiResponse({ status: 200, description: 'Danh sách gói token' })
   getChatPackages(): ChatPackageInfo[] {
     return this.aiService.getAvailableChatPackages();
   }
@@ -138,8 +138,8 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Mua thêm tin nhắn AI Coach (Nhắn được nhiều hơn, không hết hạn)',
-    description: 'Cộng thêm tin nhắn vào tài khoản. Người dùng luôn được ưu tiên dùng 10 tin nhắn miễn phí mỗi ngày trước.',
+    summary: 'Nạp thêm token AI Coach (Tăng thêm token, không hết hạn)',
+    description: 'Nạp thêm token vào tài khoản (+200k, +500k, +1M). Hệ thống luôn ưu tiên dùng hết 50,000 token miễn phí mỗi ngày trước.',
   })
   @ApiResponse({ status: 200, type: ChatQuotaInfoDto })
   async purchaseChatQuota(
@@ -153,7 +153,7 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Kiểm tra hạn mức tin nhắn AI Coach (10 tin free/ngày + Tin nhắn đã mua)',
+    summary: 'Kiểm tra hạn mức token AI Coach (50k token free/ngày + Token đã mua)',
   })
   @ApiResponse({ status: 200, type: ChatQuotaInfoDto })
   async getChatQuota(@CurrentUser('id') userId: string): Promise<ChatQuotaInfoDto> {

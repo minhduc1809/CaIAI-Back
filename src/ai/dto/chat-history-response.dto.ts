@@ -15,19 +15,19 @@ export class ChatMessageDto {
 }
 
 export class ChatQuotaInfoDto {
-  @ApiProperty({ example: 10, description: 'Giới hạn tin nhắn miễn phí mỗi ngày' })
+  @ApiProperty({ example: 50000, description: 'Hạn mức token miễn phí mỗi ngày (50k tokens/ngày)' })
   dailyFreeLimit: number;
 
-  @ApiProperty({ example: 8, description: 'Số tin nhắn miễn phí còn lại hôm nay' })
+  @ApiProperty({ example: 42500, description: 'Số token miễn phí còn lại hôm nay' })
   freeRemaining: number;
 
-  @ApiProperty({ example: 20, description: 'Số tin nhắn đã mua thêm còn lại (vĩnh viễn)' })
+  @ApiProperty({ example: 200000, description: 'Số token đã mua thêm còn lại (vĩnh viễn, không hết hạn)' })
   purchasedCredits: number;
 
-  @ApiProperty({ example: 28, description: 'Tổng số tin nhắn có thể gửi ngay bây giờ' })
+  @ApiProperty({ example: 242500, description: 'Tổng số token có thể sử dụng ngay bây giờ' })
   totalRemaining: number;
 
-  @ApiProperty({ example: '2026-09-09T00:00:00+07:00', description: 'Thời điểm reset lượt miễn phí tiếp theo' })
+  @ApiProperty({ example: '2026-09-09T00:00:00+07:00', description: 'Thời điểm reset 50k token miễn phí tiếp theo' })
   resetsAt: string;
 }
 
@@ -35,7 +35,10 @@ export class ChatResponseDto {
   @ApiProperty({ description: 'Tin nhắn trả lời từ AI Coach' })
   reply: string;
 
-  @ApiProperty({ description: 'Thông tin quota tin nhắn sau khi chat', type: () => ChatQuotaInfoDto })
+  @ApiProperty({ example: 650, description: 'Số token tiêu thụ cho lượt trò chuyện này (prompt + context + reply)' })
+  tokensUsed: number;
+
+  @ApiProperty({ description: 'Thông tin quota token sau khi chat', type: () => ChatQuotaInfoDto })
   quota: ChatQuotaInfoDto;
 }
 
@@ -46,6 +49,6 @@ export class ChatHistoryResponseDto {
   @ApiProperty({ description: 'Tổng số tin nhắn hiện có trong 7 ngày' })
   totalMessages: number;
 
-  @ApiProperty({ description: 'Thông tin quota', type: () => ChatQuotaInfoDto })
+  @ApiProperty({ description: 'Thông tin hạn mức token', type: () => ChatQuotaInfoDto })
   quota: ChatQuotaInfoDto;
 }
