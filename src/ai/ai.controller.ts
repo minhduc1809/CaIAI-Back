@@ -24,6 +24,7 @@ import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dt
 import { ChatQuotaInfoDto, ChatResponseDto, ChatHistoryResponseDto } from './dto/chat-history-response.dto';
 import { PurchaseChatQuotaDto } from './dto/purchase-chat-quota.dto';
 import { SuggestMealResponseDto } from './dto/suggest-meal-response.dto';
+import { ScanMenuResponseDto, ScanMenuBase64Dto } from './dto/menu-scan.dto';
 
 @ApiTags('AI Engine')
 @Controller('ai')
@@ -211,5 +212,66 @@ export class AiController {
   @ApiResponse({ status: 200, type: SuggestMealResponseDto })
   async suggestMeal(@CurrentUser('id') userId: string): Promise<SuggestMealResponseDto> {
     return this.aiService.suggestMeal(userId);
+  }
+
+  // =========================================================================
+  // 4. MENU SCANNER (QUÉT THỰC ĐƠN QUÁN ĂN)
+  // =========================================================================
+
+  @Post('scan-menu')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Ảnh chụp menu thực đơn quán ăn',
+        },
+        note: {
+          type: 'string',
+          description: 'Ghi chú thêm sở thích hoặc dị ứng',
+        },
+      },
+      required: ['image'],
+    },
+  })
+  @ApiOperation({
+    summary: 'Quét menu quán ăn từ file ảnh (Multipart)',
+    description: 'Phân tích thực đơn quán ăn, ước lượng dinh dưỡng từng món và recommend món tối ưu theo mục tiêu calo hôm nay.',
+  })
+  @ApiResponse({ status: 200, type: ScanMenuResponseDto })
+  async scanMenu(
+    @CurrentUser('id') userId: string,
+    @UploadedFile() file?: Express.Multer.File,
+    @Body('note') note?: string,
+  ): Promise<ScanMenuResponseDto> {
+    if (!file) {
+      throw new BadRequestException('Vui lòng tải lên tệp hình ảnh menu (field: image)');
+    }
+    return this.aiService.scanMenuFromBuffer(file.buffer, file.mimetype, userId, note);
+  }
+
+  @Post('scan-menu-base64')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Quét menu quán ăn từ chuỗi Base64 (Dành cho Mobile App)',
+  })
+  @ApiResponse({ status: 200, type: ScanMenuResponseDto })
+  async scanMenuBase64(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ScanMenuBase64Dto,
+  ): Promise<ScanMenuResponseDto> {
+    return this.aiService.scanMenuBase64(dto.imageBase64, 'image/jpeg', userId, dto.note);
   }
 }

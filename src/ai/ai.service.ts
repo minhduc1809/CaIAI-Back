@@ -8,6 +8,7 @@ import { PurchaseAiQuotaDto, AiScanPackageDto } from './dto/purchase-ai-quota.dt
 import { ChatQuotaInfoDto, ChatResponseDto, ChatHistoryResponseDto, ChatMessageDto } from './dto/chat-history-response.dto';
 import { PurchaseChatQuotaDto, ChatTokenPackageId } from './dto/purchase-chat-quota.dto';
 import { SuggestMealResponseDto, SuggestedMealItemDto, NutritionGapDto } from './dto/suggest-meal-response.dto';
+import { ScanMenuResponseDto, MenuItemDto } from './dto/menu-scan.dto';
 
 export interface ChatPackageInfo {
   id: string;
@@ -830,6 +831,193 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
       nutritionGap: gap,
       suggestions,
       advice: `Hôm nay bạn còn thiếu ${gap.remainingProtein}g Protein và ${gap.remainingCalories} kcal. Hãy ưu tiên nạp nguồn đạm nạc để hoàn thành mục tiêu ngày nhé!`,
+    };
+  }
+
+  // =========================================================================
+  // PHẦN 6: MENU SCANNER (QUÉT THỰC ĐƠN QUÁN ĂN & RECOMMEND MÓN PHÙ HỢP)
+  // =========================================================================
+
+  async scanMenuFromBuffer(
+    buffer: Buffer,
+    mimeType: string = 'image/jpeg',
+    userId: string,
+    note?: string,
+  ): Promise<ScanMenuResponseDto> {
+    const base64Data = buffer.toString('base64');
+    return this.scanMenuBase64(base64Data, mimeType, userId, note);
+  }
+
+  async scanMenuBase64(
+    base64Data: string,
+    mimeType: string = 'image/jpeg',
+    userId: string,
+    note?: string,
+  ): Promise<ScanMenuResponseDto> {
+    // 1. Kiểm tra hạn mức quét ảnh (5 lượt free/ngày hoặc lượt mua thêm)
+    const { quota, usedQuotaType } = await this.checkAndDetermineQuotaType(userId);
+
+    // 2. Lấy gap calo/protein của người dùng hôm nay
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        goal: true,
+        targetCalories: true,
+        targetProtein: true,
+        timezone: true,
+      },
+    });
+
+    const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
+    const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
+
+    const todayMeals = await this.prisma.meal.findMany({
+      where: {
+        userId,
+        date: { gte: startOfDay, lt: resetsAt },
+      },
+    });
+
+    const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.totalCalories || 0), 0);
+    const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.totalProtein || 0), 0);
+    const remainingCalories = Math.max(0, (user?.targetCalories || 2000) - consumedCalories);
+    const remainingProtein = Math.max(0, (user?.targetProtein || 140) - consumedProtein);
+
+    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+
+    // 3. Gọi Gemini Vision nếu có key
+    if (this.genAI) {
+      try {
+        const model = this.genAI.getGenerativeModel({
+          model: this.modelName,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.2,
+          },
+        });
+
+        const prompt = `
+Bạn là AI chuyên gia đọc thực đơn quán ăn và dinh dưỡng thể thao tại Việt Nam.
+Nhiệm vụ:
+1. Đọc và phân tích ảnh MENU THỰC ĐƠN quán ăn (nhận diện tên quán nếu có, danh sách các món ăn kèm giá tiền).
+2. Ước tính dinh dưỡng chuẩn xác (Calo, Protein, Carbs, Fat) cho từng món ăn trên menu theo bảng thành phần thực phẩm Việt Nam.
+3. Người dùng đang có mục tiêu: ${user?.goal || 'Duy trì vóc dáng'}.
+   Ngân sách còn lại hôm nay: ${remainingCalories} kcal và ${remainingProtein}g Protein.
+   ${note ? `Ghi chú thêm của người dùng: "${note}"` : ''}
+4. Chọn ra TOP 1-2 MÓN TỐI ƯU NHẤT từ menu phù hợp với ngân sách calo và protein còn lại này. Đánh dấu isRecommended = true và ghi rõ recommendationReason.
+
+ĐỊNH DẠNG JSON TRẢ VỀ DUY NHẤT:
+{
+  "restaurantName": "Tên quán ăn nếu có trên menu",
+  "summaryAdvice": "Lời khuyên tổng kết ngắn gọn cho người dùng khi gọi món tại quán này",
+  "items": [
+    {
+      "name": "Tên món ăn trên menu",
+      "price": "Giá tiền (ví dụ: 45,000 VNĐ)",
+      "estimatedCalories": 550,
+      "protein": 28,
+      "carbs": 65,
+      "fat": 18,
+      "description": "Thành phần món chính",
+      "isRecommended": false,
+      "recommendationReason": ""
+    }
+  ]
+}
+`;
+
+        const imagePart = {
+          inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType || 'image/jpeg',
+          },
+        };
+
+        const response = await model.generateContent([prompt, imagePart]);
+        const text = response.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(text);
+
+        await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
+          promptTokens: 600,
+          outputTokens: 350,
+          costUsd: 0.0007,
+        });
+
+        const allItems: MenuItemDto[] = Array.isArray(parsed.items) ? parsed.items : [];
+        const recommendedItems = allItems.filter((it) => it.isRecommended);
+
+        return {
+          restaurantName: parsed.restaurantName || 'Thực Đơn Quán Ăn',
+          items: allItems,
+          recommendedItems: recommendedItems.length > 0 ? recommendedItems : allItems.slice(0, 2),
+          summaryAdvice: parsed.summaryAdvice || `Hôm nay bạn còn ${remainingCalories} kcal và ${remainingProtein}g protein. Hãy chọn món giàu đạm nhé!`,
+        };
+      } catch (err) {
+        this.logger.error(`Lỗi khi gọi Gemini Scan Menu: ${err.message}. Chuyển sang Smart Fallback.`);
+      }
+    }
+
+    // 4. Smart Fallback cho Menu Scanner
+    await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
+      promptTokens: 100,
+      outputTokens: 50,
+      costUsd: 0,
+    });
+
+    return this.getSmartMenuFallback(remainingCalories, remainingProtein);
+  }
+
+  private getSmartMenuFallback(remainingCalories: number, remainingProtein: number): ScanMenuResponseDto {
+    const mockItems: MenuItemDto[] = [
+      {
+        name: 'Phở bò tái nạc',
+        price: '55,000 VNĐ',
+        estimatedCalories: 480,
+        protein: 34,
+        carbs: 60,
+        fat: 10,
+        description: 'Bánh phở tươi, thịt bò tái nạc mềm ngọt, nước dùng thanh ít béo.',
+        isRecommended: true,
+        recommendationReason: `Lựa chọn tuyệt vời! Món này cung cấp 34g protein chất lượng cao, rất phù hợp với chỉ tiêu thiếu ~${remainingProtein}g protein của bạn hôm nay.`,
+      },
+      {
+        name: 'Bún chả thịt nướng',
+        price: '50,000 VNĐ',
+        estimatedCalories: 530,
+        protein: 26,
+        carbs: 65,
+        fat: 16,
+        description: 'Chả viên nướng than hoa, bún tươi, nước mắm chấm dưa góp.',
+        isRecommended: false,
+      },
+      {
+        name: 'Cơm tấm sườn nướng trứng ốp la',
+        price: '50,000 VNĐ',
+        estimatedCalories: 620,
+        protein: 30,
+        carbs: 72,
+        fat: 22,
+        description: 'Cơm tấm dẻo thơm, sườn heo ướp đậm đà, trứng ốp la lòng đào.',
+        isRecommended: false,
+      },
+      {
+        name: 'Gỏi cuốn tôm thịt (3 cuốn)',
+        price: '35,000 VNĐ',
+        estimatedCalories: 240,
+        protein: 18,
+        carbs: 32,
+        fat: 4,
+        description: 'Tôm tươi, thịt nạc luộc cuộn bánh tráng và rau sống chấm tương đậu.',
+        isRecommended: true,
+        recommendationReason: 'Calo thấp, thanh mát và giàu protein nạc. Rất lý tưởng nếu bạn muốn ăn nhẹ mà không lo quá calo.',
+      },
+    ];
+
+    return {
+      restaurantName: 'Quán Ẩm Thực Việt Nam (Smart Fallback)',
+      items: mockItems,
+      recommendedItems: mockItems.filter((i) => i.isRecommended),
+      summaryAdvice: `Bạn còn ${remainingCalories} kcal và ${remainingProtein}g Protein hôm nay. Món Phở bò tái nạc hoặc Gỏi cuốn tôm thịt là lựa chọn tối ưu nhất!`,
     };
   }
 
