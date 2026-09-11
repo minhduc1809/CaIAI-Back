@@ -129,6 +129,8 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private genAI: GoogleGenerativeAI | null = null;
   private readonly modelName: string;
+  private readonly chatModelName: string;
+  private readonly visionModelName: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -137,7 +139,15 @@ export class AiService {
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.modelName =
-      this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
+      this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.6-flash';
+    this.chatModelName =
+      this.configService.get<string>('GEMINI_CHAT_MODEL') ||
+      this.configService.get<string>('GEMINI_MODEL') ||
+      'gemini-3.5-flash-lite';
+    this.visionModelName =
+      this.configService.get<string>('GEMINI_VISION_MODEL') ||
+      this.configService.get<string>('GEMINI_MODEL') ||
+      'gemini-3.6-flash';
 
     if (
       apiKey &&
@@ -147,7 +157,7 @@ export class AiService {
       try {
         this.genAI = new GoogleGenerativeAI(apiKey.trim());
         this.logger.log(
-          `Google Gemini AI initialized successfully with model: ${this.modelName}`,
+          `Google Gemini AI initialized (Chat: ${this.chatModelName}, Vision: ${this.visionModelName})`,
         );
       } catch (err) {
         this.logger.warn(
@@ -684,10 +694,10 @@ export class AiService {
     if (this.genAI) {
       try {
         const model = this.genAI.getGenerativeModel({
-          model: this.modelName,
+          model: this.chatModelName,
           generationConfig: {
             temperature: 0.5,
-            maxOutputTokens: 600,
+            maxOutputTokens: 2048,
           },
         });
 
@@ -695,8 +705,9 @@ export class AiService {
 BẠN LÀ AI NUTRITION & FITNESS COACH CỦA ỨNG DỤNG CALAI (VIỆT NAM).
 Nhiệm vụ: Tư vấn dinh dưỡng, chế độ ăn, tập luyện khoa học, thân thiện, súc tích bằng tiếng Việt.
 
-*** QUY TẮC BẢO VỆ CHỦ ĐỀ QUAN TRỌNG (TOPIC GUARDRAILS - TIẾT KIỆM TOKEN): ***
-1. BẠN CHỈ ĐƯỢC PHÉP trả lời các câu hỏi liên quan đến:
+*** QUY TẮC QUAN TRỌNG: ***
+1. TRẢ LỜI TRỌN VẸN: Luôn hoàn thành đầy đủ câu chữ và ý tứ, kết thúc câu rõ ràng, không bao giờ ngắt quãng hay bỏ dở câu giữa chừng.
+2. PHẠM VI HỖ TRỢ: BẠN CHỈ ĐƯỢC PHÉP trả lời các câu hỏi liên quan đến:
    - Dinh dưỡng, thực phẩm, calo, macro (protein, carb, fat), nước uống.
    - Giảm mỡ, tăng cơ, duy trì vóc dáng, chế độ ăn Eat Clean / Keto / IF / Gym.
    - Các bài tập thể dục, gym, cardio, phục hồi cơ bắp, thói quen vận động lành mạnh.
@@ -896,7 +907,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
     if (this.genAI) {
       try {
         const model = this.genAI.getGenerativeModel({
-          model: this.modelName,
+          model: this.chatModelName,
           generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.3,
@@ -1100,7 +1111,7 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
     if (this.genAI) {
       try {
         const model = this.genAI.getGenerativeModel({
-          model: this.modelName,
+          model: this.visionModelName,
           generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.2,
@@ -1341,7 +1352,7 @@ Nhiệm vụ:
   ): Promise<FoodRecognitionResultDto | null> {
     if (!this.genAI) return null;
     const model = this.genAI.getGenerativeModel({
-      model: this.modelName,
+      model: this.visionModelName,
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
