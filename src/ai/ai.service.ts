@@ -137,7 +137,7 @@ export class AiService {
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.modelName =
-      this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
+      this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.6-flash';
 
     if (
       apiKey &&
