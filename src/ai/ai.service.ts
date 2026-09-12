@@ -1155,7 +1155,17 @@ Nhiệm vụ:
           },
         };
 
-        const response = await model.generateContent([prompt, imagePart]);
+        let response;
+        try {
+          response = await model.generateContent([prompt, imagePart]);
+        } catch (genErr) {
+          if (this.isGeminiInvalidInputError(genErr)) {
+            throw new BadRequestException(
+              'Không thể xử lý ảnh này — ảnh có thể bị hỏng hoặc không đúng định dạng ảnh hợp lệ (JPG/PNG/WebP). Vui lòng chụp/chọn lại ảnh khác.',
+            );
+          }
+          throw genErr;
+        }
         const text = response.response
           .text()
           .replace(/```json/gi, '')
@@ -1186,6 +1196,9 @@ Nhiệm vụ:
             `Hôm nay bạn còn ${remainingCalories} kcal và ${remainingProtein}g protein. Hãy chọn món giàu đạm nhé!`,
         };
       } catch (err) {
+        if (err instanceof BadRequestException) {
+          throw err;
+        }
         this.logger.error(
           `Lỗi khi gọi Gemini Scan Menu: ${err.message}. Chuyển sang Smart Fallback.`,
         );
@@ -1410,7 +1423,17 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
       },
     };
 
-    const response = await model.generateContent([prompt, imagePart]);
+    let response;
+    try {
+      response = await model.generateContent([prompt, imagePart]);
+    } catch (genErr) {
+      if (this.isGeminiInvalidInputError(genErr)) {
+        throw new BadRequestException(
+          'Không thể xử lý ảnh này — ảnh có thể bị hỏng hoặc không đúng định dạng ảnh hợp lệ (JPG/PNG/WebP). Vui lòng chụp/chọn lại ảnh khác.',
+        );
+      }
+      throw genErr;
+    }
     const responseText = response.response.text();
 
     try {
@@ -1460,6 +1483,22 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
       );
       return null;
     }
+  }
+
+  /**
+   * Phân biệt lỗi Gemini do INPUT SAI (ảnh hỏng/không phải ảnh hợp lệ — Gemini tự trả
+   * "400 Bad Request: Unable to process input image") với lỗi hạ tầng thật (timeout,
+   * network, quota Google, model không tồn tại...). Trước đây MỌI lỗi gọi Gemini đều bị
+   * gộp chung và âm thầm rơi vào Smart Fallback (trả dữ liệu giả + vẫn trừ quota) — kể cả
+   * khi lỗi là do user gửi file rác/không phải ảnh, khiến họ không hề biết file mình gửi
+   * có vấn đề. Lỗi input-sai này nên trả 400 rõ ràng cho client, KHÔNG fallback, KHÔNG trừ quota.
+   */
+  private isGeminiInvalidInputError(error: any): boolean {
+    const msg = String(error?.message || '');
+    return (
+      /Unable to process input image/i.test(msg) ||
+      /\[400 Bad Request\]/.test(msg)
+    );
   }
 
   private getSmartFallbackRecognition(): FoodRecognitionResultDto {
