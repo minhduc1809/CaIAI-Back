@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "CheckInStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED', 'DISMISSED');
 
 -- CreateEnum

@@ -243,6 +243,7 @@ model User {
   aiMessages    AiMessage[]
   apiUsageLogs  ApiUsageLog[]
   checkIns      CheckIn[]
+  weeklySummaries WeeklySummary[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -413,6 +414,30 @@ model WorkoutSet {
   rpe        Int?
 
   @@index([exerciseId])
+}
+
+model WeeklySummary {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekStartDate DateTime
+  weekEndDate   DateTime
+
+  avgCalories       Float?
+  avgProtein        Float?
+  avgFat            Float?
+  avgCarb           Float?
+  weightChangeKg    Float?
+  workoutsCompleted Int      @default(0)
+  highlightText     String
+  isFallback        Boolean  @default(false)
+
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, weekStartDate])
+  @@index([userId, createdAt])
 }
 
 model CheckIn {

@@ -10,6 +10,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
 import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CheckinsModule } from './checkins/checkins.module';
+import { WeeklySummaryModule } from './weekly-summary/weekly-summary.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -29,6 +30,7 @@ import { AppService } from './app.service';
     AiModule,
     AnalyticsModule,
     CheckinsModule,
+    WeeklySummaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
