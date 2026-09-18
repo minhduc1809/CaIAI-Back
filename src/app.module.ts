@@ -11,6 +11,7 @@ import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CheckinsModule } from './checkins/checkins.module';
 import { WeeklySummaryModule } from './weekly-summary/weekly-summary.module';
+import { HabitRemindersModule } from './habit-reminders/habit-reminders.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -31,6 +32,7 @@ import { AppService } from './app.service';
     AnalyticsModule,
     CheckinsModule,
     WeeklySummaryModule,
+    HabitRemindersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
