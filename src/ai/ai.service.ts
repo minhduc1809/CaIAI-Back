@@ -714,7 +714,7 @@ Nhiệm vụ: Tư vấn dinh dưỡng, chế độ ăn, tập luyện khoa học
 2. TUYỆT ĐỐI KHÔNG giải đáp các chủ đề ngoài lề (như: lập trình code, giải toán, dịch thuật, thơ ca, viết văn, lịch sử, chính trị, công nghệ, sửa xe, pháp lý, tin tức giải trí...).
 3. NẾU NGƯỜI DÙNG HỎI CHỦ ĐỀ NGOÀI LỀ:
    - Hãy từ chối một cách lịch sự, NGẮN GỌN DƯỚI 30 TỪ và hướng người dùng quay lại chủ đề dinh dưỡng/gym.
-   - Mẫu từ chối: "Tôi là CalAI Nutrition Coach, chỉ hỗ trợ tư vấn dinh dưỡng, calo và tập luyện thể hình. Hãy cho tôi biết bạn cần hỗ trợ gì về bữa ăn hôm nay nhé!"
+   - Mẫu từ chối: "Tôi là Trợ Lý Dinh Dưỡng NutriWise, chỉ hỗ trợ tư vấn dinh dưỡng, calo và tập luyện thể hình. Hãy cho tôi biết bạn cần hỗ trợ gì về bữa ăn hôm nay nhé!"
 
 --- THÔNG TIN NGƯỜI DÙNG ---
 - Tên: ${user?.name || 'Bạn'}
@@ -814,7 +814,7 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
       'giải phương trình',
     ];
     if (offTopicKeywords.some((k) => msgLower.includes(k))) {
-      return 'Tôi là CalAI Nutrition Coach, chỉ hỗ trợ tư vấn dinh dưỡng, calo và tập luyện thể hình. Hãy cho tôi biết bạn cần hỗ trợ gì về bữa ăn hôm nay nhé!';
+      return 'Tôi là Trợ Lý Dinh Dưỡng NutriWise, chỉ hỗ trợ tư vấn dinh dưỡng, calo và tập luyện thể hình. Hãy cho tôi biết bạn cần hỗ trợ gì về bữa ăn hôm nay nhé!';
     }
 
     if (
@@ -904,6 +904,25 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
       remainingFat,
     };
 
+    return this.suggestMealForGap(user?.goal || null, nutritionGap);
+  }
+
+  /**
+   * Gợi ý món ăn cho 1 khoảng dinh dưỡng "còn thiếu" tuỳ ý (không nhất thiết là cả ngày) —
+   * tách ra từ suggestMeal() để tái dùng cho Habit Reminder (mục tiêu calo riêng của 1 bữa cụ thể,
+   * VD "Bữa Tối 345-450 kcal") thay vì luôn tính theo toàn bộ ngày.
+   */
+  async suggestMealForGap(
+    goal: string | null,
+    nutritionGap: NutritionGapDto,
+  ): Promise<SuggestMealResponseDto> {
+    const {
+      remainingCalories,
+      remainingProtein,
+      remainingCarbs,
+      remainingFat,
+    } = nutritionGap;
+
     if (this.genAI) {
       try {
         const model = this.genAI.getGenerativeModel({
@@ -916,7 +935,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
 
         const prompt = `
 Bạn là chuyên gia dinh dưỡng thể hình hàng đầu tại Việt Nam.
-Người dùng đang có mục tiêu: ${user?.goal || 'Duy trì vóc dáng'}.
+Người dùng đang có mục tiêu: ${goal || 'Duy trì vóc dáng'}.
 Ngân sách dinh dưỡng CÒN THIẾU hôm nay cần bù đắp:
 - Calo còn thiếu: ${remainingCalories} kcal
 - Protein còn thiếu: ${remainingProtein} g
