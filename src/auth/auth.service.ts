@@ -464,6 +464,87 @@ export class AuthService {
   }
 
   /**
+   * Yêu cầu đặt lại mật khẩu — gửi mã OTP tới email nếu tài khoản tồn tại.
+   * Luôn trả về cùng 1 thông báo dù email có tồn tại hay không, tránh lộ thông tin
+   * tài khoản nào đã đăng ký (user enumeration).
+   */
+  async forgotPassword(email: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    const genericResponse = {
+      message:
+        'Nếu email tồn tại trong hệ thống, mã đặt lại mật khẩu đã được gửi tới',
+    };
+
+    if (!user || !user.password) {
+      // Không tiết lộ tài khoản không tồn tại, hoặc tài khoản chỉ đăng nhập bằng Google (không có mật khẩu để đặt lại)
+      return genericResponse;
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetCode: code,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+
+    await this.mailService.sendPasswordResetCode(cleanEmail, code);
+
+    return genericResponse;
+  }
+
+  /**
+   * Đặt lại mật khẩu bằng mã OTP đã gửi qua forgotPassword
+   */
+  async resetPassword(email: string, code: string, newPassword: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Mã đặt lại mật khẩu không hợp lệ');
+    }
+    if (!user.passwordResetCode || !user.passwordResetExpiresAt) {
+      throw new BadRequestException(
+        'Chưa có yêu cầu đặt lại mật khẩu nào. Vui lòng yêu cầu lại.',
+      );
+    }
+    if (user.passwordResetExpiresAt < new Date()) {
+      throw new BadRequestException(
+        'Mã đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu lại.',
+      );
+    }
+    if (user.passwordResetCode !== code) {
+      throw new BadRequestException('Mã đặt lại mật khẩu không chính xác');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordResetCode: null,
+        passwordResetExpiresAt: null,
+        refreshTokenHash: null,
+      },
+    });
+
+    return {
+      message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
+    };
+  }
+
+  /**
    * Xóa vĩnh viễn tài khoản người dùng
    */
   async deleteAccount(userId: string) {

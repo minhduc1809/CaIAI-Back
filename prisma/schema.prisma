@@ -173,6 +173,8 @@ model User {
   emailVerifiedAt            DateTime?
   emailVerificationCode      String?
   emailVerificationExpiresAt DateTime?
+  passwordResetCode          String?
+  passwordResetExpiresAt     DateTime?
 
   gender              Gender?
   dateOfBirth         DateTime?
@@ -244,6 +246,7 @@ model User {
   apiUsageLogs  ApiUsageLog[]
   checkIns      CheckIn[]
   weeklySummaries WeeklySummary[]
+  habitReminders  HabitReminder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -485,4 +488,66 @@ model CheckIn {
   @@unique([userId, weekStartDate])
   @@index([userId, status])
   @@index([userId, createdAt])
+}
+
+enum ReminderType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  WATER
+  CUSTOM
+}
+
+// Nhắc nhở bữa ăn/uống nước có gắn mục tiêu dinh dưỡng + món ăn cụ thể (Habit Reminder).
+// 5 nhắc mặc định (Breakfast/Lunch/Dinner/Snack/Water) được tự seed cho mỗi user ở lần GET đầu tiên,
+// tương đương đúng bộ mặc định trước đây chỉ nằm trong SharedPreferences phía App.
+model HabitReminder {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    ReminderType @default(CUSTOM)
+  label   String // "Bữa Sáng", "Uống nước", hoặc tên tuỳ chỉnh người dùng đặt
+  enabled Boolean      @default(true)
+
+  timeOfDay   String // Giờ báo chuông "HH:mm"
+  windowStart String? // Khung giờ ăn lý tưởng - bắt đầu "HH:mm"
+  windowEnd   String? // Khung giờ ăn lý tưởng - kết thúc "HH:mm"
+
+  targetCalorieMin Float? // Mục tiêu calo tối thiểu cho bữa này (không áp dụng cho WATER)
+  targetCalorieMax Float?
+
+  waterIntervalMinutes Int? // Chỉ dùng khi type = WATER — nhắc lại sau mỗi N phút
+
+  repeatDays           Int[] @default([1, 2, 3, 4, 5, 6, 7]) // ISO weekday: 1=Thứ 2 ... 7=Chủ nhật
+  advanceNoticeMinutes Int   @default(0) // 0 = đúng giờ, hoặc báo trước N phút
+
+  sortOrder Int @default(0)
+
+  foods HabitReminderFood[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, sortOrder])
+}
+
+// Món ăn cụ thể được gắn vào 1 Habit Reminder (VD "Salad gà & chà là" gắn vào Bữa Tối).
+// Lưu snapshot dinh dưỡng tại thời điểm gắn — không tham chiếu cứng CustomFood để không vỡ nếu
+// món gốc bị sửa/xoá sau này.
+model HabitReminderFood {
+  id              String        @id @default(uuid())
+  habitReminderId String
+  habitReminder   HabitReminder @relation(fields: [habitReminderId], references: [id], onDelete: Cascade)
+
+  name        String
+  servingSize String?
+  calories    Float
+  protein     Float
+  carb        Float
+  fat         Float
+
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
 }

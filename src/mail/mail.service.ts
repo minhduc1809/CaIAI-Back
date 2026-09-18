@@ -50,4 +50,31 @@ export class MailService {
       `,
     });
   }
+
+  /**
+   * Gửi email chứa mã OTP đặt lại mật khẩu.
+   * Nếu SMTP chưa được cấu hình (thiếu SMTP_HOST), chỉ log mã ra console để không chặn luồng dev.
+   */
+  async sendPasswordResetCode(toEmail: string, code: string): Promise<void> {
+    if (!this.configService.get<string>('SMTP_HOST')) {
+      this.logger.warn(
+        `SMTP chưa được cấu hình — mã đặt lại mật khẩu cho ${toEmail} là: ${code} (chỉ hiển thị ở log, không gửi email thật)`,
+      );
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: this.fromAddress,
+      to: toEmail,
+      subject: 'Mã đặt lại mật khẩu NutriWise',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2>Đặt lại mật khẩu</h2>
+          <p>Mã đặt lại mật khẩu của bạn là:</p>
+          <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px;">${code}</p>
+          <p>Mã có hiệu lực trong 15 phút. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+        </div>
+      `,
+    });
+  }
 }
