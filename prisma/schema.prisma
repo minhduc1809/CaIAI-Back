@@ -247,6 +247,7 @@ model User {
   checkIns      CheckIn[]
   weeklySummaries WeeklySummary[]
   habitReminders  HabitReminder[]
+  waterLogs       WaterLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -550,4 +551,15 @@ model HabitReminderFood {
 
   sortOrder Int @default(0)
   createdAt DateTime @default(now())
+}
+
+// Mỗi lần user uống 1 ly nước (bấm + trên dashboard). Tổng theo ngày = SUM(amountMl).
+model WaterLog {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMl Int
+  loggedAt DateTime @default(now())
+
+  @@index([userId, loggedAt])
 }

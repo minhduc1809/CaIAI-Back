@@ -12,6 +12,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CheckinsModule } from './checkins/checkins.module';
 import { WeeklySummaryModule } from './weekly-summary/weekly-summary.module';
 import { HabitRemindersModule } from './habit-reminders/habit-reminders.module';
+import { WaterLogsModule } from './water-logs/water-logs.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -33,6 +34,7 @@ import { AppService } from './app.service';
     CheckinsModule,
     WeeklySummaryModule,
     HabitRemindersModule,
+    WaterLogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
