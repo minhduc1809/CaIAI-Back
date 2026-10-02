@@ -130,6 +130,16 @@ export class UpdateProfileDto {
   @IsEnum(MacroStyle, { message: 'Trường phái Macro không hợp lệ' })
   macroStyle?: MacroStyle;
 
+  @ApiPropertyOptional({
+    example: ['Hải sản', 'Đậu phộng'],
+    description: 'Danh sách dị ứng/kiêng thực phẩm — dùng để lọc gợi ý món AI',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergies?: string[];
+
   @ApiPropertyOptional({ example: 'Asia/Ho_Chi_Minh', description: 'Múi giờ' })
   @IsOptional()
   @IsString()

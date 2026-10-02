@@ -186,6 +186,7 @@ model User {
   activityLevel       ActivityLevel? @default(SEDENTARY)
   goal                GoalType?      @default(MAINTAIN)
   macroStyle          MacroStyle?    @default(BALANCED)
+  allergies           String[]       @default([]) // Dị ứng/kiêng thực phẩm (Onboarding Q050) — dùng để lọc gợi ý món AI
 
   // Lifestyle Profile (BRD Onboarding — nhóm 6/7)
   sleepHours       Float?
@@ -315,6 +316,9 @@ model CustomFood {
   protein       Float        @default(0)
   carb          Float        @default(0)
   fat           Float        @default(0)
+  // Công thức nhiều nguyên liệu (Recipe) — mảng [{name, servingSize?, calories, protein, carb, fat}].
+  // null/rỗng = món đơn giản nhập tổng calo/macro trực tiếp như trước (không phá dữ liệu cũ).
+  ingredients   Json?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

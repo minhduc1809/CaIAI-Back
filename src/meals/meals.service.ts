@@ -165,6 +165,16 @@ export class MealsService {
     let totalCarb = existing.totalCarb;
     let totalFat = existing.totalFat;
 
+    // Xoá món cuối cùng khỏi bữa ăn (items=[]) thì xoá luôn cả bữa ăn — 1 bữa 0 món là vô nghĩa,
+    // và tránh bug cũ: `dto.items.length > 0` bỏ qua hẳn trường hợp này, để lại items rác + tổng sai.
+    if (dto.items && dto.items.length === 0) {
+      await this.prisma.meal.delete({ where: { id: mealId } });
+      return {
+        message: 'Đã xoá món cuối cùng — bữa ăn được xoá theo',
+        data: null,
+      };
+    }
+
     // Nếu người dùng gửi danh sách items mới -> tính toán lại tổng
     if (dto.items && dto.items.length > 0) {
       totalCalories = 0;
@@ -188,6 +198,8 @@ export class MealsService {
             mealId,
             name: item.name,
             servingSize: item.servingSize || null,
+            servingAmount: item.servingAmount ?? null,
+            servingUnit: item.servingUnit || null,
             quantity: item.quantity || 1,
             calories: item.calories,
             protein: item.protein || 0,

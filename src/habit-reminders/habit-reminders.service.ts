@@ -257,6 +257,7 @@ export class HabitRemindersService {
         targetProtein: true,
         targetCarb: true,
         targetFat: true,
+        allergies: true,
       },
     });
 
@@ -278,6 +279,10 @@ export class HabitRemindersService {
       remainingFat: Math.round((user?.targetFat || 60) * ratio),
     };
 
-    return this.aiService.suggestMealForGap(user?.goal || null, nutritionGap);
+    return this.aiService.suggestMealForGap(
+      user?.goal || null,
+      nutritionGap,
+      user?.allergies || [],
+    );
   }
 }

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { CreateCustomFoodDto } from './dto/create-custom-food.dto';
 import { Gender, GoalType, WorkoutLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -378,9 +379,36 @@ export class RecommendationsService {
   }
 
   /**
-   * Tạo món ăn tự tạo riêng của người dùng (Custom Food)
+   * Tạo món ăn tự tạo riêng của người dùng (Custom Food) — hỗ trợ 2 chế độ:
+   * đơn giản (nhập thẳng tổng calo/macro) hoặc Recipe nhiều nguyên liệu
+   * (calo/macro tổng tự tính bằng tổng các `ingredients`, không cần nhập tay).
    */
-  async createCustomFood(userId: string, dto: any) {
+  async createCustomFood(userId: string, dto: CreateCustomFoodDto) {
+    const hasIngredients = dto.ingredients && dto.ingredients.length > 0;
+
+    if (!hasIngredients && dto.calories === undefined) {
+      throw new BadRequestException(
+        'Phải nhập Calories hoặc cung cấp danh sách ingredients',
+      );
+    }
+
+    const totals = hasIngredients
+      ? dto.ingredients!.reduce(
+          (acc, ing) => ({
+            calories: acc.calories + (ing.calories || 0),
+            protein: acc.protein + (ing.protein || 0),
+            carb: acc.carb + (ing.carb || 0),
+            fat: acc.fat + (ing.fat || 0),
+          }),
+          { calories: 0, protein: 0, carb: 0, fat: 0 },
+        )
+      : {
+          calories: dto.calories!,
+          protein: dto.protein || 0,
+          carb: dto.carb || 0,
+          fat: dto.fat || 0,
+        };
+
     const food = await this.prisma.customFood.create({
       data: {
         userId,
@@ -388,10 +416,11 @@ export class RecommendationsService {
         servingSize: dto.servingSize || null,
         servingAmount: dto.servingAmount ?? null,
         servingUnit: dto.servingUnit || null,
-        calories: dto.calories,
-        protein: dto.protein || 0,
-        carb: dto.carb || 0,
-        fat: dto.fat || 0,
+        calories: totals.calories,
+        protein: totals.protein,
+        carb: totals.carb,
+        fat: totals.fat,
+        ingredients: hasIngredients ? (dto.ingredients as any) : undefined,
       },
     });
 

@@ -60,6 +60,7 @@ export class UsersService {
         sessionsPerWeek: true,
         equipmentAccess: true,
         injuries: true,
+        allergies: true,
         injuriesOtherNote: true,
         oneRepMaxSquatKg: true,
         oneRepMaxBenchKg: true,
@@ -232,6 +233,8 @@ export class UsersService {
             : currentUser.equipmentAccess,
         injuries:
           dto.injuries !== undefined ? dto.injuries : currentUser.injuries,
+        allergies:
+          dto.allergies !== undefined ? dto.allergies : currentUser.allergies,
         injuriesOtherNote:
           dto.injuriesOtherNote !== undefined
             ? dto.injuriesOtherNote
@@ -320,6 +323,7 @@ export class UsersService {
         sessionsPerWeek: true,
         equipmentAccess: true,
         injuries: true,
+        allergies: true,
         injuriesOtherNote: true,
         oneRepMaxSquatKg: true,
         oneRepMaxBenchKg: true,

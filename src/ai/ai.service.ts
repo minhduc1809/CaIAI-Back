@@ -615,6 +615,7 @@ export class AiService {
         targetCarb: true,
         targetFat: true,
         timezone: true,
+        allergies: true,
       },
     });
 
@@ -851,6 +852,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
         targetCarb: true,
         targetFat: true,
         timezone: true,
+        allergies: true,
       },
     });
 
@@ -904,7 +906,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
       remainingFat,
     };
 
-    return this.suggestMealForGap(user?.goal || null, nutritionGap);
+    return this.suggestMealForGap(user?.goal || null, nutritionGap, user?.allergies || []);
   }
 
   /**
@@ -915,6 +917,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
   async suggestMealForGap(
     goal: string | null,
     nutritionGap: NutritionGapDto,
+    allergies: string[] = [],
   ): Promise<SuggestMealResponseDto> {
     const {
       remainingCalories,
@@ -933,6 +936,11 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
           },
         });
 
+        const allergyNote =
+          allergies.length > 0
+            ? `
+Dị ứng/kiêng TUYỆT ĐỐI không được gợi ý món chứa: ${allergies.join(', ')}.`
+            : '';
         const prompt = `
 Bạn là chuyên gia dinh dưỡng thể hình hàng đầu tại Việt Nam.
 Người dùng đang có mục tiêu: ${goal || 'Duy trì vóc dáng'}.
@@ -941,6 +949,7 @@ Ngân sách dinh dưỡng CÒN THIẾU hôm nay cần bù đắp:
 - Protein còn thiếu: ${remainingProtein} g
 - Carbs còn thiếu: ${remainingCarbs} g
 - Fat còn thiếu: ${remainingFat} g
+${allergyNote}
 
 Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ biến, dễ mua hoặc dễ nấu để bù đắp vừa vặn nhất cho lượng calo và macro còn thiếu này.
 
