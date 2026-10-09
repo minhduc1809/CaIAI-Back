@@ -10,8 +10,13 @@ import {
   Min,
   Max,
   IsUrl,
+  IsInt,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsIn,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ALLERGEN_CODES } from '../../recommendations/data/food-safety-tags.data';
 import {
   Gender,
   GoalType,
@@ -131,14 +136,42 @@ export class UpdateProfileDto {
   macroStyle?: MacroStyle;
 
   @ApiPropertyOptional({
-    example: ['Hải sản', 'Đậu phộng'],
-    description: 'Danh sách dị ứng/kiêng thực phẩm — dùng để lọc gợi ý món AI',
+    example: ['SHELLFISH', 'PEANUT'],
+    enum: ALLERGEN_CODES,
+    isArray: true,
+    description:
+      'Danh sách mã dị ứng (DAIRY, EGG, FISH, GLUTEN, PEANUT, SESAME, SHELLFISH, SOY, TREE_NUT) — dùng để lọc cứng gợi ý món. Giá trị ngoài danh sách bị từ chối để không có dị ứng nào bị bỏ sót âm thầm.',
     type: [String],
   })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayUnique()
+  @ArrayMaxSize(ALLERGEN_CODES.length)
+  @IsIn(ALLERGEN_CODES, {
+    each: true,
+    message: `Dị ứng chỉ nhận các mã: ${ALLERGEN_CODES.join(', ')}`,
+  })
   allergies?: string[];
+
+  @ApiPropertyOptional({
+    example: 3,
+    description:
+      'Số buổi tập mỗi tuần (0–7; 0 = chưa tập). Backend suy ra activityLevel và nhóm sessionsPerWeek từ giá trị này, ghi đè các trường đó nếu được gửi kèm.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'Số buổi tập phải là số nguyên' })
+  @Min(0, { message: 'Số buổi tập tối thiểu là 0' })
+  @Max(7, { message: 'Số buổi tập tối đa là 7' })
+  trainingDaysPerWeek?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true = người dùng đã xác nhận áp dụng mục tiêu tính lại (Onboarding, đổi mục tiêu). Không truyền thì backend chỉ trả proposedTarget và KHÔNG đổi mục tiêu đang dùng (BR-04). Lần đầu chưa có mục tiêu thì luôn được áp dụng.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  applyTarget?: boolean;
 
   @ApiPropertyOptional({ example: 'Asia/Ho_Chi_Minh', description: 'Múi giờ' })
   @IsOptional()
@@ -176,7 +209,7 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     enum: DietType,
-    example: DietType.BALANCED,
+    example: DietType.OMNIVORE,
     description: 'Loại chế độ ăn',
   })
   @IsOptional()

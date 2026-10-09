@@ -1,3 +1,4 @@
+import { ProfileIncompleteException } from '../common/errors/profile-incomplete.exception';
 import {
   BadRequestException,
   ForbiddenException,
@@ -258,31 +259,34 @@ export class HabitRemindersService {
         targetCarb: true,
         targetFat: true,
         allergies: true,
+        dietType: true,
       },
     });
 
+    if (!user?.targetCalories) throw new ProfileIncompleteException();
     const targetCalorieForMeal =
       reminder.targetCalorieMax ??
       reminder.targetCalorieMin ??
-      Math.round((user?.targetCalories || 2000) / 3);
+      Math.round(user.targetCalories / 3);
 
     // Ước lượng macro theo đúng tỷ lệ macro mục tiêu cả ngày của user, scale theo calo của riêng bữa này
     // (không có cách nào biết chính xác tỷ lệ macro mong muốn cho 1 bữa lẻ, nên suy ra tỷ lệ tương ứng).
-    const dailyCalories = user?.targetCalories || 2000;
+    const dailyCalories = user.targetCalories;
     const ratio =
       dailyCalories > 0 ? targetCalorieForMeal / dailyCalories : 1 / 3;
 
     const nutritionGap = {
       remainingCalories: Math.round(targetCalorieForMeal),
-      remainingProtein: Math.round((user?.targetProtein || 140) * ratio),
-      remainingCarbs: Math.round((user?.targetCarb || 200) * ratio),
-      remainingFat: Math.round((user?.targetFat || 60) * ratio),
+      remainingProtein: Math.round((user.targetProtein ?? 0) * ratio),
+      remainingCarbs: Math.round((user.targetCarb ?? 0) * ratio),
+      remainingFat: Math.round((user.targetFat ?? 0) * ratio),
     };
 
     return this.aiService.suggestMealForGap(
       user?.goal || null,
       nutritionGap,
       user?.allergies || [],
+      user?.dietType || null,
     );
   }
 }

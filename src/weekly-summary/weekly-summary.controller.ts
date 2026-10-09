@@ -1,3 +1,4 @@
+import { PremiumGuard, RequiresPremium } from '../billing/premium.guard';
 import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,6 +33,8 @@ export class WeeklySummaryController {
   }
 
   @Post('weekly-summary/regenerate')
+  @UseGuards(PremiumGuard)
+  @RequiresPremium()
   @ApiOperation({
     summary: 'Buộc tạo lại tổng hợp tuần hiện tại (bỏ qua cache)',
   })

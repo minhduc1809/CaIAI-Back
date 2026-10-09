@@ -93,6 +93,25 @@ export class MealsController {
     return this.mealsService.getDailyNutritionSummary(userId, date);
   }
 
+  @Get('week-summary')
+  @ApiOperation({
+    summary:
+      'Tóm tắt 7 ngày liên tiếp từ startDate — calo đã nạp + đã đạt mục tiêu hay chưa từng ngày (dùng cho Week Strip)',
+  })
+  @ApiQuery({
+    name: 'startDate',
+    required: true,
+    example: '2026-09-28',
+    description: 'Ngày đầu tuần (YYYY-MM-DD), trả về đúng 7 ngày kể từ ngày này',
+  })
+  @ApiResponse({ status: 200, description: 'Lấy tóm tắt tuần thành công' })
+  async getWeekSummary(
+    @CurrentUser('id') userId: string,
+    @Query('startDate') startDate: string,
+  ) {
+    return this.mealsService.getWeekSummary(userId, startDate);
+  }
+
   @Get('statistics')
   @ApiOperation({
     summary:

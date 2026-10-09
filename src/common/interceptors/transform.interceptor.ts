@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -29,6 +30,10 @@ export class TransformInterceptor<T> implements NestInterceptor<
 
     return next.handle().pipe(
       map((data) => {
+        // File tải về (ví dụ ZIP xuất dữ liệu) trả nguyên vẹn, không bọc JSON
+        if (data instanceof StreamableFile || Buffer.isBuffer(data)) {
+          return data as unknown as ApiResponse<T>;
+        }
         let message = 'Success';
         let responseData = data;
 

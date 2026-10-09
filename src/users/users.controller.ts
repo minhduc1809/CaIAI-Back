@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -51,6 +53,30 @@ export class UsersController {
     return this.usersService.updateProfile(userId, updateProfileDto);
   }
 
+  @Post('me/target/apply')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Áp dụng mục tiêu tính lại từ hồ sơ hiện tại (sự kiện E5, user bấm "Áp dụng")',
+  })
+  @ApiResponse({ status: 200, description: 'Đã áp dụng mục tiêu mới' })
+  async applyTarget(@CurrentUser('id') userId: string) {
+    return this.usersService.applyProposedTarget(userId);
+  }
+
+  @Get('me/target/history')
+  @ApiOperation({ summary: 'Lịch sử thay đổi mục tiêu calo/macro' })
+  @ApiResponse({ status: 200, description: 'Lấy lịch sử thành công' })
+  async getTargetHistory(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.getTargetHistory(
+      userId,
+      limit ? parseInt(limit, 10) : undefined,
+    );
+  }
+
   @Get('me/health-summary')
   @ApiOperation({
     summary:
@@ -74,5 +100,23 @@ export class UsersController {
   })
   async getExpenditure(@CurrentUser('id') userId: string) {
     return this.usersService.getExpenditureStatus(userId);
+  }
+
+  @Get('me/expenditure/history')
+  @ApiOperation({
+    summary:
+      'Lịch sử Expenditure thích ứng vs TDEE tĩnh theo thời gian (Nutrition Progress)',
+    description:
+      'Mỗi điểm ứng với 1 lần log cân nặng/cập nhật hồ sơ/Weekly Check-in thực sự lưu lại giá trị mới — không phải lấy mẫu theo ngày cố định.',
+  })
+  @ApiResponse({ status: 200, description: 'Lấy lịch sử Expenditure thành công' })
+  async getExpenditureHistory(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.getExpenditureHistory(
+      userId,
+      limit ? parseInt(limit, 10) : undefined,
+    );
   }
 }

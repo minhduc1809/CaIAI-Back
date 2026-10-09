@@ -49,7 +49,7 @@ export class CheckinsController {
   @Get('pending')
   @ApiOperation({
     summary:
-      'Lấy check-in đang chờ xử lý (PENDING hoặc DISMISSED) cùng coaching module',
+      'Lấy check-in đang chờ xử lý (PENDING hoặc SNOOZED) cùng coaching module',
   })
   @ApiResponse({
     status: 200,

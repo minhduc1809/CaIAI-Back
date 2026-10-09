@@ -8,6 +8,12 @@ import { CreateWorkoutLogDto } from './dto/create-workout-log.dto';
 import { UpdateWorkoutLogDto } from './dto/update-workout-log.dto';
 import { QueryWorkoutDto } from './dto/query-workout.dto';
 import { WorkoutCategory } from '@prisma/client';
+import {
+  addDaysToKey,
+  keyToDate,
+  normalizeDayKey,
+  resolveTimezone,
+} from '../common/utils/date-zone.util';
 
 export interface MetConfig {
   met: number;
@@ -74,7 +80,7 @@ export class WorkoutsService {
 
   /**
    * Tính toán năng lượng tiêu hao chuẩn theo hệ số MET và cân nặng người dùng
-   * Công thức: Calo = MET * weightKg * (durationMinutes / 60)
+   * Công thức (net): Calo = (MET - 1) * weightKg * (durationMinutes / 60)
    */
   calculateCalories(
     category: WorkoutCategory,
@@ -82,7 +88,8 @@ export class WorkoutsService {
     userWeightKg: number,
   ): number {
     const met = MET_TABLE[category]?.met || 4.0;
-    const calories = met * userWeightKg * (durationMinutes / 60);
+    // BR-10.5: calo tập NET = (MET − 1) × kg × giờ (MET gộp đã gồm cả năng lượng lúc nghỉ)
+    const calories = Math.max(0, met - 1) * userWeightKg * (durationMinutes / 60);
     return Math.round(calories * 10) / 10;
   }
 
@@ -125,7 +132,9 @@ export class WorkoutsService {
         ? caloriesBurned
         : this.calculateCalories(category, durationMinutes, weightKg);
 
-    const workoutDate = date ? new Date(date) : new Date();
+    const workoutDayKey = normalizeDayKey(date, await this.getUserTimezone(userId));
+    if (!workoutDayKey) throw new BadRequestException('date không hợp lệ');
+    const workoutDate = keyToDate(workoutDayKey);
 
     // 2. Tạo bản ghi WorkoutLog kèm Exercises và Sets
     const workout = await this.prisma.workoutLog.create({
@@ -176,6 +185,14 @@ export class WorkoutsService {
     };
   }
 
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return resolveTimezone(user?.timezone);
+  }
+
   /**
    * Lấy danh sách buổi tập của người dùng theo bộ lọc
    */
@@ -187,26 +204,26 @@ export class WorkoutsService {
       where.category = category;
     }
 
+    // Buổi tập lưu theo ngày dạng YYYY-MM-DD (00:00 UTC) giống bữa ăn; ngày lọc tính theo múi giờ user (BR-07.2)
+    const tz = await this.getUserTimezone(userId);
     if (date) {
-      const targetDate = new Date(date);
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      where.date = { gte: startOfDay, lte: endOfDay };
+      const key = normalizeDayKey(date, tz);
+      if (!key) throw new BadRequestException('date không hợp lệ');
+      where.date = {
+        gte: keyToDate(key),
+        lt: keyToDate(addDaysToKey(key, 1)),
+      };
     } else if (startDate || endDate) {
       where.date = {};
       if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        where.date.gte = start;
+        const key = normalizeDayKey(startDate, tz);
+        if (!key) throw new BadRequestException('startDate không hợp lệ');
+        where.date.gte = keyToDate(key);
       }
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
+        const key = normalizeDayKey(endDate, tz);
+        if (!key) throw new BadRequestException('endDate không hợp lệ');
+        where.date.lt = keyToDate(addDaysToKey(key, 1));
       }
     }
 
@@ -299,7 +316,12 @@ export class WorkoutsService {
       data: {
         name: name || undefined,
         category: category || undefined,
-        date: date ? new Date(date) : undefined,
+        date: date
+          ? keyToDate(
+              normalizeDayKey(date, await this.getUserTimezone(userId)) ??
+                date,
+            )
+          : undefined,
         durationMinutes: durationMinutes || undefined,
         caloriesBurned: finalCalories,
         rpe: rpe !== undefined ? rpe : undefined,
@@ -349,17 +371,17 @@ export class WorkoutsService {
    * Tổng hợp hoạt động thể chất trong ngày (Active Calories, thời lượng, số buổi)
    */
   async getDailySummary(userId: string, dateStr?: string) {
-    const targetDate = dateStr ? new Date(dateStr) : new Date();
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const tz = await this.getUserTimezone(userId);
+    const dayKey = normalizeDayKey(dateStr, tz);
+    if (!dayKey) throw new BadRequestException('date không hợp lệ');
 
     const workouts = await this.prisma.workoutLog.findMany({
       where: {
         userId,
-        date: { gte: startOfDay, lte: endOfDay },
+        date: {
+          gte: keyToDate(dayKey),
+          lt: keyToDate(addDaysToKey(dayKey, 1)),
+        },
       },
       select: {
         durationMinutes: true,
@@ -379,7 +401,7 @@ export class WorkoutsService {
     const categories = Array.from(new Set(workouts.map((w) => w.category)));
 
     return {
-      date: targetDate.toISOString().split('T')[0],
+      date: dayKey,
       totalActiveCalories,
       totalDurationMinutes,
       workoutCount,

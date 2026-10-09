@@ -1,20 +1,17 @@
+import { getPlanLimits } from '../billing/entitlement.util';
+import { PLAN_LIMITS } from '../billing/billing.constants';
+import { refundDaily, reserveDaily } from '../billing/daily-counter';
+import { QuotaExceededException } from '../common/errors/quota-exceeded.exception';
+import { dayBoundsForKey, resolveTimezone, todayKey } from '../common/utils/date-zone.util';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateCustomFoodDto } from './dto/create-custom-food.dto';
 import { Gender, GoalType, WorkoutLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  VIETNAMESE_DIET_PLANS,
-  VietnameseDietPlan,
-} from './data/vietnamese-diet.data';
-import {
   VIETNAMESE_WORKOUT_PLANS,
   WorkoutTemplatePlan,
 } from './data/vietnamese-workout.data';
 import { MALE_EXERCISES, FEMALE_EXERCISES } from './data/gender-exercises.data';
-import {
-  generateAdvancedMonthDiet,
-  MonthDietPlanItem,
-} from './data/vietnamese-month-diet.data';
 import {
   VIETNAMESE_FOODS_DATA,
   SeedFoodItem,
@@ -68,153 +65,6 @@ export class RecommendationsService {
     return {
       message: 'Lấy danh mục nhóm thực phẩm thành công',
       data: categories,
-    };
-  }
-
-  /**
-   * Gợi ý Thực đơn phù hợp nhất với Target Calories và Goal của người dùng
-   */
-  async getDietRecommendation(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        goal: true,
-        bmi: true,
-        targetCalories: true,
-        targetProtein: true,
-        targetCarb: true,
-        targetFat: true,
-      },
-    });
-
-    const userGoal = user?.goal || GoalType.LOSE_WEIGHT;
-    const userTargetCalo = user?.targetCalories || 1500;
-
-    // 1. Lọc thực đơn theo Goal của User
-    const filteredByGoal = VIETNAMESE_DIET_PLANS.filter(
-      (plan) => plan.goal === userGoal,
-    );
-    const plansPool =
-      filteredByGoal.length > 0 ? filteredByGoal : VIETNAMESE_DIET_PLANS;
-
-    // 2. Tìm thực đơn có mức calo gần nhất với User Target Calories
-    let bestPlan = plansPool[0];
-    let minDiff = Math.abs(bestPlan.targetCalo - userTargetCalo);
-
-    for (const plan of plansPool) {
-      const diff = Math.abs(plan.targetCalo - userTargetCalo);
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestPlan = plan;
-      }
-    }
-
-    return {
-      message: 'Gợi ý thực đơn món Việt chuẩn calo thành công',
-      data: {
-        userTarget: {
-          goal: userGoal,
-          targetCalories: userTargetCalo,
-          targetProtein: user?.targetProtein,
-          targetCarb: user?.targetCarb,
-          targetFat: user?.targetFat,
-        },
-        recommendedPlan: bestPlan,
-        availableOptions: plansPool.map((p) => ({
-          id: p.id,
-          title: p.title,
-          targetCalo: p.targetCalo,
-          description: p.description,
-        })),
-      },
-    };
-  }
-
-  /**
-   * Lấy Thực đơn chuẩn món Việt chi tiết 30 ngày trong tháng
-   * Tự động phân chia khác biệt hoàn toàn theo Goal (Giảm cân / Tăng cân) và Cấp độ kinh nghiệm/Cường độ tập (Beginner, Intermediate, Advanced)
-   */
-  async getMonthlyDietPlans(
-    userId: string,
-    dayNumberQuery?: number,
-    goalQuery?: string,
-    levelQuery?: string,
-  ) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        goal: true,
-        targetCalories: true,
-        targetProtein: true,
-        targetCarb: true,
-        targetFat: true,
-      },
-    });
-
-    // 1. Xác định Mục tiêu (Goal)
-    let selectedGoal = user?.goal || GoalType.LOSE_WEIGHT;
-    if (goalQuery) {
-      const upperGoal = goalQuery.toUpperCase();
-      if (
-        upperGoal === 'LOSE_WEIGHT' ||
-        upperGoal === 'GAIN_WEIGHT' ||
-        upperGoal === 'MAINTAIN'
-      ) {
-        selectedGoal = upperGoal;
-      }
-    }
-
-    // 2. Xác định Cấp độ kinh nghiệm / Cường độ tập luyện (Level)
-    let selectedLevel: WorkoutLevel = WorkoutLevel.BEGINNER;
-    if (levelQuery) {
-      const upperLevel = levelQuery.toUpperCase();
-      if (
-        upperLevel === 'BEGINNER' ||
-        upperLevel === 'INTERMEDIATE' ||
-        upperLevel === 'ADVANCED'
-      ) {
-        selectedLevel = upperLevel;
-      }
-    }
-
-    const userTargetCalo =
-      user?.targetCalories ||
-      (selectedGoal === GoalType.GAIN_WEIGHT ? 2200 : 1400);
-
-    // 3. Sinh thực đơn 30 ngày chuyên biệt
-    const monthlyPlans = generateAdvancedMonthDiet(
-      userTargetCalo,
-      selectedGoal,
-      selectedLevel,
-    );
-
-    // Nếu có query ngày cụ thể (VD: day=5)
-    if (dayNumberQuery) {
-      const selectedDay =
-        monthlyPlans.find((p) => p.dayNumber === Number(dayNumberQuery)) ||
-        monthlyPlans[0];
-      return {
-        message: `Lấy thực đơn Ngày ${selectedDay.dayNumber} cho ${selectedGoal} (${selectedLevel}) thành công`,
-        data: {
-          goal: selectedGoal,
-          experienceLevel: selectedLevel,
-          dayPlan: selectedDay,
-        },
-      };
-    }
-
-    return {
-      message: `Lấy danh sách thực đơn 30 ngày cho ${selectedGoal} (${selectedLevel}) thành công`,
-      data: {
-        goal: selectedGoal,
-        experienceLevel: selectedLevel,
-        totalDays: monthlyPlans.length,
-        monthlyPlans,
-      },
     };
   }
 
@@ -282,15 +132,11 @@ export class RecommendationsService {
    * Báo cáo tổng hợp trọn gói cả Thực đơn + Lịch tập
    */
   async getRecommendationsOverview(userId: string) {
-    const [dietResult, workoutResult] = await Promise.all([
-      this.getDietRecommendation(userId),
-      this.getWorkoutRecommendation(userId),
-    ]);
+    const workoutResult = await this.getWorkoutRecommendation(userId);
 
     return {
       message: 'Lấy trọn bộ gói gợi ý cá nhân hóa thành công',
       data: {
-        diet: dietResult.data,
         workout: workoutResult.data,
       },
     };
@@ -470,7 +316,28 @@ export class RecommendationsService {
    * Tra cứu thông tin dinh dưỡng theo mã vạch (Barcode Scanner) qua OpenFoodFacts API công khai.
    * Nutriments của OpenFoodFacts tính theo 100g/100ml — quy đổi sẵn về "1 khẩu phần chuẩn" (100g) để app dùng trực tiếp.
    */
-  async lookupBarcode(barcode: string) {
+  async lookupBarcode(userId: string, barcode: string) {
+    // Hạn mức theo gói (Free giới hạn số lượt/ngày); lượt không dùng được vì lỗi mạng sẽ được hoàn lại
+    const limits = await getPlanLimits(this.prisma, userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const tz = resolveTimezone(user?.timezone);
+    const date = todayKey(tz);
+    const ok = await reserveDaily(this.prisma, userId, date, 'barcodeLookups', limits.barcodePerDay);
+    if (!ok) {
+      throw new QuotaExceededException({
+        feature: 'BARCODE',
+        limit: limits.barcodePerDay,
+        used: limits.barcodePerDay,
+        period: 'day',
+        resetsAt: dayBoundsForKey(date, tz).end,
+        premiumBenefit: `Mở Premium để tra mã vạch tới ${PLAN_LIMITS.PREMIUM.barcodePerDay} lượt mỗi ngày.`,
+        isPremium: limits.barcodePerDay >= PLAN_LIMITS.PREMIUM.barcodePerDay,
+      });
+    }
+
     try {
       const response = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
@@ -507,6 +374,7 @@ export class RecommendationsService {
         },
       };
     } catch (error) {
+      await refundDaily(this.prisma, userId, date, 'barcodeLookups');
       return {
         message: 'Không thể tra cứu mã vạch lúc này, vui lòng thử lại',
         data: null,

@@ -36,4 +36,11 @@ export class WeeklySummaryResponseDto {
 
   @ApiProperty({ example: '2026-09-12T10:00:00.000Z' })
   generatedAt: string;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'true: bản xem trước dành cho Free (chỉ calo trung bình, số buổi tập và cân nặng); nội dung đầy đủ do AI viết dành cho Premium',
+  })
+  isPreview: boolean;
 }

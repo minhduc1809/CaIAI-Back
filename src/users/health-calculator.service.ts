@@ -1,5 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { Gender, GoalType, ActivityLevel, MacroStyle } from '@prisma/client';
+import {
+  Gender,
+  GoalType,
+  ActivityLevel,
+  MacroStyle,
+  SessionsPerWeek,
+  TargetLimit,
+} from '@prisma/client';
+
+/**
+ * Giới hạn an toàn của mục tiêu calo (BR-03.3). Đây là mặc định; BR-19 sẽ chuyển sang SystemConfig.
+ */
+export const NUTRITION_LIMITS = {
+  calorieFloorFemale: 1200,
+  calorieFloorMale: 1500,
+  /** Thâm hụt tối đa so với mức năng lượng nền E (%). */
+  maxDeficitPctOfE: 25,
+  /** Thặng dư tối đa so với mức năng lượng nền E (%). */
+  maxSurplusPctOfE: 15,
+} as const;
+
 
 export interface HealthMetricsInput {
   heightCm?: number | null;
@@ -23,10 +43,35 @@ export interface HealthCalculationsResult {
   bmrFormula: string;
   tdee: number | null;
   targetCalories: number | null;
+  /** Quy tắc an toàn đã giới hạn mục tiêu (null = không bị giới hạn). */
+  targetLimitedBy: TargetLimit | null;
   targetProtein: number | null; // gram
   targetCarb: number | null; // gram
   targetFat: number | null; // gram
   macroStyle: MacroStyle;
+}
+
+/**
+ * Suy nhóm hệ số vận động từ số buổi tập mỗi tuần (BR-03.2): 0 → ít vận động (1.2), 1–2 → nhẹ (1.375),
+ * 3–4 → vừa (1.55), 5–6 → nhiều (1.725), 7 → rất nhiều (1.9). Đây là nguồn duy nhất của phép suy luận này.
+ */
+export function activityLevelFromTrainingDays(days: number): ActivityLevel {
+  if (days <= 0) return ActivityLevel.SEDENTARY;
+  if (days <= 2) return ActivityLevel.LIGHTLY_ACTIVE;
+  if (days <= 4) return ActivityLevel.MODERATELY_ACTIVE;
+  if (days <= 6) return ActivityLevel.VERY_ACTIVE;
+  return ActivityLevel.EXTRA_ACTIVE;
+}
+
+/** Nhóm SessionsPerWeek tương ứng (giữ cho tương thích); 0 buổi không có nhóm nên trả null. */
+export function sessionsBucketFromTrainingDays(
+  days: number,
+): SessionsPerWeek | null {
+  if (days <= 0) return null;
+  if (days <= 2) return SessionsPerWeek.ONE_TO_TWO;
+  if (days <= 4) return SessionsPerWeek.THREE_TO_FOUR;
+  if (days <= 6) return SessionsPerWeek.FIVE_TO_SIX;
+  return SessionsPerWeek.SEVEN;
 }
 
 @Injectable()
@@ -69,11 +114,13 @@ export class HealthCalculatorService {
 
     // 5. Tính Calo mục tiêu — ưu tiên Adaptive Expenditure (nếu đã hội tụ/đang cập nhật) thay vì TDEE công thức tĩnh
     const expenditureForTarget = expenditureOverride ?? tdee;
-    const targetCalories = this.calculateTargetCalories(
-      expenditureForTarget,
-      goal,
-      weightRateKgPerWeek,
-    );
+    const { calories: targetCalories, limitedBy: targetLimitedBy } =
+      this.calculateTargetFromEnergy(
+        expenditureForTarget,
+        goal,
+        weightRateKgPerWeek,
+        { gender, bmr: bmrResult.bmr },
+      );
 
     // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle)
     const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;
@@ -86,6 +133,7 @@ export class HealthCalculatorService {
       bmrFormula: bmrResult.formula,
       tdee,
       targetCalories,
+      targetLimitedBy,
       targetProtein: macros.protein,
       targetCarb: macros.carb,
       targetFat: macros.fat,
@@ -203,32 +251,65 @@ export class HealthCalculatorService {
     return Math.round(bmr * multiplier);
   }
 
+  /** Sàn calo theo giới (BR-03.3); giới tính không xác định thì dùng mức cao hơn cho an toàn. */
+  private calorieFloorFor(gender?: Gender | null): number {
+    return gender === Gender.FEMALE
+      ? NUTRITION_LIMITS.calorieFloorFemale
+      : NUTRITION_LIMITS.calorieFloorMale;
+  }
+
   /**
-   * Tính Calo mục tiêu dựa trên Tốc độ thay đổi cân nặng (kg/tuần):
-   * 1 kg mỡ = ~7700 kcal.
-   * Thâm hụt hoặc thặng dư calo/ngày = (weightRateKgPerWeek * 7700) / 7.
+   * Tính Calo mục tiêu từ mức năng lượng nền E (Expenditure thích ứng hoặc TDEE tĩnh) và tốc độ
+   * thay đổi cân nặng (kg/tuần), áp các giới hạn an toàn của BR-03.3:
+   * - Chênh lệch/ngày D = tốc độ × 7700 / 7.
+   * - Giảm cân: E − D, nhưng D không vượt 25% E và kết quả không thấp hơn max(sàn theo giới, BMR).
+   * - Tăng cân: E + D, nhưng D không vượt 15% E.
+   * - Duy trì: bằng E.
+   * Trả kèm quy tắc đã giới hạn (targetLimitedBy) để app giải thích cho người dùng.
    */
-  private calculateTargetCalories(
-    tdee: number | null,
+  calculateTargetFromEnergy(
+    energy: number | null,
     goal?: GoalType | null,
     weightRateKgPerWeek?: number | null,
-  ): number | null {
-    if (!tdee) return null;
+    opts?: { gender?: Gender | null; bmr?: number | null },
+  ): { calories: number | null; limitedBy: TargetLimit | null } {
+    if (!energy) return { calories: null, limitedBy: null };
 
     const rate =
       weightRateKgPerWeek && weightRateKgPerWeek > 0
         ? weightRateKgPerWeek
         : 0.5;
-    const deltaPerDay = Math.round((rate * 7700) / 7);
+    let delta = (rate * 7700) / 7;
+    let limitedBy: TargetLimit | null = null;
+    let target = energy;
 
-    let target = tdee;
     if (goal === GoalType.LOSE_WEIGHT) {
-      target = Math.max(tdee - deltaPerDay, 1200); // Ngưỡng an toàn tối thiểu 1200 kcal
+      const maxDeficit = (energy * NUTRITION_LIMITS.maxDeficitPctOfE) / 100;
+      if (delta > maxDeficit) {
+        delta = maxDeficit;
+        limitedBy = TargetLimit.DEFICIT_CAP;
+      }
+      target = energy - delta;
+
+      const floor = Math.max(
+        this.calorieFloorFor(opts?.gender),
+        opts?.bmr ?? 0,
+      );
+      if (target < floor) {
+        // Sàn không bao giờ đẩy mục tiêu giảm cân lên cao hơn mức nền
+        target = Math.min(floor, energy);
+        limitedBy = TargetLimit.FLOOR;
+      }
     } else if (goal === GoalType.GAIN_WEIGHT) {
-      target = tdee + deltaPerDay;
+      const maxSurplus = (energy * NUTRITION_LIMITS.maxSurplusPctOfE) / 100;
+      if (delta > maxSurplus) {
+        delta = maxSurplus;
+        limitedBy = TargetLimit.SURPLUS_CAP;
+      }
+      target = energy + delta;
     }
 
-    return Math.round(target);
+    return { calories: Math.round(target), limitedBy };
   }
 
   /**

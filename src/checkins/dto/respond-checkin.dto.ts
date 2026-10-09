@@ -2,14 +2,19 @@ import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Mood } from '@prisma/client';
 
-export type CheckInAction = 'ACCEPT' | 'DECLINE' | 'DISMISS';
+export type CheckInAction =
+  | 'ACCEPT'
+  | 'DECLINE'
+  | 'SNOOZE'
+  | 'DISMISS' // tên cũ của SNOOZE, giữ để app cũ vẫn chạy
+  | 'ACKNOWLEDGE';
 
 export class RespondCheckinDto {
   @ApiProperty({
-    enum: ['ACCEPT', 'DECLINE', 'DISMISS'],
+    enum: ['ACCEPT', 'DECLINE', 'SNOOZE', 'DISMISS', 'ACKNOWLEDGE'],
     description: 'Hành động của người dùng với đề xuất check-in',
   })
-  @IsEnum(['ACCEPT', 'DECLINE', 'DISMISS'])
+  @IsEnum(['ACCEPT', 'DECLINE', 'SNOOZE', 'DISMISS', 'ACKNOWLEDGE'])
   action: CheckInAction;
 
   @ApiPropertyOptional({ enum: Mood })
