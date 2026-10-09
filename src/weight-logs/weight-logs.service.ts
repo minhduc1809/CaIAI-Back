@@ -7,6 +7,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { getActiveGoal, startGoal } from '../users/goal.util';
 import { HealthCalculatorService } from '../users/health-calculator.service';
 import { AdaptiveExpenditureService } from '../users/adaptive-expenditure.service';
+import {
+  dayKeyOf,
+  keyToDate,
+  resolveTimezone,
+} from '../common/utils/date-zone.util';
 import { CreateWeightLogDto } from './dto/create-weight-log.dto';
 import { UpdateWeightLogDto } from './dto/update-weight-log.dto';
 
@@ -115,18 +120,114 @@ export class WeightLogsService {
   }
 
   /**
+   * Tính danh sách cân hợp lệ (BR-05.3 & BR-09.4):
+   * 1. Gom nhiều lần cân trong cùng ngày theo múi giờ user thành TRUNG BÌNH ngày (D6).
+   * 2. Lọc bỏ các ngày nghi ngờ ngoại lai (> max(2kg, 3%)) nếu chưa được xác nhận bởi lần cân trong vòng 3 ngày cùng hướng (lệch < 1kg) (D1).
+   */
+  async effectiveWeights(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const tz = resolveTimezone(user?.timezone);
+
+    const logs = await this.prisma.weightLog.findMany({
+      where: { userId },
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (!logs || logs.length === 0) return [];
+
+    // 1. Gom nhóm theo ngày
+    const dayMap = new Map<
+      string,
+      { date: Date; weights: number[]; ids: string[] }
+    >();
+    for (const log of logs) {
+      const key = dayKeyOf(log.date, tz);
+      const cur = dayMap.get(key) ?? { date: log.date, weights: [], ids: [] };
+      cur.weights.push(log.weightKg);
+      cur.ids.push(log.id);
+      dayMap.set(key, cur);
+    }
+
+    const dayKeys = Array.from(dayMap.keys()).sort();
+    const days = dayKeys.map((k) => {
+      const d = dayMap.get(k)!;
+      const avg = d.weights.reduce((sum, w) => sum + w, 0) / d.weights.length;
+      return {
+        dateKey: k,
+        date: keyToDate(k),
+        avgWeight: avg,
+        ids: d.ids,
+        isOutlier: false,
+        confirmed: false,
+      };
+    });
+
+    if (days.length === 0) return [];
+
+    // 2. Thuật toán phát hiện ngoại lai và xác nhận trong 3 ngày
+    let runningTrend = days[0].avgWeight;
+
+    for (let i = 0; i < days.length; i++) {
+      const current = days[i];
+      if (i === 0) continue;
+
+      if (current.confirmed) {
+        runningTrend = runningTrend + 0.1 * (current.avgWeight - runningTrend);
+        continue;
+      }
+
+      const threshold = Math.max(2.0, runningTrend * 0.03);
+      const diff = Math.abs(current.avgWeight - runningTrend);
+
+      if (diff > threshold) {
+        // Nghi ngờ ngoại lai: Tìm trong 3 ngày kế tiếp xem có lần cân cùng hướng (lệch < 1kg) không
+        let confirmed = false;
+        const currentMs = current.date.getTime();
+        for (let j = i + 1; j < days.length; j++) {
+          const next = days[j];
+          const daysDiff =
+            (next.date.getTime() - currentMs) / (24 * 3600 * 1000);
+          if (daysDiff > 3) break;
+
+          if (Math.abs(next.avgWeight - current.avgWeight) < 1.0) {
+            confirmed = true;
+            next.confirmed = true;
+            break;
+          }
+        }
+
+        if (confirmed) {
+          current.confirmed = true;
+          runningTrend =
+            runningTrend + 0.1 * (current.avgWeight - runningTrend);
+        } else {
+          current.isOutlier = true;
+        }
+      } else {
+        runningTrend = runningTrend + 0.1 * (current.avgWeight - runningTrend);
+      }
+    }
+
+    return days;
+  }
+
+  /**
    * Cân nặng bị coi là đáng ngờ khi lệch quá max(2 kg, 3% cân nặng) so với xu hướng EWMA hiện tại.
-   * Chưa có lịch sử thì không đáng ngờ.
    */
   private async isSuspiciousWeight(
     userId: string,
     weightKg: number,
   ): Promise<boolean> {
-    const previous = await this.latestLogsAscending(userId, 60);
-    if (!previous || previous.length === 0) return false;
-    let trend = previous[0].weightKg;
-    for (let i = 1; i < previous.length; i++) {
-      trend = trend + 0.1 * (previous[i].weightKg - trend);
+    const days = await this.effectiveWeights(userId);
+    const valid = days.filter((d) => !d.isOutlier);
+    if (valid.length === 0) return false;
+
+    let trend = valid[0].avgWeight;
+    for (let i = 1; i < valid.length; i++) {
+      trend = trend + 0.1 * (valid[i].avgWeight - trend);
     }
     const threshold = Math.max(2, trend * 0.03);
     return Math.abs(weightKg - trend) > threshold;
@@ -169,7 +270,6 @@ export class WeightLogsService {
    * Lấy lịch sử cân nặng theo thứ tự thời gian (dùng vẽ biểu đồ Line Chart)
    */
   async getLogs(userId: string, limit: number = 30) {
-    // Lấy các lần cân GẦN NHẤT (trước đây lấy nhầm các lần cũ nhất khi có nhiều hơn `limit` bản ghi)
     const logs = await this.latestLogsAscending(userId, limit);
 
     return {
@@ -180,40 +280,40 @@ export class WeightLogsService {
 
   /**
    * Tính toán xu hướng cân nặng làm mượt (Trend Weight - EWMA) theo chuẩn BRD
-   * Công thức: TrendWeight_t = TrendWeight_{t-1} + 0.1 * (LoggedWeight_t - TrendWeight_{t-1})
+   * Sử dụng ngày cân trung bình và lọc ngoại lai (BR-05.3, BR-09.4)
    */
   async getWeightTrend(userId: string, limit: number = 60) {
-    const logs = await this.latestLogsAscending(userId, limit);
+    const days = await this.effectiveWeights(userId);
+    const validDays = days.filter((d) => !d.isOutlier);
 
-    if (logs.length === 0) {
+    if (validDays.length === 0) {
       return {
         message: 'Chưa có bản ghi cân nặng để tính xu hướng',
         data: [],
       };
     }
 
-    let previousTrend = logs[0].weightKg;
-    const trendData = logs.map((log, index) => {
+    const limited = validDays.slice(-limit);
+    let previousTrend = limited[0].avgWeight;
+
+    const trendData = limited.map((d, index) => {
       if (index === 0) {
         return {
-          id: log.id,
-          date: log.date.toISOString().split('T')[0],
-          loggedWeight: log.weightKg,
-          trendWeight: Math.round(log.weightKg * 10) / 10,
-          note: log.note,
+          id: d.ids[0],
+          date: d.dateKey,
+          loggedWeight: Math.round(d.avgWeight * 10) / 10,
+          trendWeight: Math.round(d.avgWeight * 10) / 10,
         };
       }
 
-      // Hệ số làm mượt alpha = 0.1 theo chuẩn MacroFactor / BRD Nutrition AI
-      const currentTrend = previousTrend + 0.1 * (log.weightKg - previousTrend);
+      const currentTrend = previousTrend + 0.1 * (d.avgWeight - previousTrend);
       previousTrend = currentTrend;
 
       return {
-        id: log.id,
-        date: log.date.toISOString().split('T')[0],
-        loggedWeight: log.weightKg,
+        id: d.ids[0],
+        date: d.dateKey,
+        loggedWeight: Math.round(d.avgWeight * 10) / 10,
         trendWeight: Math.round(currentTrend * 10) / 10,
-        note: log.note,
       };
     });
 
