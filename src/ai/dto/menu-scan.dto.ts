@@ -47,6 +47,13 @@ export class MenuItemDto {
     example: 'Món này vừa vặn lượng calo và protein bạn đang thiếu hôm nay',
   })
   recommendationReason?: string;
+
+  @ApiPropertyOptional({
+    example: 'Có thể không phù hợp: có thịt',
+    description:
+      'Cảnh báo khi món có thể vi phạm dị ứng hoặc chế độ ăn của bạn (nhận diện theo từ khoá, cần kiểm tra lại với quán)',
+  })
+  warning?: string;
 }
 
 export class ScanMenuResponseDto {

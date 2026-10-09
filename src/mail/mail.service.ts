@@ -77,4 +77,30 @@ export class MailService {
       `,
     });
   }
+
+  /**
+   * Báo cho chủ email biết tài khoản chưa xác thực đã được liên kết Google và mật khẩu cũ đã bị vô hiệu
+   * (BR-01.2). Nếu SMTP chưa cấu hình thì chỉ ghi log.
+   */
+  async sendGoogleLinkedNotice(toEmail: string): Promise<void> {
+    if (!this.configService.get<string>('SMTP_HOST')) {
+      this.logger.warn(
+        `SMTP chưa được cấu hình — không gửi email báo liên kết Google tới ${toEmail}`,
+      );
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: this.fromAddress,
+      to: toEmail,
+      subject: 'Tài khoản NutriWise đã được liên kết với Google',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2>Tài khoản đã được liên kết với Google</h2>
+          <p>Tài khoản NutriWise dùng email này vừa được liên kết với đăng nhập Google. Vì email chưa từng được xác thực, mật khẩu cũ đã bị vô hiệu và mọi phiên đăng nhập trước đó đã bị đăng xuất.</p>
+          <p>Nếu bạn muốn dùng mật khẩu, hãy chọn "Quên mật khẩu" để đặt lại. Nếu bạn không thực hiện việc này, vui lòng liên hệ hỗ trợ.</p>
+        </div>
+      `,
+    });
+  }
 }

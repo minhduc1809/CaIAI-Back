@@ -8,6 +8,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -22,21 +23,16 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AiService, ChatPackageInfo } from './ai.service';
+import { AiService } from './ai.service';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { RecognizeFoodBase64Dto } from './dto/recognize-food-base64.dto';
 import { ChatAiDto } from './dto/chat-ai.dto';
 import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
 import {
-  PurchaseAiQuotaDto,
-  AiScanPackageDto,
-} from './dto/purchase-ai-quota.dto';
-import {
   ChatQuotaInfoDto,
   ChatResponseDto,
   ChatHistoryResponseDto,
 } from './dto/chat-history-response.dto';
-import { PurchaseChatQuotaDto } from './dto/purchase-chat-quota.dto';
 import { SuggestMealResponseDto } from './dto/suggest-meal-response.dto';
 import { ScanMenuResponseDto, ScanMenuBase64Dto } from './dto/menu-scan.dto';
 
@@ -48,33 +44,6 @@ export class AiController {
   // =========================================================================
   // 1. CHỤP ẢNH MÓN ĂN & QUOTA ẢNH (5 LƯỢT/NGÀY + MUA LƯỢT)
   // =========================================================================
-
-  @Get('packages')
-  @ApiOperation({
-    summary: 'Lấy danh sách các gói mua thêm lượt chụp ảnh AI',
-    description:
-      'Trả về danh sách các gói mua thêm lượt chụp ảnh (10, 20, 50, 100 lượt). Lượt mua không bao giờ hết hạn.',
-  })
-  @ApiResponse({ status: 200, type: [AiScanPackageDto] })
-  getPackages(): AiScanPackageDto[] {
-    return this.aiService.getAvailablePackages();
-  }
-
-  @Post('purchase-credits')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: 'Mua thêm lượt chụp ảnh AI (Tăng số lượt chụp, không hết hạn)',
-    description:
-      'Cộng thêm lượt chụp ảnh vào tài khoản. Hệ thống luôn ưu tiên dùng 5 lượt miễn phí mỗi ngày trước.',
-  })
-  @ApiResponse({ status: 200, type: AiQuotaResponseDto })
-  async purchaseCredits(
-    @CurrentUser('id') userId: string,
-    @Body() dto: PurchaseAiQuotaDto,
-  ): Promise<AiQuotaResponseDto> {
-    return this.aiService.purchaseScanCredits(userId, dto);
-  }
 
   @Get('quota')
   @UseGuards(JwtAuthGuard)
@@ -153,33 +122,6 @@ export class AiController {
   // =========================================================================
   // 2. AI CHATBOT COACH & CÁC BẢN NÂNG CẤP (BẢN PLUS, PRO, MAX)
   // =========================================================================
-
-  @Get('chat/packages')
-  @ApiOperation({
-    summary: 'Lấy danh sách các bản nâng cấp AI Coach (Plus, Pro, Max)',
-    description:
-      'Danh sách 3 bản nâng cấp thành viên giúp người dùng trò chuyện sâu hơn và mở rộng hạn mức với AI Coach (Plus, Pro, Max).',
-  })
-  @ApiResponse({ status: 200, description: 'Danh sách bản nâng cấp' })
-  getChatPackages(): ChatPackageInfo[] {
-    return this.aiService.getAvailableChatPackages();
-  }
-
-  @Post('chat/purchase')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: 'Nâng cấp bản AI Coach (Bản Plus, Pro, Max - Không hết hạn)',
-    description:
-      'Nâng cấp tài khoản lên bản Plus, Pro hoặc Max. Hệ thống luôn ưu tiên dùng hết lượt miễn phí mỗi ngày trước.',
-  })
-  @ApiResponse({ status: 200, type: ChatQuotaInfoDto })
-  async purchaseChatQuota(
-    @CurrentUser('id') userId: string,
-    @Body() dto: PurchaseChatQuotaDto,
-  ): Promise<ChatQuotaInfoDto> {
-    return this.aiService.purchaseChatCredits(userId, dto);
-  }
 
   @Get('chat/quota')
   @UseGuards(JwtAuthGuard)

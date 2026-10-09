@@ -202,6 +202,13 @@ export class AuthService {
       );
     }
 
+    // BR-01.2: chỉ tin email mà Google xác nhận đã xác thực
+    if (payload.email_verified !== true) {
+      throw new UnauthorizedException(
+        'Email của tài khoản Google chưa được xác thực',
+      );
+    }
+
     const googleId = payload.sub;
     const email = payload.email.toLowerCase();
 
@@ -212,15 +219,38 @@ export class AuthService {
       user = await this.prisma.user.findUnique({ where: { email } });
 
       if (user) {
-        // Liên kết tài khoản local hiện có với Google
+        // Email này đã gắn với một tài khoản Google khác
+        if (user.googleId && user.googleId !== googleId) {
+          throw new ConflictException(
+            'Email này đã được liên kết với một tài khoản Google khác',
+          );
+        }
+
+        const wasUnverified = !user.isEmailVerified;
+
+        // Liên kết tài khoản local hiện có với Google. Nếu email CHƯA từng được xác thực thì
+        // người đăng ký ban đầu có thể không phải chủ email: xoá mật khẩu và thu hồi phiên cũ.
         user = await this.prisma.user.update({
           where: { id: user.id },
           data: {
             googleId,
             isEmailVerified: true,
             emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+            ...(wasUnverified
+              ? { password: null, refreshTokenHash: null }
+              : {}),
           },
         });
+
+        if (wasUnverified) {
+          try {
+            await this.mailService.sendGoogleLinkedNotice(email);
+          } catch (e) {
+            this.logger.warn(
+              `Không gửi được email báo liên kết Google: ${(e as Error).message}`,
+            );
+          }
+        }
       } else {
         const cleanUsername = await this.generateUniqueUsernameFromEmail(email);
         user = await this.prisma.user.create({
