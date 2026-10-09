@@ -10,10 +10,17 @@ import {
   Min,
   Max,
   IsUrl,
+  IsInt,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsIn,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ALLERGEN_CODES } from '../../recommendations/data/food-safety-tags.data';
+import { IsValidAge } from '../../common/validators/age-limit.validator';
 import {
   Gender,
+  PregnancyStatus,
   GoalType,
   ActivityLevel,
   MacroStyle,
@@ -55,11 +62,25 @@ export class UpdateProfileDto {
   gender?: Gender;
 
   @ApiPropertyOptional({
+    enum: PregnancyStatus,
+    example: PregnancyStatus.NONE,
+    description:
+      'Tình trạng mang thai/cho con bú (NONE, PREGNANT, LACTATING) — chỉ áp dụng cho nữ (BR-02.2)',
+  })
+  @IsOptional()
+  @IsEnum(PregnancyStatus, {
+    message: 'Tình trạng mang thai không hợp lệ (NONE, PREGNANT, LACTATING)',
+  })
+  pregnancyStatus?: PregnancyStatus;
+
+  @ApiPropertyOptional({
     example: '2000-01-15',
-    description: 'Ngày sinh (YYYY-MM-DD)',
+    description:
+      'Ngày sinh (YYYY-MM-DD), người dùng phải từ đủ 13 đến 100 tuổi (B1 / BR-02.2)',
   })
   @IsOptional()
   @IsDateString({}, { message: 'Ngày sinh phải đúng định dạng YYYY-MM-DD' })
+  @IsValidAge(13, 100)
   dateOfBirth?: string;
 
   @ApiPropertyOptional({ example: 175, description: 'Chiều cao (cm)' })
@@ -92,6 +113,17 @@ export class UpdateProfileDto {
   @Min(0.1, { message: 'Tốc độ tối thiểu 0.1 kg/tuần' })
   @Max(1.5, { message: 'Tốc độ tối đa 1.5 kg/tuần' })
   weightRateKgPerWeek?: number;
+
+  @ApiPropertyOptional({
+    example: 0.5,
+    description:
+      'Tốc độ thay đổi cân nặng theo % cân nặng mỗi tuần (0.25%–1.0%/tuần, BR-02.3)',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Tốc độ % cân nặng phải là số' })
+  @Min(0.1, { message: 'Tốc độ tối thiểu 0.1% cân nặng/tuần' })
+  @Max(2.0, { message: 'Tốc độ tối đa 2.0% cân nặng/tuần' })
+  weightRatePercent?: number;
 
   @ApiPropertyOptional({ example: 18.5, description: 'Tỷ lệ mỡ cơ thể (%)' })
   @IsOptional()
@@ -130,6 +162,44 @@ export class UpdateProfileDto {
   @IsEnum(MacroStyle, { message: 'Trường phái Macro không hợp lệ' })
   macroStyle?: MacroStyle;
 
+  @ApiPropertyOptional({
+    example: ['SHELLFISH', 'PEANUT'],
+    enum: ALLERGEN_CODES,
+    isArray: true,
+    description:
+      'Danh sách mã dị ứng (DAIRY, EGG, FISH, GLUTEN, PEANUT, SESAME, SHELLFISH, SOY, TREE_NUT) — dùng để lọc cứng gợi ý món. Giá trị ngoài danh sách bị từ chối để không có dị ứng nào bị bỏ sót âm thầm.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(ALLERGEN_CODES.length)
+  @IsIn(ALLERGEN_CODES, {
+    each: true,
+    message: `Dị ứng chỉ nhận các mã: ${ALLERGEN_CODES.join(', ')}`,
+  })
+  allergies?: string[];
+
+  @ApiPropertyOptional({
+    example: 3,
+    description:
+      'Số buổi tập mỗi tuần (0–7; 0 = chưa tập). Backend suy ra activityLevel và nhóm sessionsPerWeek từ giá trị này, ghi đè các trường đó nếu được gửi kèm.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'Số buổi tập phải là số nguyên' })
+  @Min(0, { message: 'Số buổi tập tối thiểu là 0' })
+  @Max(7, { message: 'Số buổi tập tối đa là 7' })
+  trainingDaysPerWeek?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true = người dùng đã xác nhận áp dụng mục tiêu tính lại (Onboarding, đổi mục tiêu). Không truyền thì backend chỉ trả proposedTarget và KHÔNG đổi mục tiêu đang dùng (BR-04). Lần đầu chưa có mục tiêu thì luôn được áp dụng.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  applyTarget?: boolean;
+
   @ApiPropertyOptional({ example: 'Asia/Ho_Chi_Minh', description: 'Múi giờ' })
   @IsOptional()
   @IsString()
@@ -166,7 +236,7 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     enum: DietType,
-    example: DietType.BALANCED,
+    example: DietType.OMNIVORE,
     description: 'Loại chế độ ăn',
   })
   @IsOptional()

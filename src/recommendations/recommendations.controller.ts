@@ -65,53 +65,6 @@ export class RecommendationsController {
     return this.recommendationsService.searchFoodItems(query, category);
   }
 
-  @Get('diet')
-  @ApiOperation({
-    summary: 'Gợi ý thực đơn món ăn Việt Nam chuẩn Calo & Macros',
-  })
-  @ApiResponse({ status: 200, description: 'Gợi ý thực đơn thành công' })
-  async getDietRecommendation(@CurrentUser('id') userId: string) {
-    return this.recommendationsService.getDietRecommendation(userId);
-  }
-
-  @Get('diet/monthly')
-  @ApiOperation({
-    summary:
-      'Lấy Thực đơn 30 ngày chia theo Goal (LOSE_WEIGHT / GAIN_WEIGHT) và Level người tập (BEGINNER / INTERMEDIATE / ADVANCED)',
-  })
-  @ApiQuery({
-    name: 'day',
-    required: false,
-    example: 1,
-    description: 'Số ngày trong tháng (1 đến 30)',
-  })
-  @ApiQuery({
-    name: 'goal',
-    required: false,
-    enum: ['LOSE_WEIGHT', 'MAINTAIN', 'GAIN_WEIGHT'],
-    description: 'Mục tiêu dinh dưỡng',
-  })
-  @ApiQuery({
-    name: 'level',
-    required: false,
-    enum: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'],
-    description: 'Cấp độ tập luyện / Kinh nghiệm',
-  })
-  @ApiResponse({ status: 200, description: 'Lấy thực đơn 30 ngày thành công' })
-  async getMonthlyDiet(
-    @CurrentUser('id') userId: string,
-    @Query('day') day?: number,
-    @Query('goal') goal?: string,
-    @Query('level') level?: string,
-  ) {
-    return this.recommendationsService.getMonthlyDietPlans(
-      userId,
-      day,
-      goal,
-      level,
-    );
-  }
-
   @Get('workout')
   @ApiOperation({
     summary:
@@ -168,8 +121,11 @@ export class RecommendationsController {
     status: 200,
     description: 'Tra cứu mã vạch thành công (data null nếu không tìm thấy)',
   })
-  async lookupBarcode(@Param('code') code: string) {
-    return this.recommendationsService.lookupBarcode(code);
+  async lookupBarcode(
+    @CurrentUser('id') userId: string,
+    @Param('code') code: string,
+  ) {
+    return this.recommendationsService.lookupBarcode(userId, code);
   }
 
   // --- CUSTOM FOODS (Món ăn tự tạo của người dùng) ---

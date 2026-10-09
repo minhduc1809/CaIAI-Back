@@ -10,6 +10,15 @@ import { WorkoutsModule } from './workouts/workouts.module';
 import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CheckinsModule } from './checkins/checkins.module';
+import { WeeklySummaryModule } from './weekly-summary/weekly-summary.module';
+import { HabitRemindersModule } from './habit-reminders/habit-reminders.module';
+import { WaterLogsModule } from './water-logs/water-logs.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { DailyStatusModule } from './daily-status/daily-status.module';
+import { DataExportModule } from './data-export/data-export.module';
+import { MealPlanModule } from './meal-plan/meal-plan.module';
+import { PaymentsModule } from './payments/payments.module';
+import { BillingModule } from './billing/billing.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -29,6 +38,15 @@ import { AppService } from './app.service';
     AiModule,
     AnalyticsModule,
     CheckinsModule,
+    WeeklySummaryModule,
+    HabitRemindersModule,
+    WaterLogsModule,
+    NotificationsModule,
+    DailyStatusModule,
+    BillingModule,
+    PaymentsModule,
+    MealPlanModule,
+    DataExportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

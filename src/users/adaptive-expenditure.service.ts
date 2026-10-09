@@ -1,5 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  dateToKey,
+  dayKeyOf,
+  keyToDate,
+  resolveTimezone,
+} from '../common/utils/date-zone.util';
+import {
+  isCompleteDay,
+  loadDayFlags,
+} from '../common/utils/day-completeness.util';
 
 export type ExpenditureMethod = 'ADAPTIVE' | 'STATIC_FALLBACK';
 export type ExpenditureStatus = 'UPDATING' | 'HOLDING';
@@ -57,7 +67,6 @@ export class AdaptiveExpenditureService {
   async recalculate(
     userId: string,
     staticTdee: number | null,
-    previousEstimate: number | null,
   ): Promise<AdaptiveExpenditureResult> {
     const since = new Date();
     since.setDate(since.getDate() - LOOKBACK_DAYS);
@@ -111,19 +120,39 @@ export class AdaptiveExpenditureService {
     const trendWeightStart = firstLog.weightKg;
     const trendWeightEnd = trend;
 
-    // Calo đã log trong đúng khoảng ngày của các lần cân [firstLog.date, lastLog.date]
+    // Calo đã log trong khoảng ngày của các lần cân [lần cân đầu, lần cân cuối], theo ngày của user (BR-07.2)
+    const tzUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true, targetCalories: true },
+    });
+    const tz = resolveTimezone(tzUser?.timezone);
+    const firstKey = dayKeyOf(firstLog.date, tz);
+    const lastKey = dayKeyOf(lastLog.date, tz);
     const meals = await this.prisma.meal.findMany({
-      where: { userId, date: { gte: firstLog.date, lte: lastLog.date } },
-      select: { date: true, totalCalories: true },
+      where: {
+        userId,
+        logDate: { gte: keyToDate(firstKey), lte: keyToDate(lastKey) },
+      },
+      select: { logDate: true, totalCalories: true },
     });
 
-    const caloriesByDay = new Map<string, number>();
+    // BR-05.2: chỉ ngày ĐẦY ĐỦ mới được dùng để tính lượng ăn. Ngày ghi thiếu bữa bị coi là đầy đủ
+    // sẽ làm Expenditure bị đánh giá thấp rồi hạ mục tiêu ("log càng lười app càng bắt ăn ít").
+    const flags = await loadDayFlags(this.prisma, userId, firstKey, lastKey);
+    const targetForRule = tzUser?.targetCalories ?? staticTdee ?? 2000;
+    const perDay = new Map<string, { meals: number; calories: number }>();
     for (const meal of meals) {
-      const key = meal.date.toISOString().split('T')[0];
-      caloriesByDay.set(
-        key,
-        (caloriesByDay.get(key) || 0) + meal.totalCalories,
-      );
+      const key = dateToKey(meal.logDate);
+      const cur = perDay.get(key) ?? { meals: 0, calories: 0 };
+      cur.meals += 1;
+      cur.calories += meal.totalCalories;
+      perDay.set(key, cur);
+    }
+    const caloriesByDay = new Map<string, number>();
+    for (const [key, d] of perDay) {
+      if (isCompleteDay(d.meals, d.calories, targetForRule, flags.get(key))) {
+        caloriesByDay.set(key, d.calories);
+      }
     }
     const loggedDaysCount = caloriesByDay.size;
 
@@ -151,7 +180,9 @@ export class AdaptiveExpenditureService {
       rawExpenditure = Math.min(Math.max(rawExpenditure, minBound), maxBound);
     }
 
-    // Hội tụ dần theo thời gian: trộn với ước tính trước đó thay vì nhảy đột ngột mỗi lần tính lại
+    // Hội tụ dần theo thời gian: trộn với ước tính của NGÀY TRƯỚC (BR-05.9), không phải giá trị vừa lưu
+    // ở lần tính trước đó, nên tính lại nhiều lần trong cùng một ngày luôn cho cùng một kết quả.
+    const previousEstimate = await this.getPreviousDayEstimate(userId);
     const converged = previousEstimate
       ? previousEstimate +
         CONVERGENCE_ALPHA * (rawExpenditure - previousEstimate)
@@ -179,5 +210,71 @@ export class AdaptiveExpenditureService {
           ? 'Expenditure đã hội tụ ổn định dựa trên dữ liệu cân nặng và bữa ăn thực tế của bạn.'
           : 'Đang thu thập thêm dữ liệu thực tế để tinh chỉnh Expenditure — ước tính sẽ chính xác dần theo thời gian.',
     };
+  }
+
+  /** 00:00 hôm nay theo múi giờ của máy chủ (máy chủ đặt Asia/Ho_Chi_Minh, xem BR-07.2). */
+  private startOfToday(): Date {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+   * Mốc "Expenditure cũ" cho hệ số trộn: giá trị của snapshot gần nhất TRƯỚC hôm nay.
+   * Chưa có snapshot nào thì trả null (lần đầu: trộn với TDEE tĩnh).
+   */
+  private async getPreviousDayEstimate(userId: string): Promise<number | null> {
+    const snapshot = await this.prisma.expenditureSnapshot.findFirst({
+      where: {
+        userId,
+        recordedAt: { lt: this.startOfToday() },
+        adaptiveExpenditure: { not: null },
+      },
+      orderBy: { recordedAt: 'desc' },
+    });
+    return snapshot?.adaptiveExpenditure ?? null;
+  }
+
+  /**
+   * Ghi điểm lịch sử Expenditure — CHỈ gọi ngay sau khi 1 sự kiện thật (log cân nặng, cập nhật hồ sơ,
+   * Weekly Check-in) đã PERSIST giá trị mới vào User, không gọi khi chỉ đọc màn hình.
+   * Tối đa một snapshot mỗi ngày: các lần trong cùng ngày ghi đè snapshot của ngày đó (BR-05.7).
+   */
+  async recordSnapshot(
+    userId: string,
+    result: Pick<AdaptiveExpenditureResult, 'estimatedExpenditure' | 'staticTdee' | 'status'>,
+  ): Promise<void> {
+    const data = {
+      adaptiveExpenditure: result.estimatedExpenditure,
+      staticTdee: result.staticTdee,
+      status: result.status,
+      recordedAt: new Date(),
+    };
+    const today = await this.prisma.expenditureSnapshot.findFirst({
+      where: { userId, recordedAt: { gte: this.startOfToday() } },
+      orderBy: { recordedAt: 'desc' },
+    });
+    if (today) {
+      await this.prisma.expenditureSnapshot.update({
+        where: { id: today.id },
+        data,
+      });
+      return;
+    }
+    await this.prisma.expenditureSnapshot.create({ data: { userId, ...data } });
+  }
+
+  /**
+   * Lịch sử Expenditure thích ứng vs TDEE tĩnh theo thời gian, mới nhất trước — dùng vẽ biểu đồ
+   * Nutrition Progress. Mỗi lần log cân nặng/cập nhật hồ sơ/check-in mới có 1 điểm, nên mật độ điểm
+   * phản ánh đúng tần suất người dùng thực sự tương tác, không phải lấy mẫu theo ngày cố định.
+   */
+  async getHistory(userId: string, limit = 60) {
+    const snapshots = await this.prisma.expenditureSnapshot.findMany({
+      where: { userId },
+      orderBy: { recordedAt: 'desc' },
+      take: limit,
+    });
+    return snapshots.reverse();
   }
 }

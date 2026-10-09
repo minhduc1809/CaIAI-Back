@@ -1,4 +1,8 @@
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  Max,
+  MaxLength,
   IsNotEmpty,
   IsString,
   IsNumber,
@@ -17,6 +21,7 @@ export class CreateMealItemDto {
   @ApiProperty({ example: 'Phở bò tái', description: 'Tên món ăn' })
   @IsString({ message: 'Tên món ăn phải là chuỗi' })
   @IsNotEmpty({ message: 'Tên món ăn không được để trống' })
+  @MaxLength(200, { message: 'Tên món ăn tối đa 200 ký tự' })
   name: string;
 
   @ApiPropertyOptional({
@@ -34,6 +39,7 @@ export class CreateMealItemDto {
   @IsOptional()
   @IsNumber({}, { message: 'Số lượng khẩu phần phải là số' })
   @Min(0, { message: 'Số lượng khẩu phần tối thiểu 0' })
+  @Max(10000, { message: 'Số lượng khẩu phần quá lớn' })
   servingAmount?: number;
 
   @ApiPropertyOptional({
@@ -51,29 +57,34 @@ export class CreateMealItemDto {
   @IsOptional()
   @IsNumber()
   @Min(0.1)
+  @Max(50, { message: 'Số lượng tối đa 50 phần' })
   quantity?: number;
 
   @ApiProperty({ example: 450, description: 'Lượng calo (kcal)' })
   @IsNumber({}, { message: 'Calories phải là số' })
   @Min(0)
+  @Max(5000, { message: 'Calo của một phần tối đa 5000 kcal' })
   calories: number;
 
   @ApiPropertyOptional({ example: 25, description: 'Lượng Protein (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Lượng protein của một phần tối đa 500 g' })
   protein?: number;
 
   @ApiPropertyOptional({ example: 55, description: 'Lượng Carb (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Lượng carb của một phần tối đa 500 g' })
   carb?: number;
 
   @ApiPropertyOptional({ example: 12, description: 'Lượng Fat (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Lượng fat của một phần tối đa 500 g' })
   fat?: number;
 
   @ApiPropertyOptional({
@@ -116,6 +127,8 @@ export class CreateMealDto {
     description: 'Danh sách các món ăn trong bữa',
   })
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
+  @ArrayMinSize(1, { message: 'Bữa ăn cần ít nhất 1 món' })
+  @ArrayMaxSize(50, { message: 'Một bữa ăn tối đa 50 món' })
   @ValidateNested({ each: true })
   @Type(() => CreateMealItemDto)
   items: CreateMealItemDto[];

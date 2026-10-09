@@ -6,13 +6,14 @@ import {
   Max,
   IsDateString,
 } from 'class-validator';
+import { IsNotFutureDate } from '../../common/validators/not-future-date.validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateWeightLogDto {
   @ApiPropertyOptional({ example: 68.5, description: 'Cân nặng (kg)' })
   @IsOptional()
   @IsNumber({}, { message: 'Cân nặng phải là số' })
-  @Min(20, { message: 'Cân nặng tối thiểu 20 kg' })
+  @Min(25, { message: 'Cân nặng tối thiểu 25 kg' })
   @Max(300, { message: 'Cân nặng tối đa 300 kg' })
   weightKg?: number;
 
@@ -30,5 +31,6 @@ export class UpdateWeightLogDto {
   })
   @IsOptional()
   @IsDateString()
+  @IsNotFutureDate()
   date?: string;
 }

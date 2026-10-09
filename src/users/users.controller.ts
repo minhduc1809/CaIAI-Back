@@ -2,7 +2,11 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
+  Put,
+  Delete,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -15,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveOnboardingDraftDto } from './dto/onboarding-draft.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -51,6 +56,62 @@ export class UsersController {
     return this.usersService.updateProfile(userId, updateProfileDto);
   }
 
+  @Get('me/onboarding-draft')
+  @ApiOperation({
+    summary: 'Lấy dữ liệu nháp Onboarding đã lưu (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Lấy dữ liệu nháp thành công' })
+  async getOnboardingDraft(@CurrentUser('id') userId: string) {
+    return this.usersService.getOnboardingDraft(userId);
+  }
+
+  @Put('me/onboarding-draft')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lưu tiến độ và dữ liệu nháp Onboarding (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Lưu nháp thành công' })
+  async saveOnboardingDraft(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SaveOnboardingDraftDto,
+  ) {
+    return this.usersService.saveOnboardingDraft(userId, dto);
+  }
+
+  @Delete('me/onboarding-draft')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Xóa dữ liệu nháp Onboarding (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Xóa nháp thành công' })
+  async clearOnboardingDraft(@CurrentUser('id') userId: string) {
+    return this.usersService.clearOnboardingDraft(userId);
+  }
+
+  @Post('me/target/apply')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Áp dụng mục tiêu tính lại từ hồ sơ hiện tại (sự kiện E5, user bấm "Áp dụng")',
+  })
+  @ApiResponse({ status: 200, description: 'Đã áp dụng mục tiêu mới' })
+  async applyTarget(@CurrentUser('id') userId: string) {
+    return this.usersService.applyProposedTarget(userId);
+  }
+
+  @Get('me/target/history')
+  @ApiOperation({ summary: 'Lịch sử thay đổi mục tiêu calo/macro' })
+  @ApiResponse({ status: 200, description: 'Lấy lịch sử thành công' })
+  async getTargetHistory(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.getTargetHistory(
+      userId,
+      limit ? parseInt(limit, 10) : undefined,
+    );
+  }
+
   @Get('me/health-summary')
   @ApiOperation({
     summary:
@@ -74,5 +135,26 @@ export class UsersController {
   })
   async getExpenditure(@CurrentUser('id') userId: string) {
     return this.usersService.getExpenditureStatus(userId);
+  }
+
+  @Get('me/expenditure/history')
+  @ApiOperation({
+    summary:
+      'Lịch sử Expenditure thích ứng vs TDEE tĩnh theo thời gian (Nutrition Progress)',
+    description:
+      'Mỗi điểm ứng với 1 lần log cân nặng/cập nhật hồ sơ/Weekly Check-in thực sự lưu lại giá trị mới — không phải lấy mẫu theo ngày cố định.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy lịch sử Expenditure thành công',
+  })
+  async getExpenditureHistory(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.getExpenditureHistory(
+      userId,
+      limit ? parseInt(limit, 10) : undefined,
+    );
   }
 }

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { getActiveGoal, startGoal } from '../users/goal.util';
 import { HealthCalculatorService } from '../users/health-calculator.service';
 import { AdaptiveExpenditureService } from '../users/adaptive-expenditure.service';
 import { CreateWeightLogDto } from './dto/create-weight-log.dto';
@@ -24,6 +25,10 @@ export class WeightLogsService {
     const { weightKg, note, date } = dto;
     const logDate = date ? new Date(date) : new Date();
 
+    // 0. Cân nặng lệch nhiều so với xu hướng (nhầm kg/lb, cân sau bữa lớn) → đánh dấu để app hỏi lại.
+    //    Chỉ đánh dấu, vẫn lưu bản ghi (BR-09.3; việc loại khỏi xu hướng thuộc BR-05.3).
+    const suspicious = await this.isSuspiciousWeight(userId, weightKg);
+
     // 1. Tạo bản ghi WeightLog
     const log = await this.prisma.weightLog.create({
       data: {
@@ -34,73 +39,97 @@ export class WeightLogsService {
       },
     });
 
-    // 2. Lấy thông tin user hiện tại để tính lại BMI/BMR/TDEE với cân nặng mới
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (user) {
-      // 2a. Tính TDEE công thức tĩnh trước (làm baseline & sanity bound cho Adaptive Engine)
-      const staticCalculations = this.healthCalculator.calculateAllMetrics({
-        heightCm: user.heightCm,
-        weightKg,
-        targetWeightKg: user.targetWeightKg,
-        weightRateKgPerWeek: user.weightRateKgPerWeek,
-        bodyFatPercent: user.bodyFatPercent,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        activityLevel: user.activityLevel,
-        goal: user.goal,
-        macroStyle: user.macroStyle,
-      });
-
-      // 2b. Adaptive Expenditure Engine — hồi quy dữ liệu cân nặng + calo đã log thực tế
-      const expenditureResult = await this.adaptiveExpenditure.recalculate(
-        userId,
-        staticCalculations.tdee,
-        user.adaptiveExpenditure,
-      );
-
-      // 2c. Tính lại Target Calories/Macro dựa trên Expenditure thích ứng (nếu có) thay vì TDEE tĩnh
-      const finalCalculations = this.healthCalculator.calculateAllMetrics({
-        heightCm: user.heightCm,
-        weightKg,
-        targetWeightKg: user.targetWeightKg,
-        weightRateKgPerWeek: user.weightRateKgPerWeek,
-        bodyFatPercent: user.bodyFatPercent,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        activityLevel: user.activityLevel,
-        goal: user.goal,
-        macroStyle: user.macroStyle,
-        expenditureOverride:
-          expenditureResult.method === 'ADAPTIVE'
-            ? expenditureResult.estimatedExpenditure
-            : null,
-      });
-
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          weightKg,
-          bmi: finalCalculations.bmi,
-          bmr: finalCalculations.bmr,
-          tdee: finalCalculations.tdee,
-          targetCalories: finalCalculations.targetCalories,
-          targetProtein: finalCalculations.targetProtein,
-          targetCarb: finalCalculations.targetCarb,
-          targetFat: finalCalculations.targetFat,
-          adaptiveExpenditure: expenditureResult.estimatedExpenditure,
-          expenditureStatus: expenditureResult.status,
-          expenditureUpdatedAt: new Date(),
-        },
-      });
-    }
+    // 2. Cân hiện tại = bản ghi MỚI NHẤT THEO NGÀY (ghi bù ngày cũ không được ghi đè cân hiện tại)
+    await this.refreshCurrentWeight(userId);
 
     return {
       message: 'Ghi nhận cân nặng thành công',
-      data: log,
+      data: { ...log, suspicious },
     };
+  }
+
+  /** Các lần cân gần nhất, trả về theo thứ tự thời gian tăng dần (cũ → mới). */
+  private async latestLogsAscending(userId: string, limit: number) {
+    const rows = await this.prisma.weightLog.findMany({
+      where: { userId },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+    });
+    return [...rows].sort(
+      (a, b) =>
+        a.date.getTime() - b.date.getTime() ||
+        (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0),
+    );
+  }
+
+  /**
+   * Đồng bộ cân nặng hiện tại của hồ sơ với bản ghi mới nhất theo ngày, rồi tính lại các chỉ số suy ra.
+   * Gọi sau MỌI thao tác thêm/sửa/xoá. Hết sạch bản ghi thì giữ cân hiện tại đã biết.
+   *
+   * BR-04 / BR-09.2: ghi cân KHÔNG được đổi mục tiêu calo/macro. Chỉ cập nhật cân hiện tại, các chỉ số
+   * suy ra (BMI, BMR, TDEE tĩnh) và kết quả Adaptive Engine (ước tính, không phải mục tiêu).
+   */
+  private async refreshCurrentWeight(userId: string) {
+    const latest = await this.prisma.weightLog.findFirst({
+      where: { userId },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    });
+    if (!latest) return;
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return;
+
+    const weightKg = latest.weightKg;
+    const staticCalculations = this.healthCalculator.calculateAllMetrics({
+      heightCm: user.heightCm,
+      weightKg,
+      targetWeightKg: user.targetWeightKg,
+      weightRateKgPerWeek: user.weightRateKgPerWeek,
+      bodyFatPercent: user.bodyFatPercent,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      activityLevel: user.activityLevel,
+      goal: user.goal,
+      macroStyle: user.macroStyle,
+    });
+
+    const expenditureResult = await this.adaptiveExpenditure.recalculate(
+      userId,
+      staticCalculations.tdee,
+    );
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        weightKg,
+        bmi: staticCalculations.bmi,
+        bmr: staticCalculations.bmr,
+        tdee: staticCalculations.tdee,
+        adaptiveExpenditure: expenditureResult.estimatedExpenditure,
+        expenditureStatus: expenditureResult.status,
+        expenditureUpdatedAt: new Date(),
+      },
+    });
+
+    await this.adaptiveExpenditure.recordSnapshot(userId, expenditureResult);
+  }
+
+  /**
+   * Cân nặng bị coi là đáng ngờ khi lệch quá max(2 kg, 3% cân nặng) so với xu hướng EWMA hiện tại.
+   * Chưa có lịch sử thì không đáng ngờ.
+   */
+  private async isSuspiciousWeight(
+    userId: string,
+    weightKg: number,
+  ): Promise<boolean> {
+    const previous = await this.latestLogsAscending(userId, 60);
+    if (!previous || previous.length === 0) return false;
+    let trend = previous[0].weightKg;
+    for (let i = 1; i < previous.length; i++) {
+      trend = trend + 0.1 * (previous[i].weightKg - trend);
+    }
+    const threshold = Math.max(2, trend * 0.03);
+    return Math.abs(weightKg - trend) > threshold;
   }
 
   /**
@@ -128,6 +157,8 @@ export class WeightLogsService {
       },
     });
 
+    await this.refreshCurrentWeight(userId);
+
     return {
       message: 'Cập nhật bản ghi cân nặng thành công',
       data: updated,
@@ -138,11 +169,8 @@ export class WeightLogsService {
    * Lấy lịch sử cân nặng theo thứ tự thời gian (dùng vẽ biểu đồ Line Chart)
    */
   async getLogs(userId: string, limit: number = 30) {
-    const logs = await this.prisma.weightLog.findMany({
-      where: { userId },
-      orderBy: { date: 'asc' },
-      take: limit,
-    });
+    // Lấy các lần cân GẦN NHẤT (trước đây lấy nhầm các lần cũ nhất khi có nhiều hơn `limit` bản ghi)
+    const logs = await this.latestLogsAscending(userId, limit);
 
     return {
       message: 'Lấy lịch sử cân nặng thành công',
@@ -155,11 +183,7 @@ export class WeightLogsService {
    * Công thức: TrendWeight_t = TrendWeight_{t-1} + 0.1 * (LoggedWeight_t - TrendWeight_{t-1})
    */
   async getWeightTrend(userId: string, limit: number = 60) {
-    const logs = await this.prisma.weightLog.findMany({
-      where: { userId },
-      orderBy: { date: 'asc' },
-      take: limit,
-    });
+    const logs = await this.latestLogsAscending(userId, limit);
 
     if (logs.length === 0) {
       return {
@@ -216,13 +240,23 @@ export class WeightLogsService {
       throw new NotFoundException('Không tìm thấy người dùng');
     }
 
-    // Lấy bản ghi cân nặng đầu tiên để xác định mốc bắt đầu
-    const earliestLog = await this.prisma.weightLog.findFirst({
-      where: { userId },
-      orderBy: { date: 'asc' },
-    });
+    // Mốc bắt đầu = startWeight của Goal đang hiệu lực (BR-09.5), không phải bản ghi cân cũ nhất mọi thời đại.
+    // Người dùng cũ chưa có Goal (migration chỉ tạo cho người có mục tiêu) thì dùng bản ghi cân sớm nhất, như trước.
+    let goalRow = await getActiveGoal(this.prisma, userId);
+    if (!goalRow && user.goal && user.weightKg) {
+      const earliest = await this.prisma.weightLog.findFirst({
+        where: { userId },
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      });
+      goalRow = await startGoal(this.prisma, userId, {
+        goalType: user.goal,
+        startWeight: earliest?.weightKg ?? user.weightKg,
+        targetWeight: user.targetWeightKg,
+        startDate: earliest?.date,
+      });
+    }
 
-    const startWeight = earliestLog ? earliestLog.weightKg : user.weightKg;
+    const startWeight = goalRow ? goalRow.startWeight : user.weightKg;
     const currentWeight = user.weightKg;
     const targetWeight = user.targetWeightKg;
 
@@ -243,10 +277,11 @@ export class WeightLogsService {
         const achievedSpan = Math.abs(currentWeight - startWeight);
 
         // Kiểm tra xem có đang đi đúng hướng không
+        const goalType = goalRow?.goalType ?? user.goal;
         const isLosing =
-          user.goal === 'LOSE_WEIGHT' && currentWeight <= startWeight;
+          goalType === 'LOSE_WEIGHT' && currentWeight <= startWeight;
         const isGaining =
-          user.goal === 'GAIN_WEIGHT' && currentWeight >= startWeight;
+          goalType === 'GAIN_WEIGHT' && currentWeight >= startWeight;
 
         if (isLosing || isGaining) {
           progressPercent = Math.min(
@@ -262,6 +297,7 @@ export class WeightLogsService {
       data: {
         goal: user.goal,
         startWeightKg: startWeight,
+        goalStartDate: goalRow?.startDate ?? null,
         currentWeightKg: currentWeight,
         targetWeightKg: targetWeight,
         weightChangedKg: weightChanged,
@@ -290,6 +326,8 @@ export class WeightLogsService {
     await this.prisma.weightLog.delete({
       where: { id: logId },
     });
+
+    await this.refreshCurrentWeight(userId);
 
     return {
       message: 'Xóa bản ghi cân nặng thành công',

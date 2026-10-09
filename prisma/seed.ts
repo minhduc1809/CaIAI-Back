@@ -88,6 +88,9 @@ async function main() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Meal.logDate: ngày (00:00 UTC của ngày theo giờ máy) — xem BR-07.2
+  const logDateOf = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 
   // Bữa Sáng: Phở Bò Tái Nạm
   const breakfast = await prisma.meal.create({
@@ -95,6 +98,7 @@ async function main() {
       userId: testUser.id,
       mealType: MealType.BREAKFAST,
       date: new Date(),
+      logDate: logDateOf(new Date()),
       totalCalories: 480,
       totalProtein: 32,
       totalCarb: 62,
@@ -142,6 +146,7 @@ async function main() {
       userId: testUser.id,
       mealType: MealType.LUNCH,
       date: new Date(),
+      logDate: logDateOf(new Date()),
       totalCalories: 620,
       totalProtein: 34,
       totalCarb: 72,
@@ -189,6 +194,7 @@ async function main() {
       userId: testUser.id,
       mealType: MealType.SNACK,
       date: new Date(),
+      logDate: logDateOf(new Date()),
       totalCalories: 190,
       totalProtein: 14,
       totalCarb: 18,
