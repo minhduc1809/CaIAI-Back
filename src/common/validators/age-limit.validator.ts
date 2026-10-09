@@ -9,7 +9,7 @@ import {
  * Ứng dụng chỉ dành cho người trưởng thành từ đủ minAge (mặc định 18) đến maxAge (mặc định 100).
  */
 export function IsValidAge(
-  minAge = 18,
+  minAge = 13,
   maxAge = 100,
   options?: ValidationOptions,
 ) {
@@ -19,7 +19,7 @@ export function IsValidAge(
       target: object.constructor,
       propertyName,
       options: {
-        message: `Người dùng phải từ đủ ${minAge} tuổi đến ${maxAge} tuổi`,
+        message: `NutriWise dành cho người từ đủ ${minAge} tuổi đến ${maxAge} tuổi`,
         ...options,
       },
       validator: {

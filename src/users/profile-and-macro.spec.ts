@@ -20,25 +20,101 @@ const pipe = new ValidationPipe({
 const validate = (value: any, metatype: any = UpdateProfileDto) =>
   pipe.transform(value, { type: 'body', metatype });
 
-describe('BR-02.2 Kiểm soát độ tuổi (18–100 tuổi)', () => {
-  it('độ tuổi 18 đến 100 hợp lệ qua ValidationPipe', async () => {
+describe('B1 / BR-02.2 Kiểm soát độ tuổi (13–100 tuổi)', () => {
+  function buildService(user: any) {
+    const prisma: any = {
+      user: {
+        findUnique: jest.fn(async () => user),
+        update: jest.fn(async ({ data }: any) => ({ ...user, ...data })),
+      },
+      goal: {
+        updateMany: jest.fn(),
+        create: jest.fn(),
+      },
+      targetChange: { create: jest.fn() },
+    };
+    const adaptive: any = {
+      recalculate: jest.fn(async () => ({
+        method: 'STATIC_FALLBACK',
+        status: 'UPDATING',
+        estimatedExpenditure: null,
+      })),
+      recordSnapshot: jest.fn(),
+    };
+    const service = new UsersService(
+      prisma,
+      new HealthCalculatorService(),
+      adaptive,
+    );
+    return { service, prisma };
+  }
+
+  it('độ tuổi 13 đến 100 hợp lệ qua ValidationPipe', async () => {
     // 25 tuổi
     await expect(
       validate({ dateOfBirth: '2000-01-01' }),
     ).resolves.toBeDefined();
-    // Đủ 18 tuổi
-    const d18 = new Date();
-    d18.setFullYear(d18.getFullYear() - 19);
-    await expect(
-      validate({ dateOfBirth: d18.toISOString().split('T')[0] }),
-    ).resolves.toBeDefined();
-  });
-
-  it('dưới 18 tuổi bị ValidationPipe từ chối', async () => {
+    // 15 tuổi (hợp lệ qua pipe)
     const d15 = new Date();
     d15.setFullYear(d15.getFullYear() - 15);
     await expect(
       validate({ dateOfBirth: d15.toISOString().split('T')[0] }),
+    ).resolves.toBeDefined();
+  });
+
+  it('dưới 13 tuổi bị ValidationPipe và Service từ chối', async () => {
+    const d10 = new Date();
+    d10.setFullYear(d10.getFullYear() - 10);
+    await expect(
+      validate({ dateOfBirth: d10.toISOString().split('T')[0] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const { service } = buildService({
+      id: 'u1',
+      weightKg: 45,
+      heightCm: 150,
+      gender: Gender.MALE,
+      goal: GoalType.MAINTAIN,
+    });
+    await expect(
+      service.updateProfile('u1', {
+        dateOfBirth: d10.toISOString().split('T')[0],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('độ tuổi 13-17: chỉ cho phép mục tiêu MAINTAIN, cấm LOSE_WEIGHT và GAIN_WEIGHT', async () => {
+    const d15 = new Date();
+    d15.setFullYear(d15.getFullYear() - 15);
+
+    const { service } = buildService({
+      id: 'u1',
+      weightKg: 50,
+      heightCm: 160,
+      dateOfBirth: d15,
+      gender: Gender.MALE,
+      goal: GoalType.MAINTAIN,
+    });
+
+    // Chọn MAINTAIN: thành công
+    await expect(
+      service.updateProfile('u1', { goal: GoalType.MAINTAIN }),
+    ).resolves.toBeDefined();
+
+    // Chọn LOSE_WEIGHT: bị từ chối
+    await expect(
+      service.updateProfile('u1', {
+        goal: GoalType.LOSE_WEIGHT,
+        targetWeightKg: 45,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    // Chọn GAIN_WEIGHT: bị từ chối
+    await expect(
+      service.updateProfile('u1', {
+        goal: GoalType.GAIN_WEIGHT,
+        targetWeightKg: 55,
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -351,12 +427,12 @@ describe('BR-03.4 Đạm theo g/kg cân nặng (Protein per kg)', () => {
       macroStyle: MacroStyle.BALANCED,
     };
 
-    // LOW (1.6 g/kg) = 128g
+    // LOW (1.8 g/kg) = 144g
     const low = calc.calculateAllMetrics({
       ...base,
       proteinPreference: ProteinPreference.LOW,
     });
-    expect(low.targetProtein).toBe(128);
+    expect(low.targetProtein).toBe(144);
 
     // HIGH (2.2 g/kg) = 176g
     const high = calc.calculateAllMetrics({

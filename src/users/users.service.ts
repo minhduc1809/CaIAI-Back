@@ -143,7 +143,8 @@ export class UsersService {
         : currentUser.dateOfBirth;
     const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
 
-    // Kiểm tra độ tuổi (BR-02.2)
+    // Kiểm tra độ tuổi (B1 / BR-02.2)
+    let userAge: number | null = null;
     if (dateOfBirth) {
       const today = new Date();
       let age = today.getFullYear() - dateOfBirth.getFullYear();
@@ -154,10 +155,9 @@ export class UsersService {
       ) {
         age--;
       }
-      if (age < 18) {
-        throw new BadRequestException(
-          'Người dùng phải từ đủ 18 tuổi trở lên để sử dụng ứng dụng.',
-        );
+      userAge = age;
+      if (age < 13) {
+        throw new BadRequestException('NutriWise dành cho người từ 13 tuổi.');
       }
       if (age > 100) {
         throw new BadRequestException('Ngày sinh không hợp lệ.');
@@ -165,6 +165,15 @@ export class UsersService {
     }
 
     const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
+
+    // Người từ 13 đến dưới 18 tuổi: chỉ cho mục tiêu Duy trì (MAINTAIN) (B1 / BR-02.2)
+    if (userAge !== null && userAge >= 13 && userAge < 18) {
+      if (goal && goal !== GoalType.MAINTAIN) {
+        throw new BadRequestException(
+          'Với người dưới 18 tuổi, hãy trao đổi với bác sĩ hoặc chuyên gia dinh dưỡng trước khi giảm/tăng cân.',
+        );
+      }
+    }
 
     // Kiểm tra mang thai / cho con bú (BR-02.2)
     const pregnancyStatus =

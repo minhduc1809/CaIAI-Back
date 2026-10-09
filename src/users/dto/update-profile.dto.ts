@@ -76,11 +76,11 @@ export class UpdateProfileDto {
   @ApiPropertyOptional({
     example: '2000-01-15',
     description:
-      'Ngày sinh (YYYY-MM-DD), người dùng phải từ đủ 18 đến 100 tuổi (BR-02.2)',
+      'Ngày sinh (YYYY-MM-DD), người dùng phải từ đủ 13 đến 100 tuổi (B1 / BR-02.2)',
   })
   @IsOptional()
   @IsDateString({}, { message: 'Ngày sinh phải đúng định dạng YYYY-MM-DD' })
-  @IsValidAge(18, 100)
+  @IsValidAge(13, 100)
   dateOfBirth?: string;
 
   @ApiPropertyOptional({ example: 175, description: 'Chiều cao (cm)' })
