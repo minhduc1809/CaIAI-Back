@@ -25,10 +25,26 @@ import {
   loadDayFlags,
 } from '../common/utils/day-completeness.util';
 
+import { MealType } from '@prisma/client';
+import { detectTextViolations } from '../recommendations/food-safety';
+
 /** Giới hạn hợp lý chặn số liệu sai/nhập nhầm (kcal). */
 const MAX_ITEM_KCAL = 10000;
 const MAX_MEAL_KCAL = 15000;
 const DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+
+export function resolveSourceType(
+  sourceType?: string,
+  source?: string,
+): string {
+  if (sourceType) return sourceType;
+  if (source === 'quick_add') return 'QUICK_ADD';
+  if (source === 'diet_plan') return 'DIET_PLAN';
+  if (source === 'ai_vision') return 'AI_ESTIMATE';
+  if (source === 'barcode') return 'BARCODE';
+  if (source === 'custom') return 'CUSTOM';
+  return 'CATALOG';
+}
 
 @Injectable()
 export class MealsService {
@@ -194,7 +210,18 @@ export class MealsService {
    * Tạo một bữa ăn mới gồm nhiều món và tự động tính tổng Calories/Macros
    */
   async createMeal(userId: string, createMealDto: CreateMealDto) {
-    const { mealType, date, imageUrl, items } = createMealDto;
+    const { mealType, date, imageUrl, items, clientRequestId } = createMealDto;
+
+    // Chống ghi trùng qua clientRequestId khi retry/offline (BR-07.5)
+    if (clientRequestId) {
+      const existingReq = await this.prisma.meal.findFirst({
+        where: { userId, clientRequestId },
+        include: { items: true },
+      });
+      if (existingReq) {
+        return { message: 'Bữa ăn này đã được ghi nhận', data: existingReq };
+      }
+    }
 
     const logDateKey = await this.resolveWriteDayKey(userId, date);
     const mealDate = keyToDate(logDateKey);
@@ -223,6 +250,7 @@ export class MealsService {
           logDate: mealDate,
           imageUrl: imageUrl || null,
           dedupeKey,
+          clientRequestId: clientRequestId || null,
           ...totals,
           items: {
             create: items.map((item) => ({
@@ -236,6 +264,8 @@ export class MealsService {
               carb: item.carb || 0,
               fat: item.fat || 0,
               source: item.source || 'manual',
+              sourceType: resolveSourceType(item.sourceType, item.source),
+              sourceId: item.sourceId || null,
             })),
           },
         },
@@ -245,6 +275,15 @@ export class MealsService {
       });
     } catch (e) {
       if ((e as { code?: string }).code === 'P2002') {
+        if (clientRequestId) {
+          const byReq = await this.prisma.meal.findFirst({
+            where: { userId, clientRequestId },
+            include: { items: true },
+          });
+          if (byReq) {
+            return { message: 'Bữa ăn này đã được ghi nhận', data: byReq };
+          }
+        }
         const existing = await this.findDuplicate(userId, dedupeKey);
         if (existing) {
           return { message: 'Bữa ăn này đã được ghi nhận', data: existing };
@@ -403,6 +442,8 @@ export class MealsService {
             carb: item.carb || 0,
             fat: item.fat || 0,
             source: item.source || 'manual',
+            sourceType: resolveSourceType(item.sourceType, item.source),
+            sourceId: item.sourceId || null,
           })),
         });
       }
@@ -875,5 +916,102 @@ export class MealsService {
     }
 
     return { message: 'Lấy tóm tắt tuần thành công', data: days };
+  }
+
+  /**
+   * Món quen (BR-07.7): 20 món được log nhiều nhất trong 30 ngày gần nhất,
+   * kèm khẩu phần lần gần nhất. Lọc món có calories = 0 và món vi phạm dị ứng/chế độ ăn.
+   */
+  async getFrequentFoods(userId: string, mealType?: MealType) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { dietType: true, allergies: true },
+    });
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const meals = await this.prisma.meal.findMany({
+      where: {
+        userId,
+        logDate: { gte: thirtyDaysAgo },
+        ...(mealType ? { mealType } : {}),
+      },
+      include: {
+        items: true,
+      },
+      orderBy: { logDate: 'desc' },
+    });
+
+    const groupMap = new Map<
+      string,
+      {
+        count: number;
+        lastUsedAt: Date;
+        mealType: MealType;
+        name: string;
+        servingSize: string | null;
+        servingAmount: number | null;
+        servingUnit: any;
+        quantity: number;
+        calories: number;
+        protein: number;
+        carb: number;
+        fat: number;
+        sourceType: string;
+        sourceId: string | null;
+      }
+    >();
+
+    for (const meal of meals) {
+      for (const item of meal.items) {
+        if (!item.calories || item.calories <= 0) continue;
+
+        // Kiểm tra an toàn dị ứng / ăn kiêng
+        if (user) {
+          const violations = detectTextViolations(item.name, {
+            dietType: user.dietType,
+            allergies: user.allergies ?? [],
+          });
+          if (violations.length > 0) continue;
+        }
+
+        const sType =
+          item.sourceType || resolveSourceType(undefined, item.source);
+        const sId = item.sourceId || null;
+        const key = sId ? `${sType}:${sId}` : item.name.trim().toLowerCase();
+
+        const existing = groupMap.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          groupMap.set(key, {
+            count: 1,
+            lastUsedAt: meal.logDate,
+            mealType: meal.mealType,
+            name: item.name,
+            servingSize: item.servingSize,
+            servingAmount: item.servingAmount,
+            servingUnit: item.servingUnit,
+            quantity: item.quantity,
+            calories: item.calories,
+            protein: item.protein,
+            carb: item.carb,
+            fat: item.fat,
+            sourceType: sType,
+            sourceId: sId,
+          });
+        }
+      }
+    }
+
+    const frequentList = Array.from(groupMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    return {
+      message: 'Lấy danh sách món quen thành công',
+      data: frequentList,
+    };
   }
 }

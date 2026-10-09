@@ -94,9 +94,35 @@ export class CreateMealItemDto {
   @IsOptional()
   @IsString()
   source?: string;
+
+  @ApiPropertyOptional({
+    example: 'CATALOG',
+    description:
+      'Loại nguồn (CATALOG, CUSTOM, BARCODE, AI_MATCHED, AI_ESTIMATE, QUICK_ADD, DIET_PLAN)',
+  })
+  @IsOptional()
+  @IsString()
+  sourceType?: string;
+
+  @ApiPropertyOptional({
+    example: 'cuid_food_123',
+    description: 'ID của món gốc (nếu có)',
+  })
+  @IsOptional()
+  @IsString()
+  sourceId?: string;
 }
 
 export class CreateMealDto {
+  @ApiPropertyOptional({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description:
+      'Client Request ID (UUID) chống ghi trùng lặp khi retry/offline (BR-07.5)',
+  })
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string;
+
   @ApiProperty({
     enum: MealType,
     example: MealType.LUNCH,
