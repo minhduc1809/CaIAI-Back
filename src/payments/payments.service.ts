@@ -20,13 +20,24 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // bỏ I, O, 0, 1 cho
 
 /** Giá bán qua QR. Gói đăng ký Google Play lấy giá từ Play Console, không dùng bảng này. */
 export const QR_PLANS = [
-  { productId: 'premium_monthly', name: 'Premium tháng', amount: 59000, days: 30 },
-  { productId: 'premium_yearly', name: 'Premium năm', amount: 449000, days: 365 },
+  {
+    productId: 'premium_monthly',
+    name: 'Premium tháng',
+    amount: 59000,
+    days: 30,
+  },
+  {
+    productId: 'premium_yearly',
+    name: 'Premium năm',
+    amount: 449000,
+    days: 365,
+  },
 ] as const;
 
 export function generateOrderCode(): string {
   let s = 'NW';
-  for (let i = 0; i < 8; i++) s += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  for (let i = 0; i < 8; i++)
+    s += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
   return s;
 }
 
@@ -41,16 +52,25 @@ export class PaymentsService {
 
   /** Thông tin ngân hàng lấy từ cấu hình máy chủ, không nằm trong code hay app. */
   private bank() {
-    const bin = process.env.BANK_BIN;
-    const accountNo = process.env.BANK_ACCOUNT_NO;
-    const accountName = process.env.BANK_ACCOUNT_NAME;
+    const bin =
+      process.env.BANK_BIN ||
+      (process.env.NODE_ENV === 'development' ? '970422' : undefined);
+    const accountNo =
+      process.env.BANK_ACCOUNT_NO ||
+      (process.env.NODE_ENV === 'development' ? '0388888888' : undefined);
+    const accountName =
+      process.env.BANK_ACCOUNT_NAME ||
+      (process.env.NODE_ENV === 'development' ? 'NUTRIWISE' : undefined);
+    const bankName =
+      process.env.BANK_NAME ||
+      (process.env.NODE_ENV === 'development' ? 'MB Bank' : '');
     if (!bin || !accountNo || !accountName) {
       throw new ServiceUnavailableException({
         code: 'PAYMENT_NOT_CONFIGURED',
         message: 'Chưa cấu hình tài khoản nhận tiền.',
       });
     }
-    return { bin, accountNo, accountName, bankName: process.env.BANK_NAME ?? '' };
+    return { bin, accountNo, accountName, bankName };
   }
 
   qrUrl(order: { amount: number; code: string }) {
@@ -128,7 +148,9 @@ export class PaymentsService {
   }
 
   async getOrder(userId: string, orderId: string, now: Date = new Date()) {
-    let order = await this.prisma.paymentOrder.findFirst({ where: { id: orderId, userId } });
+    let order = await this.prisma.paymentOrder.findFirst({
+      where: { id: orderId, userId },
+    });
     if (!order) throw new NotFoundException();
     if (order.status === 'PENDING' && order.expiresAt < now) {
       order = await this.prisma.paymentOrder.update({
@@ -152,12 +174,19 @@ export class PaymentsService {
       where: {
         OR: [
           { status: 'PENDING' },
-          { status: 'EXPIRED', createdAt: { gte: new Date(now.getTime() - LATE_APPROVAL_WINDOW_MS) } },
+          {
+            status: 'EXPIRED',
+            createdAt: {
+              gte: new Date(now.getTime() - LATE_APPROVAL_WINDOW_MS),
+            },
+          },
         ],
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
-      include: { user: { select: { id: true, username: true, email: true, name: true } } },
+      include: {
+        user: { select: { id: true, username: true, email: true, name: true } },
+      },
     });
     return orders.map((o) => ({
       id: o.id,
@@ -181,10 +210,18 @@ export class PaymentsService {
    * trạng thái nên gọi lặp (admin bấm hai lần, ngân hàng gửi lại webhook) không cộng hạn hai lần.
    * `allowCanceled`: tiền đã thật sự vào nên webhook vẫn cấp quyền cho đơn khách lỡ huỷ.
    */
-  private async settleOrder(orderId: string, approvedBy: string, now: Date, allowCanceled: boolean) {
-    const order = await this.prisma.paymentOrder.findUnique({ where: { id: orderId } });
+  private async settleOrder(
+    orderId: string,
+    approvedBy: string,
+    now: Date,
+    allowCanceled: boolean,
+  ) {
+    const order = await this.prisma.paymentOrder.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException();
-    if (order.status === 'PAID') return { alreadyPaid: true, orderId, code: order.code };
+    if (order.status === 'PAID')
+      return { alreadyPaid: true, orderId, code: order.code };
     if (order.status === 'CANCELED' && !allowCanceled) {
       throw new ConflictException({ code: 'ORDER_CANCELED' });
     }
@@ -199,7 +236,11 @@ export class PaymentsService {
       const claimed = await tx.paymentOrder.updateMany({
         where: {
           id: orderId,
-          status: { in: allowCanceled ? ['PENDING', 'EXPIRED', 'CANCELED'] : ['PENDING', 'EXPIRED'] },
+          status: {
+            in: allowCanceled
+              ? ['PENDING', 'EXPIRED', 'CANCELED']
+              : ['PENDING', 'EXPIRED'],
+          },
         },
         data: { status: 'PAID', paidAt: now, approvedBy },
       });
@@ -232,12 +273,17 @@ export class PaymentsService {
   private checkWebhookKey(authorization?: string) {
     const expected = process.env.SEPAY_API_KEY;
     if (!expected) {
-      throw new ServiceUnavailableException({ code: 'PAYMENT_WEBHOOK_NOT_CONFIGURED' });
+      throw new ServiceUnavailableException({
+        code: 'PAYMENT_WEBHOOK_NOT_CONFIGURED',
+      });
     }
-    const given = (authorization ?? '').replace(/^(Apikey|Bearer)\s+/i, '').trim();
+    const given = (authorization ?? '')
+      .replace(/^(Apikey|Bearer)\s+/i, '')
+      .trim();
     const a = Buffer.from(given);
     const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) throw new UnauthorizedException();
+    if (a.length !== b.length || !timingSafeEqual(a, b))
+      throw new UnauthorizedException();
   }
 
   /**
@@ -245,7 +291,11 @@ export class PaymentsService {
    * chỉ xử lý một lần; chỉ cấp quyền khi tìm thấy mã đơn trong nội dung và số tiền đủ.
    * Trả success cho các trường hợp đã ghi nhận để SePay không gửi lại vô hạn.
    */
-  async handleBankWebhook(authorization: string | undefined, body: any, now: Date = new Date()) {
+  async handleBankWebhook(
+    authorization: string | undefined,
+    body: any,
+    now: Date = new Date(),
+  ) {
     this.checkWebhookKey(authorization);
 
     const txId = body?.id != null ? `bank:${body.id}` : undefined;
@@ -253,26 +303,38 @@ export class PaymentsService {
     if (String(body?.transferType ?? '').toLowerCase() !== 'in') {
       return { success: true, ignored: 'NOT_INCOMING' };
     }
-    if (await this.prisma.billingEvent.findUnique({ where: { messageId: txId } })) {
+    if (
+      await this.prisma.billingEvent.findUnique({ where: { messageId: txId } })
+    ) {
       return { success: true, duplicate: true };
     }
 
-    const text = `${body?.code ?? ''} ${body?.content ?? ''} ${body?.description ?? ''}`.toUpperCase();
+    const text =
+      `${body?.code ?? ''} ${body?.content ?? ''} ${body?.description ?? ''}`.toUpperCase();
     const code = text.match(/NW[A-HJ-NP-Z2-9]{8}/)?.[0];
     const amount = Number(body?.transferAmount ?? 0);
     const log = (type: string, userId?: string) =>
       this.prisma.billingEvent.create({
-        data: { type, userId, messageId: txId, payload: { code, amount, ref: body?.referenceCode ?? null } },
+        data: {
+          type,
+          userId,
+          messageId: txId,
+          payload: { code, amount, ref: body?.referenceCode ?? null },
+        },
       });
 
-    const order = code ? await this.prisma.paymentOrder.findUnique({ where: { code } }) : null;
+    const order = code
+      ? await this.prisma.paymentOrder.findUnique({ where: { code } })
+      : null;
     if (!order) {
       await log('PAYMENT_UNMATCHED');
       return { success: true, matched: false };
     }
     if (amount < order.amount) {
       await log('PAYMENT_UNDERPAID', order.userId); // thiếu tiền: không cấp, chờ người xử lý
-      this.logger.warn(`Đơn ${order.code} chuyển thiếu: ${amount}/${order.amount}`);
+      this.logger.warn(
+        `Đơn ${order.code} chuyển thiếu: ${amount}/${order.amount}`,
+      );
       return { success: true, matched: true, granted: false };
     }
     try {
