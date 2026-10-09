@@ -7,43 +7,57 @@ import {
   IsArray,
   ValidateNested,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { ServingUnit } from '@prisma/client';
 
 export class RecipeIngredientDto {
-  @ApiProperty({ example: 'Ức gà áp chảo', description: 'Tên nguyên liệu/thành phần' })
+  @ApiProperty({
+    example: 'Ức gà áp chảo',
+    description: 'Tên nguyên liệu/thành phần',
+  })
   @IsString({ message: 'Tên nguyên liệu phải là chuỗi' })
   @IsNotEmpty({ message: 'Tên nguyên liệu không được để trống' })
   name: string;
 
-  @ApiPropertyOptional({ example: '150g', description: 'Khẩu phần ước tính của nguyên liệu này' })
+  @ApiPropertyOptional({
+    example: '150g',
+    description: 'Khẩu phần ước tính của nguyên liệu này',
+  })
   @IsOptional()
   @IsString()
   servingSize?: string;
 
-  @ApiProperty({ example: 250, description: 'Calo của riêng nguyên liệu này (kcal)' })
+  @ApiProperty({
+    example: 250,
+    description: 'Calo của riêng nguyên liệu này (kcal)',
+  })
   @IsNumber({}, { message: 'Calories nguyên liệu phải là số' })
   @Min(0)
+  @Max(5000, { message: 'Calo của nguyên liệu tối đa 5000 kcal' })
   calories: number;
 
   @ApiPropertyOptional({ example: 30, description: 'Protein (g)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Protein của nguyên liệu tối đa 500 g' })
   protein?: number;
 
   @ApiPropertyOptional({ example: 5, description: 'Carb (g)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Carb của nguyên liệu tối đa 500 g' })
   carb?: number;
 
   @ApiPropertyOptional({ example: 12, description: 'Fat (g)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Fat của nguyên liệu tối đa 500 g' })
   fat?: number;
 }
 
@@ -92,24 +106,28 @@ export class CreateCustomFoodDto {
   @IsOptional()
   @IsNumber({}, { message: 'Calories phải là số' })
   @Min(0)
+  @Max(5000, { message: 'Calo món tự tạo tối đa 5000 kcal' })
   calories?: number;
 
   @ApiPropertyOptional({ example: 32, description: 'Lượng Protein (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Protein tối đa 500 g' })
   protein?: number;
 
   @ApiPropertyOptional({ example: 50, description: 'Lượng Carb (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Carb tối đa 500 g' })
   carb?: number;
 
   @ApiPropertyOptional({ example: 14, description: 'Lượng Fat (gram)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(500, { message: 'Fat tối đa 500 g' })
   fat?: number;
 
   @ApiPropertyOptional({
@@ -123,3 +141,5 @@ export class CreateCustomFoodDto {
   @Type(() => RecipeIngredientDto)
   ingredients?: RecipeIngredientDto[];
 }
+
+export class UpdateCustomFoodDto extends PartialType(CreateCustomFoodDto) {}

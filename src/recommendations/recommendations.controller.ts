@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -18,7 +19,10 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { RecommendationsService } from './recommendations.service';
-import { CreateCustomFoodDto } from './dto/create-custom-food.dto';
+import {
+  CreateCustomFoodDto,
+  UpdateCustomFoodDto,
+} from './dto/create-custom-food.dto';
 import { AddFavoriteFoodDto } from './dto/add-favorite-food.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -145,6 +149,18 @@ export class RecommendationsController {
   @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
   async getCustomFoods(@CurrentUser('id') userId: string) {
     return this.recommendationsService.getCustomFoods(userId);
+  }
+
+  @Patch('custom-foods/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cập nhật món ăn riêng của người dùng (BR-08.4)' })
+  @ApiResponse({ status: 200, description: 'Cập nhật món ăn thành công' })
+  async updateCustomFood(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomFoodDto,
+  ) {
+    return this.recommendationsService.updateCustomFood(userId, id, dto);
   }
 
   @Delete('custom-foods/:id')

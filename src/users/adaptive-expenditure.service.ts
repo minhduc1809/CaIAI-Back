@@ -12,11 +12,16 @@ import {
 } from '../common/utils/day-completeness.util';
 
 export type ExpenditureMethod = 'ADAPTIVE' | 'STATIC_FALLBACK';
-export type ExpenditureStatus = 'UPDATING' | 'HOLDING';
+export type ExpenditureStatus =
+  'STATIC' | 'LEARNING' | 'STABLE' | 'STALE' | 'UPDATING' | 'HOLDING';
+export type ExpenditureConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface AdaptiveExpenditureResult {
   method: ExpenditureMethod;
   status: ExpenditureStatus;
+  confidence: ExpenditureConfidence;
+  bandKcal: number;
+  todoList: string[];
   estimatedExpenditure: number | null;
   staticTdee: number | null;
   windowDays: number;
@@ -33,12 +38,15 @@ const LOOKBACK_DAYS = 28;
 const EWMA_ALPHA = 0.1;
 const CONVERGENCE_ALPHA = 0.25;
 
-const MIN_WEIGHT_LOGS = 4;
-const MIN_WINDOW_SPAN_DAYS = 7;
+// Điều kiện tối thiểu để tính Expenditure thích ứng (BR-05.4)
+const MIN_WEIGHT_DAYS = 4;
+const MIN_WINDOW_SPAN_DAYS = 10;
 const MIN_LOGGED_DAYS = 5;
 
-const HOLDING_MIN_SPAN_DAYS = 14;
-const HOLDING_MIN_LOGGED_DAYS = 8;
+// Điều kiện trạng thái ổn định (BR-05.5)
+const STABLE_MIN_SPAN_DAYS = 21;
+const STABLE_MIN_LOGGED_DAYS = 10;
+const STALE_AFTER_DAYS = 10;
 
 // Chặn ước tính bất thường (nhiễu dữ liệu ngắn hạn) trong khoảng hợp lý quanh TDEE công thức tĩnh
 const SANITY_MIN_RATIO = 0.6;
@@ -47,42 +55,112 @@ const SANITY_MAX_RATIO = 1.5;
 /**
  * Adaptive Expenditure Engine — ước tính Energy Expenditure động dựa trên dữ liệu thực tế
  * (Trend Weight EWMA + calo đã log), thay vì chỉ dùng công thức tĩnh Mifflin/Katch-McArdle.
- *
- * Nguyên lý (Energy Balance Equation): trong 1 khoảng thời gian,
- *   ΔTrendWeight(kg) * 7700 kcal/kg = (Calo nạp trung bình/ngày - Expenditure thực tế/ngày) * số ngày
- * => Expenditure = Calo nạp trung bình/ngày - (ΔTrendWeight * 7700) / số ngày
- *
- * "Adherence-Neutral": không phạt/thưởng người dùng vì log thiếu ngày — chỉ cần đủ dữ liệu tối thiểu
- * là tính được, bất kể có log đều 100% hay không.
- * "Hội tụ theo thời gian": ước tính mới được trộn dần với ước tính trước đó (không nhảy đột ngột).
  */
 @Injectable()
 export class AdaptiveExpenditureService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Tính lại Expenditure thích ứng cho 1 user. Không tự lưu — nơi gọi (WeightLogsService,
-   * UsersService) chịu trách nhiệm persist kết quả vào User và dùng để tính lại Target Calories.
+   * Tính lại Expenditure thích ứng cho 1 user.
    */
   async recalculate(
     userId: string,
     staticTdee: number | null,
   ): Promise<AdaptiveExpenditureResult> {
+    const tzUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true, targetCalories: true },
+    });
+    const tz = resolveTimezone(tzUser?.timezone);
+
     const since = new Date();
     since.setDate(since.getDate() - LOOKBACK_DAYS);
 
+    // Lấy toàn bộ cân nặng trong cửa sổ lookback
     const weightLogs = await this.prisma.weightLog.findMany({
       where: { userId, date: { gte: since } },
-      orderBy: { date: 'asc' },
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
     });
 
-    const fallback = (message: string): AdaptiveExpenditureResult => ({
+    // 1. Nhóm cân nặng theo ngày (múi giờ user) và tính trung bình ngày (BR-09.4)
+    const dayMap = new Map<string, { date: Date; weights: number[] }>();
+    for (const log of weightLogs) {
+      const key = dayKeyOf(log.date, tz);
+      const cur = dayMap.get(key) ?? { date: log.date, weights: [] };
+      cur.weights.push(log.weightKg);
+      dayMap.set(key, cur);
+    }
+
+    const dayKeys = Array.from(dayMap.keys()).sort();
+    const weightDays = dayKeys.map((k) => {
+      const d = dayMap.get(k)!;
+      const avg = d.weights.reduce((sum, w) => sum + w, 0) / d.weights.length;
+      return {
+        dateKey: k,
+        date: keyToDate(k),
+        avgWeight: avg,
+        isOutlier: false,
+        confirmed: false,
+      };
+    });
+
+    // 2. Lọc ngoại lai (BR-05.3): lệch > max(2kg, 3%) mà không được xác nhận trong 3 ngày
+    if (weightDays.length > 0) {
+      let rTrend = weightDays[0].avgWeight;
+      for (let i = 1; i < weightDays.length; i++) {
+        const cur = weightDays[i];
+        if (cur.confirmed) {
+          rTrend = rTrend + EWMA_ALPHA * (cur.avgWeight - rTrend);
+          continue;
+        }
+
+        const threshold = Math.max(2.0, rTrend * 0.03);
+        if (Math.abs(cur.avgWeight - rTrend) > threshold) {
+          let confirmed = false;
+          for (let j = i + 1; j < weightDays.length; j++) {
+            const next = weightDays[j];
+            if (
+              (next.date.getTime() - cur.date.getTime()) / (24 * 3600 * 1000) >
+              3
+            )
+              break;
+            if (Math.abs(next.avgWeight - cur.avgWeight) < 1.0) {
+              confirmed = true;
+              next.confirmed = true;
+              break;
+            }
+          }
+          if (confirmed) {
+            cur.confirmed = true;
+            rTrend = rTrend + EWMA_ALPHA * (cur.avgWeight - rTrend);
+          } else {
+            cur.isOutlier = true;
+          }
+        } else {
+          rTrend = rTrend + EWMA_ALPHA * (cur.avgWeight - rTrend);
+        }
+      }
+    }
+
+    const validWeightDays = weightDays.filter((d) => !d.isOutlier);
+
+    const fallback = (
+      message: string,
+      status: ExpenditureStatus = 'STATIC',
+    ): AdaptiveExpenditureResult => ({
       method: 'STATIC_FALLBACK',
-      status: 'UPDATING',
+      status,
+      confidence: 'LOW',
+      bandKcal: 250,
+      todoList: [
+        validWeightDays.length < MIN_WEIGHT_DAYS
+          ? `Cần cân thêm ít nhất ${MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa`
+          : '',
+      ].filter(Boolean),
       estimatedExpenditure: staticTdee,
       staticTdee,
       windowDays: 0,
-      weightLogsCount: weightLogs.length,
+      weightLogsCount: validWeightDays.length,
       loggedDaysCount: 0,
       trendWeightStart: null,
       trendWeightEnd: null,
@@ -90,18 +168,19 @@ export class AdaptiveExpenditureService {
       message,
     });
 
-    if (weightLogs.length < MIN_WEIGHT_LOGS) {
+    if (validWeightDays.length < MIN_WEIGHT_DAYS) {
       return fallback(
-        `Cần cân thêm ít nhất ${MIN_WEIGHT_LOGS - weightLogs.length} lần nữa (trong ${LOOKBACK_DAYS} ngày gần đây) để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
+        `Cần cân thêm ít nhất ${MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa (trong ${LOOKBACK_DAYS} ngày gần đây) để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
+        'STATIC',
       );
     }
 
-    const firstLog = weightLogs[0];
-    const lastLog = weightLogs[weightLogs.length - 1];
+    const firstWeight = validWeightDays[0];
+    const lastWeight = validWeightDays[validWeightDays.length - 1];
     const windowDays = Math.max(
       1,
       Math.round(
-        (lastLog.date.getTime() - firstLog.date.getTime()) /
+        (lastWeight.date.getTime() - firstWeight.date.getTime()) /
           (1000 * 60 * 60 * 24),
       ),
     );
@@ -109,25 +188,23 @@ export class AdaptiveExpenditureService {
     if (windowDays < MIN_WINDOW_SPAN_DAYS) {
       return fallback(
         `Cần theo dõi cân nặng trải dài ít nhất ${MIN_WINDOW_SPAN_DAYS} ngày (hiện tại ${windowDays} ngày). Hiện đang dùng công thức TDEE tĩnh.`,
+        'STATIC',
       );
     }
 
-    // Trend Weight (EWMA alpha=0.1) — cùng công thức với WeightLogsService.getWeightTrend
-    let trend = firstLog.weightKg;
-    for (let i = 1; i < weightLogs.length; i++) {
-      trend = trend + EWMA_ALPHA * (weightLogs[i].weightKg - trend);
+    // Trend Weight (EWMA alpha=0.1) trên chuỗi ngày cân hợp lệ
+    let trend = firstWeight.avgWeight;
+    const residuals: number[] = [];
+    for (let i = 1; i < validWeightDays.length; i++) {
+      trend = trend + EWMA_ALPHA * (validWeightDays[i].avgWeight - trend);
+      residuals.push(Math.abs(validWeightDays[i].avgWeight - trend));
     }
-    const trendWeightStart = firstLog.weightKg;
+    const trendWeightStart = firstWeight.avgWeight;
     const trendWeightEnd = trend;
 
-    // Calo đã log trong khoảng ngày của các lần cân [lần cân đầu, lần cân cuối], theo ngày của user (BR-07.2)
-    const tzUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { timezone: true, targetCalories: true },
-    });
-    const tz = resolveTimezone(tzUser?.timezone);
-    const firstKey = dayKeyOf(firstLog.date, tz);
-    const lastKey = dayKeyOf(lastLog.date, tz);
+    // Calo đã log trong khoảng ngày của các lần cân, theo ngày của user
+    const firstKey = firstWeight.dateKey;
+    const lastKey = lastWeight.dateKey;
     const meals = await this.prisma.meal.findMany({
       where: {
         userId,
@@ -136,8 +213,7 @@ export class AdaptiveExpenditureService {
       select: { logDate: true, totalCalories: true },
     });
 
-    // BR-05.2: chỉ ngày ĐẦY ĐỦ mới được dùng để tính lượng ăn. Ngày ghi thiếu bữa bị coi là đầy đủ
-    // sẽ làm Expenditure bị đánh giá thấp rồi hạ mục tiêu ("log càng lười app càng bắt ăn ít").
+    // Chỉ ngày ĐẦY ĐỦ mới được dùng (BR-05.2)
     const flags = await loadDayFlags(this.prisma, userId, firstKey, lastKey);
     const targetForRule = tzUser?.targetCalories ?? staticTdee ?? 2000;
     const perDay = new Map<string, { meals: number; calories: number }>();
@@ -159,6 +235,7 @@ export class AdaptiveExpenditureService {
     if (loggedDaysCount < MIN_LOGGED_DAYS) {
       return fallback(
         `Cần log bữa ăn thêm ít nhất ${MIN_LOGGED_DAYS - loggedDaysCount} ngày nữa trong ${windowDays} ngày gần đây để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
+        'STATIC',
       );
     }
 
@@ -173,56 +250,108 @@ export class AdaptiveExpenditureService {
     let rawExpenditure =
       avgDailyCaloriesConsumed - (deltaWeightKg * KCAL_PER_KG) / windowDays;
 
-    // Sanity clamp quanh TDEE công thức tĩnh (nếu có) để tránh ước tính phi thực tế từ dữ liệu ngắn/nhiễu
+    // Sanity clamp quanh TDEE công thức tĩnh
     if (staticTdee) {
       const minBound = staticTdee * SANITY_MIN_RATIO;
       const maxBound = staticTdee * SANITY_MAX_RATIO;
       rawExpenditure = Math.min(Math.max(rawExpenditure, minBound), maxBound);
     }
 
-    // Hội tụ dần theo thời gian: trộn với ước tính của NGÀY TRƯỚC (BR-05.9), không phải giá trị vừa lưu
-    // ở lần tính trước đó, nên tính lại nhiều lần trong cùng một ngày luôn cho cùng một kết quả.
+    // Trộn dần với ước tính của ngày hôm trước (BR-05.9)
     const previousEstimate = await this.getPreviousDayEstimate(userId);
     const converged = previousEstimate
       ? previousEstimate +
         CONVERGENCE_ALPHA * (rawExpenditure - previousEstimate)
       : (rawExpenditure + (staticTdee ?? rawExpenditure)) / 2;
 
-    const status: ExpenditureStatus =
-      windowDays >= HOLDING_MIN_SPAN_DAYS &&
-      loggedDaysCount >= HOLDING_MIN_LOGGED_DAYS
-        ? 'HOLDING'
-        : 'UPDATING';
+    // Xác định trạng thái mới (BR-05.5: STATIC, LEARNING, STABLE, STALE)
+    const now = new Date();
+    const daysSinceLastWeight = Math.round(
+      (now.getTime() - lastWeight.date.getTime()) / (24 * 3600 * 1000),
+    );
+
+    let status: ExpenditureStatus;
+    if (daysSinceLastWeight > STALE_AFTER_DAYS) {
+      status = 'STALE';
+    } else if (
+      windowDays >= STABLE_MIN_SPAN_DAYS &&
+      loggedDaysCount >= STABLE_MIN_LOGGED_DAYS
+    ) {
+      status = 'STABLE';
+    } else {
+      status = 'LEARNING';
+    }
+
+    // Tính độ tin cậy và dải sai số (BR-05.6)
+    let confidence: ExpenditureConfidence = 'LOW';
+    let bandKcal = 250;
+
+    if (status === 'STABLE') {
+      const meanRes =
+        residuals.length > 0
+          ? residuals.reduce((a, b) => a + b, 0) / residuals.length
+          : 0;
+      const sd =
+        residuals.length > 0
+          ? Math.sqrt(
+              residuals.reduce((a, b) => a + Math.pow(b - meanRes, 2), 0) /
+                residuals.length,
+            )
+          : 0;
+
+      if (sd <= 0.8) {
+        confidence = 'HIGH';
+        bandKcal = 100;
+      } else {
+        confidence = 'MEDIUM';
+        bandKcal = 150;
+      }
+    }
+
+    const todoList: string[] = [];
+    if (loggedDaysCount < STABLE_MIN_LOGGED_DAYS) {
+      todoList.push(
+        `Thêm ${STABLE_MIN_LOGGED_DAYS - loggedDaysCount} ngày ghi đủ bữa ăn`,
+      );
+    }
+    if (windowDays < STABLE_MIN_SPAN_DAYS) {
+      todoList.push(
+        `Tiếp tục theo dõi cân nặng thêm ${STABLE_MIN_SPAN_DAYS - windowDays} ngày`,
+      );
+    }
+    if (daysSinceLastWeight >= 5) {
+      todoList.push('Hãy cân lại sớm để cập nhật mức tiêu hao');
+    }
 
     return {
       method: 'ADAPTIVE',
       status,
+      confidence,
+      bandKcal,
+      todoList,
       estimatedExpenditure: Math.round(converged),
       staticTdee,
       windowDays,
-      weightLogsCount: weightLogs.length,
+      weightLogsCount: validWeightDays.length,
       loggedDaysCount,
       trendWeightStart: Math.round(trendWeightStart * 10) / 10,
       trendWeightEnd: Math.round(trendWeightEnd * 10) / 10,
       avgDailyCaloriesConsumed: Math.round(avgDailyCaloriesConsumed),
       message:
-        status === 'HOLDING'
+        status === 'STABLE'
           ? 'Expenditure đã hội tụ ổn định dựa trên dữ liệu cân nặng và bữa ăn thực tế của bạn.'
-          : 'Đang thu thập thêm dữ liệu thực tế để tinh chỉnh Expenditure — ước tính sẽ chính xác dần theo thời gian.',
+          : status === 'STALE'
+            ? 'Cân nặng đã quá 10 ngày chưa được cập nhật. Hãy cân lại để làm mới ước tính.'
+            : 'Đang thu thập thêm dữ liệu thực tế để tinh chỉnh Expenditure — ước tính sẽ chính xác dần theo thời gian.',
     };
   }
 
-  /** 00:00 hôm nay theo múi giờ của máy chủ (máy chủ đặt Asia/Ho_Chi_Minh, xem BR-07.2). */
   private startOfToday(): Date {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }
 
-  /**
-   * Mốc "Expenditure cũ" cho hệ số trộn: giá trị của snapshot gần nhất TRƯỚC hôm nay.
-   * Chưa có snapshot nào thì trả null (lần đầu: trộn với TDEE tĩnh).
-   */
   private async getPreviousDayEstimate(userId: string): Promise<number | null> {
     const snapshot = await this.prisma.expenditureSnapshot.findFirst({
       where: {
@@ -236,39 +365,47 @@ export class AdaptiveExpenditureService {
   }
 
   /**
-   * Ghi điểm lịch sử Expenditure — CHỈ gọi ngay sau khi 1 sự kiện thật (log cân nặng, cập nhật hồ sơ,
-   * Weekly Check-in) đã PERSIST giá trị mới vào User, không gọi khi chỉ đọc màn hình.
-   * Tối đa một snapshot mỗi ngày: các lần trong cùng ngày ghi đè snapshot của ngày đó (BR-05.7).
+   * Ghi điểm lịch sử Expenditure với snapshotDate độc nhất mỗi ngày (BR-05.7).
    */
   async recordSnapshot(
     userId: string,
-    result: Pick<AdaptiveExpenditureResult, 'estimatedExpenditure' | 'staticTdee' | 'status'>,
+    result: Pick<
+      AdaptiveExpenditureResult,
+      'estimatedExpenditure' | 'staticTdee' | 'status'
+    >,
   ): Promise<void> {
+    const tzUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const tz = resolveTimezone(tzUser?.timezone);
+    const now = new Date();
+    const snapshotDate = keyToDate(dayKeyOf(now, tz));
+
     const data = {
       adaptiveExpenditure: result.estimatedExpenditure,
       staticTdee: result.staticTdee,
       status: result.status,
-      recordedAt: new Date(),
+      recordedAt: now,
     };
-    const today = await this.prisma.expenditureSnapshot.findFirst({
-      where: { userId, recordedAt: { gte: this.startOfToday() } },
-      orderBy: { recordedAt: 'desc' },
+
+    // Upsert 1 bản ghi duy nhất mỗi ngày log
+    await this.prisma.expenditureSnapshot.upsert({
+      where: {
+        userId_snapshotDate: {
+          userId,
+          snapshotDate,
+        },
+      },
+      update: data,
+      create: {
+        userId,
+        snapshotDate,
+        ...data,
+      },
     });
-    if (today) {
-      await this.prisma.expenditureSnapshot.update({
-        where: { id: today.id },
-        data,
-      });
-      return;
-    }
-    await this.prisma.expenditureSnapshot.create({ data: { userId, ...data } });
   }
 
-  /**
-   * Lịch sử Expenditure thích ứng vs TDEE tĩnh theo thời gian, mới nhất trước — dùng vẽ biểu đồ
-   * Nutrition Progress. Mỗi lần log cân nặng/cập nhật hồ sơ/check-in mới có 1 điểm, nên mật độ điểm
-   * phản ánh đúng tần suất người dùng thực sự tương tác, không phải lấy mẫu theo ngày cố định.
-   */
   async getHistory(userId: string, limit = 60) {
     const snapshots = await this.prisma.expenditureSnapshot.findMany({
       where: { userId },

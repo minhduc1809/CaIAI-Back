@@ -25,6 +25,7 @@ import { QuickAddMealDto } from './dto/quick-add-meal.dto';
 import { CopyMealDto } from './dto/copy-meal.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { MealType } from '@prisma/client';
 
 @ApiTags('Meals')
 @ApiBearerAuth()
@@ -32,6 +33,28 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @Controller('meals')
 export class MealsController {
   constructor(private readonly mealsService: MealsService) {}
+
+  @Get('frequent')
+  @ApiOperation({
+    summary:
+      'Lấy danh sách món quen (tối đa 20 món ăn thường dùng nhất trong 30 ngày gần đây - BR-07.7)',
+  })
+  @ApiQuery({
+    name: 'mealType',
+    required: false,
+    enum: MealType,
+    description: 'Lọc theo loại bữa ăn (BREAKFAST, LUNCH, DINNER, SNACK)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy danh sách món quen thành công',
+  })
+  async getFrequentFoods(
+    @CurrentUser('id') userId: string,
+    @Query('mealType') mealType?: MealType,
+  ) {
+    return this.mealsService.getFrequentFoods(userId, mealType);
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -102,7 +125,8 @@ export class MealsController {
     name: 'startDate',
     required: true,
     example: '2026-09-28',
-    description: 'Ngày đầu tuần (YYYY-MM-DD), trả về đúng 7 ngày kể từ ngày này',
+    description:
+      'Ngày đầu tuần (YYYY-MM-DD), trả về đúng 7 ngày kể từ ngày này',
   })
   @ApiResponse({ status: 200, description: 'Lấy tóm tắt tuần thành công' })
   async getWeekSummary(

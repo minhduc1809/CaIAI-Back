@@ -2,9 +2,20 @@ import { getPlanLimits } from '../billing/entitlement.util';
 import { PLAN_LIMITS } from '../billing/billing.constants';
 import { refundDaily, reserveDaily } from '../billing/daily-counter';
 import { QuotaExceededException } from '../common/errors/quota-exceeded.exception';
-import { dayBoundsForKey, resolveTimezone, todayKey } from '../common/utils/date-zone.util';
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { CreateCustomFoodDto } from './dto/create-custom-food.dto';
+import {
+  dayBoundsForKey,
+  resolveTimezone,
+  todayKey,
+} from '../common/utils/date-zone.util';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CreateCustomFoodDto,
+  UpdateCustomFoodDto,
+} from './dto/create-custom-food.dto';
 import { Gender, GoalType, WorkoutLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -225,6 +236,28 @@ export class RecommendationsService {
   }
 
   /**
+   * Kiểm tra Atwater (BR-08.4): cảnh báo mềm nếu calo lệch > 15% so với 4P + 4C + 9F
+   */
+  private checkAtwater(
+    calories: number,
+    protein: number,
+    carb: number,
+    fat: number,
+  ): string[] {
+    const warnings: string[] = [];
+    const expected = 4 * protein + 4 * carb + 9 * fat;
+    if (calories > 0 && expected > 0) {
+      const diffPct = Math.abs(calories - expected) / calories;
+      if (diffPct > 0.15) {
+        warnings.push(
+          `Số liệu calo (${Math.round(calories)} kcal) lệch hơn 15% so với tổng macro (${Math.round(expected)} kcal: 4·P + 4·C + 9·F). Vui lòng kiểm tra lại.`,
+        );
+      }
+    }
+    return warnings;
+  }
+
+  /**
    * Tạo món ăn tự tạo riêng của người dùng (Custom Food) — hỗ trợ 2 chế độ:
    * đơn giản (nhập thẳng tổng calo/macro) hoặc Recipe nhiều nguyên liệu
    * (calo/macro tổng tự tính bằng tổng các `ingredients`, không cần nhập tay).
@@ -255,6 +288,24 @@ export class RecommendationsService {
           fat: dto.fat || 0,
         };
 
+    if (
+      totals.calories > 5000 ||
+      totals.protein > 500 ||
+      totals.carb > 500 ||
+      totals.fat > 500
+    ) {
+      throw new BadRequestException(
+        'Số liệu dinh dưỡng vượt ngưỡng an toàn (tối đa 5000 kcal, 500g protein/carb/fat)',
+      );
+    }
+
+    const warnings = this.checkAtwater(
+      totals.calories,
+      totals.protein,
+      totals.carb,
+      totals.fat,
+    );
+
     const food = await this.prisma.customFood.create({
       data: {
         userId,
@@ -273,6 +324,91 @@ export class RecommendationsService {
     return {
       message: 'Tạo món ăn riêng thành công',
       data: food,
+      warnings,
+    };
+  }
+
+  /**
+   * Cập nhật món ăn riêng (BR-08.4)
+   */
+  async updateCustomFood(userId: string, id: string, dto: UpdateCustomFoodDto) {
+    const existing = await this.prisma.customFood.findUnique({
+      where: { id },
+    });
+
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Không tìm thấy món ăn');
+    }
+
+    const hasIngredients = dto.ingredients && dto.ingredients.length > 0;
+    const totals = hasIngredients
+      ? dto.ingredients!.reduce(
+          (acc, ing) => ({
+            calories: acc.calories + (ing.calories || 0),
+            protein: acc.protein + (ing.protein || 0),
+            carb: acc.carb + (ing.carb || 0),
+            fat: acc.fat + (ing.fat || 0),
+          }),
+          { calories: 0, protein: 0, carb: 0, fat: 0 },
+        )
+      : {
+          calories:
+            dto.calories !== undefined ? dto.calories : existing.calories,
+          protein: dto.protein !== undefined ? dto.protein : existing.protein,
+          carb: dto.carb !== undefined ? dto.carb : existing.carb,
+          fat: dto.fat !== undefined ? dto.fat : existing.fat,
+        };
+
+    if (
+      totals.calories > 5000 ||
+      totals.protein > 500 ||
+      totals.carb > 500 ||
+      totals.fat > 500
+    ) {
+      throw new BadRequestException(
+        'Số liệu dinh dưỡng vượt ngưỡng an toàn (tối đa 5000 kcal, 500g protein/carb/fat)',
+      );
+    }
+
+    const warnings = this.checkAtwater(
+      totals.calories,
+      totals.protein,
+      totals.carb,
+      totals.fat,
+    );
+
+    const updated = await this.prisma.customFood.update({
+      where: { id },
+      data: {
+        name: dto.name !== undefined ? dto.name : existing.name,
+        servingSize:
+          dto.servingSize !== undefined
+            ? dto.servingSize
+            : existing.servingSize,
+        servingAmount:
+          dto.servingAmount !== undefined
+            ? dto.servingAmount
+            : existing.servingAmount,
+        servingUnit:
+          dto.servingUnit !== undefined
+            ? dto.servingUnit
+            : existing.servingUnit,
+        calories: totals.calories,
+        protein: totals.protein,
+        carb: totals.carb,
+        fat: totals.fat,
+        ingredients: hasIngredients
+          ? (dto.ingredients as any)
+          : dto.ingredients === null
+            ? null
+            : existing.ingredients,
+      },
+    });
+
+    return {
+      message: 'Cập nhật món ăn riêng thành công',
+      data: updated,
+      warnings,
     };
   }
 
@@ -300,9 +436,7 @@ export class RecommendationsService {
     });
 
     if (!food || food.userId !== userId) {
-      return {
-        message: 'Không tìm thấy món ăn',
-      };
+      throw new NotFoundException('Không tìm thấy món ăn');
     }
 
     await this.prisma.customFood.delete({ where: { id } });
@@ -325,7 +459,13 @@ export class RecommendationsService {
     });
     const tz = resolveTimezone(user?.timezone);
     const date = todayKey(tz);
-    const ok = await reserveDaily(this.prisma, userId, date, 'barcodeLookups', limits.barcodePerDay);
+    const ok = await reserveDaily(
+      this.prisma,
+      userId,
+      date,
+      'barcodeLookups',
+      limits.barcodePerDay,
+    );
     if (!ok) {
       throw new QuotaExceededException({
         feature: 'BARCODE',

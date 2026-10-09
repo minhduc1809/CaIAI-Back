@@ -12,6 +12,7 @@ import { OAuth2Client } from 'google-auth-library';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { BillingService } from '../billing/billing.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -20,22 +21,24 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly googleClient: OAuth2Client;
+  private readonly usedReauthTokens = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly billingService?: BillingService,
   ) {
-    this.googleClient = new OAuth2Client(
-      this.configService.get<string>('GOOGLE_CLIENT_ID'),
-    );
+    const googleClientId =
+      this.configService.get<string>('GOOGLE_CLIENT_ID') || 'test-client-id';
+    this.googleClient = new OAuth2Client(googleClientId);
   }
 
   /**
    * Đăng ký tài khoản người dùng mới (bằng username)
    */
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: RegisterDto, deviceName?: string) {
     const { username, email, password, name } = registerDto;
     const cleanUsername = username.trim().toLowerCase();
 
@@ -75,8 +78,8 @@ export class AuthService {
     // 5. Sinh cặp tokens
     const tokens = await this.generateTokens(user.id, user.username, user.role);
 
-    // 6. Lưu hashed refresh token vào DB
-    await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+    // 6. Lưu session và hashed refresh token vào DB (BR-01.3)
+    await this.recordSession(user.id, tokens.refreshToken, deviceName);
 
     // 7. Nếu có email, gửi mã xác thực (không chặn luồng đăng ký nếu gửi lỗi)
     if (user.email) {
@@ -177,7 +180,7 @@ export class AuthService {
   /**
    * Đăng nhập/Đăng ký bằng Google Sign-In (idToken xác thực qua Credential Manager phía Android)
    */
-  async loginWithGoogle(idToken: string) {
+  async loginWithGoogle(idToken: string, deviceName?: string) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (!clientId) {
       throw new BadRequestException('Server chưa cấu hình GOOGLE_CLIENT_ID');
@@ -276,7 +279,7 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user.id, user.username, user.role);
-    await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+    await this.recordSession(user.id, tokens.refreshToken, deviceName);
 
     return {
       message: 'Đăng nhập bằng Google thành công',
@@ -321,7 +324,7 @@ export class AuthService {
   /**
    * Đăng nhập hệ thống bằng tên đăng nhập (username) hoặc email
    */
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, deviceName?: string) {
     const { username, password } = loginDto;
     const identifier = username.trim().toLowerCase();
 
@@ -361,8 +364,8 @@ export class AuthService {
     // 4. Sinh cặp tokens
     const tokens = await this.generateTokens(user.id, user.username, user.role);
 
-    // 5. Cập nhật hashed refresh token
-    await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+    // 5. Cập nhật hashed refresh token và tạo RefreshSession (BR-01.3)
+    await this.recordSession(user.id, tokens.refreshToken, deviceName);
 
     return {
       message: 'Đăng nhập thành công',
@@ -380,9 +383,9 @@ export class AuthService {
   }
 
   /**
-   * Cấp phát lại Access Token từ Refresh Token (Token Rotation)
+   * Cấp phát lại Access Token từ Refresh Token (Token Rotation & Multi-session BR-01.3)
    */
-  async refreshTokens(refreshTokenDto: RefreshTokenDto) {
+  async refreshTokens(refreshTokenDto: RefreshTokenDto, deviceName?: string) {
     const { refreshToken } = refreshTokenDto;
 
     // 1. Verify Refresh Token
@@ -393,7 +396,7 @@ export class AuthService {
           this.configService.get<string>('JWT_REFRESH_SECRET') ||
           'default_refresh_secret',
       });
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException(
         'Refresh token không hợp lệ hoặc đã hết hạn',
       );
@@ -404,19 +407,59 @@ export class AuthService {
       where: { id: payload.sub },
     });
 
-    if (!user || !user.refreshTokenHash || !user.isActive) {
+    if (!user || !user.isActive) {
       throw new UnauthorizedException(
         'Không thể cấp mới token. Vui lòng đăng nhập lại.',
       );
     }
 
-    // 3. Đối chiếu refreshToken gửi lên với hash lưu trong DB
-    const isTokenMatch = await bcrypt.compare(
-      refreshToken,
-      user.refreshTokenHash,
-    );
-    if (!isTokenMatch) {
-      throw new UnauthorizedException('Refresh token không hợp lệ');
+    // 3. Tìm trong các RefreshSession của user (BR-01.3)
+    const sessions = await this.prisma.refreshSession.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    let matchedSession: (typeof sessions)[0] | null = null;
+    for (const s of sessions) {
+      if (await bcrypt.compare(refreshToken, s.tokenHash)) {
+        matchedSession = s;
+        break;
+      }
+    }
+
+    if (!matchedSession) {
+      // Fallback kiểm tra legacy hash nếu có
+      const legacyMatch = user.refreshTokenHash
+        ? await bcrypt.compare(refreshToken, user.refreshTokenHash)
+        : false;
+      if (!legacyMatch) {
+        throw new UnauthorizedException('Refresh token không hợp lệ');
+      }
+    }
+
+    // Phát hiện token đã bị thay thế (Token Reuse / Token Theft)
+    if (
+      matchedSession &&
+      (matchedSession.replacedBy || matchedSession.revokedAt)
+    ) {
+      const elapsed = Date.now() - matchedSession.lastUsedAt.getTime();
+      // Dung sai 10 giây cho trường hợp gửi trùng do mạng chập chờn
+      if (elapsed > 10_000) {
+        // Thu hồi toàn bộ phiên của user và ngắt kết nối ngay lập tức
+        await this.prisma.refreshSession.updateMany({
+          where: { userId: user.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { refreshTokenHash: null },
+        });
+        throw new UnauthorizedException({
+          code: 'SESSION_REVOKED',
+          message: 'Phiên làm việc đã bị thu hồi do phát hiện bất thường',
+        });
+      }
     }
 
     // 4. Sinh bộ tokens mới
@@ -425,7 +468,36 @@ export class AuthService {
       user.username,
       user.role,
     );
-    await this.updateRefreshTokenHash(user.id, newTokens.refreshToken);
+
+    const salt = await bcrypt.genSalt(10);
+    const newHash = await bcrypt.hash(newTokens.refreshToken, salt);
+    const now = new Date();
+
+    // Tạo phiên mới và liên kết replacedBy
+    const newSession = await this.prisma.refreshSession.create({
+      data: {
+        userId: user.id,
+        tokenHash: newHash,
+        deviceName:
+          matchedSession?.deviceName || deviceName || 'Thiết bị không xác định',
+      },
+    });
+
+    if (matchedSession && !matchedSession.replacedBy) {
+      await this.prisma.refreshSession.update({
+        where: { id: matchedSession.id },
+        data: {
+          replacedBy: newSession.id,
+          revokedAt: now,
+          lastUsedAt: now,
+        },
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { refreshTokenHash: newHash },
+    });
 
     return {
       message: 'Làm mới token thành công',
@@ -434,9 +506,35 @@ export class AuthService {
   }
 
   /**
-   * Đăng xuất (xóa refreshToken trong DB)
+   * Đăng xuất phiên hiện tại
    */
-  async logout(userId: string) {
+  async logout(userId: string, refreshToken?: string) {
+    if (refreshToken) {
+      const sessions = await this.prisma.refreshSession.findMany({
+        where: { userId, revokedAt: null },
+      });
+      for (const s of sessions) {
+        if (await bcrypt.compare(refreshToken, s.tokenHash)) {
+          await this.prisma.refreshSession.update({
+            where: { id: s.id },
+            data: { revokedAt: new Date() },
+          });
+          break;
+        }
+      }
+    } else {
+      const latest = await this.prisma.refreshSession.findFirst({
+        where: { userId, revokedAt: null },
+        orderBy: { lastUsedAt: 'desc' },
+      });
+      if (latest) {
+        await this.prisma.refreshSession.update({
+          where: { id: latest.id },
+          data: { revokedAt: new Date() },
+        });
+      }
+    }
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshTokenHash: null },
@@ -445,6 +543,58 @@ export class AuthService {
     return {
       message: 'Đăng xuất thành công',
     };
+  }
+
+  /**
+   * Đăng xuất khỏi toàn bộ thiết bị (BR-01.3)
+   */
+  async logoutAll(userId: string) {
+    await this.prisma.refreshSession.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshTokenHash: null },
+    });
+
+    return {
+      message: 'Đã đăng xuất khỏi tất cả thiết bị',
+    };
+  }
+
+  /**
+   * Danh sách thiết bị đăng nhập của người dùng (BR-01.3)
+   */
+  async getSessions(userId: string) {
+    const sessions = await this.prisma.refreshSession.findMany({
+      where: { userId, revokedAt: null },
+      orderBy: { lastUsedAt: 'desc' },
+      select: {
+        id: true,
+        deviceName: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    });
+    return sessions;
+  }
+
+  /**
+   * Thu hồi phiên đăng nhập cụ thể theo ID (BR-01.3)
+   */
+  async revokeSession(userId: string, sessionId: string) {
+    const session = await this.prisma.refreshSession.findFirst({
+      where: { id: sessionId, userId },
+    });
+    if (!session) {
+      throw new BadRequestException('Phiên đăng nhập không tồn tại');
+    }
+    await this.prisma.refreshSession.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
+    });
+    return { message: 'Đã thu hồi phiên đăng nhập thành công' };
   }
 
   /**
@@ -488,6 +638,9 @@ export class AuthService {
       },
     });
 
+    // Thu hồi toàn bộ phiên đăng nhập khi đổi mật khẩu (BR-01.3)
+    await this.logoutAll(userId);
+
     return {
       message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
     };
@@ -495,8 +648,6 @@ export class AuthService {
 
   /**
    * Yêu cầu đặt lại mật khẩu — gửi mã OTP tới email nếu tài khoản tồn tại.
-   * Luôn trả về cùng 1 thông báo dù email có tồn tại hay không, tránh lộ thông tin
-   * tài khoản nào đã đăng ký (user enumeration).
    */
   async forgotPassword(email: string) {
     const cleanEmail = email.trim().toLowerCase();
@@ -510,7 +661,6 @@ export class AuthService {
     };
 
     if (!user || !user.password) {
-      // Không tiết lộ tài khoản không tồn tại, hoặc tài khoản chỉ đăng nhập bằng Google (không có mật khẩu để đặt lại)
       return genericResponse;
     }
 
@@ -569,15 +719,102 @@ export class AuthService {
       },
     });
 
+    // Thu hồi tất cả phiên khi reset mật khẩu (BR-01.3)
+    await this.logoutAll(user.id);
+
     return {
       message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
     };
   }
 
   /**
-   * Xóa vĩnh viễn tài khoản người dùng
+   * Xác thực lại bằng mật khẩu trước thao tác nhạy cảm (BR-01.4)
+   * Trả về reauthToken có hiệu lực 5 phút
    */
-  async deleteAccount(userId: string) {
+  async reauth(userId: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+    if (!user.password) {
+      throw new BadRequestException(
+        'Tài khoản đăng nhập bằng Google. Vui lòng xác thực lại bằng Google.',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Mật khẩu không chính xác');
+    }
+
+    const token = this.jwtService.sign(
+      { sub: user.id, type: 'REAUTH' },
+      {
+        secret:
+          this.configService.get<string>('JWT_ACCESS_SECRET') ||
+          'default_access_secret',
+        expiresIn: '5m',
+      },
+    );
+
+    return {
+      reauthToken: token,
+      expiresInSec: 300,
+    };
+  }
+
+  /**
+   * Xác thực lại bằng Google idToken trước thao tác nhạy cảm (BR-01.4)
+   */
+  async reauthGoogle(userId: string, idToken: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy người dùng');
+    }
+
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    let payload: any;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException(
+        'idToken Google không hợp lệ hoặc đã hết hạn',
+      );
+    }
+
+    if (
+      payload?.email_verified !== true ||
+      payload?.email?.toLowerCase() !== user.email?.toLowerCase()
+    ) {
+      throw new UnauthorizedException('Xác thực tài khoản Google không khớp');
+    }
+
+    const token = this.jwtService.sign(
+      { sub: user.id, type: 'REAUTH' },
+      {
+        secret:
+          this.configService.get<string>('JWT_ACCESS_SECRET') ||
+          'default_access_secret',
+        expiresIn: '5m',
+      },
+    );
+
+    return {
+      reauthToken: token,
+      expiresInSec: 300,
+    };
+  }
+
+  /**
+   * Xóa vĩnh viễn tài khoản người dùng và toàn bộ dữ liệu (BR-01.4)
+   * Yêu cầu reauthToken còn hiệu lực và dùng 1 lần.
+   * Dữ liệu liên quan bị xoá dây chuyền (Cascade); BillingEvent được ẩn danh (userId = null).
+   */
+  async deleteAccount(userId: string, reauthToken?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -586,12 +823,98 @@ export class AuthService {
       throw new UnauthorizedException('Không tìm thấy người dùng');
     }
 
+    if (!reauthToken) {
+      throw new UnauthorizedException({
+        code: 'REAUTH_REQUIRED',
+        message: 'Cần xác thực lại mật khẩu/Google trước khi xóa tài khoản.',
+      });
+    }
+
+    if (this.usedReauthTokens.has(reauthToken)) {
+      throw new UnauthorizedException({
+        code: 'REAUTH_REQUIRED',
+        message: 'Mã xác thực lại đã được sử dụng.',
+      });
+    }
+
+    try {
+      const payload = this.jwtService.verify(reauthToken, {
+        secret:
+          this.configService.get<string>('JWT_ACCESS_SECRET') ||
+          'default_access_secret',
+      });
+      if (payload?.type !== 'REAUTH' || payload?.sub !== userId) {
+        throw new UnauthorizedException({
+          code: 'REAUTH_REQUIRED',
+          message: 'Mã xác thực lại không hợp lệ.',
+        });
+      }
+    } catch {
+      throw new UnauthorizedException({
+        code: 'REAUTH_REQUIRED',
+        message: 'Mã xác thực lại không hợp lệ hoặc đã hết hạn (quá 5 phút).',
+      });
+    }
+
+    this.usedReauthTokens.add(reauthToken);
+
+    // 1. Ẩn danh BillingEvent (BR-01.4: giữ dữ liệu thanh toán ẩn danh theo quy định kế toán)
+    await this.prisma.billingEvent.updateMany({
+      where: { userId },
+      data: { userId: null },
+    });
+
+    // 2. Huỷ các đơn QR đang PENDING (nếu có)
+    await this.prisma.paymentOrder.updateMany({
+      where: { userId, status: 'PENDING' },
+      data: { status: 'CANCELED' },
+    });
+
+    // 3. Xóa user — schema quan hệ onDelete: Cascade sẽ tự xoá sạch toàn bộ dữ liệu con
     await this.prisma.user.delete({
       where: { id: userId },
     });
 
+    // 4. Xóa cache quyền hạn
+    this.billingService?.invalidate(userId);
+
     return {
       message: 'Tài khoản và toàn bộ dữ liệu liên quan đã được xóa vĩnh viễn',
+    };
+  }
+
+  /**
+   * Chính sách Quyền riêng tư (BR-18)
+   */
+  getPrivacyPolicy() {
+    return {
+      title: 'Chính sách Quyền riêng tư NutriWise',
+      version: '1.0.0',
+      lastUpdated: '2026-10-09',
+      summary:
+        'NutriWise cam kết bảo vệ dữ liệu sức khỏe và thông tin cá nhân của bạn.',
+      sections: [
+        {
+          heading: '1. Dữ liệu thu thập',
+          content:
+            'NutriWise thu thập các thông tin thể chất (tuổi, giới tính, chiều cao, cân nặng, tỷ lệ mỡ), nhật ký ăn uống và hình ảnh món ăn, dữ liệu tập luyện, nhật ký nước và giấc ngủ nhằm phục vụ mục đích tính toán dinh dưỡng.',
+        },
+        {
+          heading: '2. Mục đích sử dụng',
+          content:
+            'Dữ liệu được dùng để tính toán năng lượng tiêu hao thích ứng (Adaptive Expenditure Engine), gợi ý thực đơn an toàn và theo dõi tiến độ sức khỏe.',
+        },
+        {
+          heading: '3. Chia sẻ dữ liệu với bên thứ ba',
+          content:
+            'Hình ảnh món ăn và câu hỏi dinh dưỡng được xử lý bảo mật qua Google Gemini AI (không kèm danh tính cá nhân). Thanh toán Premium được xử lý qua Google Play Store hoặc cổng ngân hàng VietQR/SePay.',
+        },
+        {
+          heading: '4. Quyền của người dùng',
+          content:
+            'Bạn có quyền xem, chỉnh sửa thông tin, xuất toàn bộ dữ liệu cá nhân ra file ZIP (POST /api/v1/me/export) hoặc xóa vĩnh viễn tài khoản bất kỳ lúc nào (DELETE /api/v1/auth/me).',
+        },
+      ],
     };
   }
 
@@ -625,15 +948,52 @@ export class AuthService {
   }
 
   /**
-   * Lưu hash của Refresh Token vào DB
+   * Lưu phiên đăng nhập RefreshSession và hash vào DB (BR-01.3: tối đa 5 phiên)
    */
-  private async updateRefreshTokenHash(userId: string, refreshToken: string) {
+  private async recordSession(
+    userId: string,
+    refreshToken: string,
+    deviceName?: string,
+  ) {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(refreshToken, salt);
 
+    // Cập nhật legacy hash
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshTokenHash: hash },
     });
+
+    // Tạo bản ghi RefreshSession mới nếu model tồn tại
+    if (this.prisma.refreshSession) {
+      await this.prisma.refreshSession.create({
+        data: {
+          userId,
+          tokenHash: hash,
+          deviceName: deviceName || 'Thiết bị không xác định',
+        },
+      });
+
+      // Giới hạn tối đa 5 phiên hoạt động: thu hồi phiên cũ nhất nếu >= 6
+      const activeSessions = await this.prisma.refreshSession.findMany({
+        where: { userId, revokedAt: null },
+        orderBy: { lastUsedAt: 'desc' },
+      });
+
+      if (activeSessions.length > 5) {
+        const excess = activeSessions.slice(5);
+        await this.prisma.refreshSession.updateMany({
+          where: { id: { in: excess.map((s) => s.id) } },
+          data: { revokedAt: new Date() },
+        });
+      }
+    }
+  }
+
+  /**
+   * Lưu hash của Refresh Token vào DB (tương thích ngược)
+   */
+  private async updateRefreshTokenHash(userId: string, refreshToken: string) {
+    await this.recordSession(userId, refreshToken);
   }
 }

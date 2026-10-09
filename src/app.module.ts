@@ -19,6 +19,7 @@ import { DataExportModule } from './data-export/data-export.module';
 import { MealPlanModule } from './meal-plan/meal-plan.module';
 import { PaymentsModule } from './payments/payments.module';
 import { BillingModule } from './billing/billing.module';
+import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -30,6 +31,7 @@ import { AppService } from './app.service';
     }),
     PrismaModule,
     AuthModule,
+    AdminModule,
     UsersModule,
     RecommendationsModule,
     MealsModule,
