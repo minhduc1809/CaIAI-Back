@@ -1,20 +1,33 @@
+import { ProfileIncompleteException } from '../common/errors/profile-incomplete.exception';
+import { getPlanLimits, isFreeTierLimited } from '../billing/entitlement.util';
+import { PLAN_LIMITS } from '../billing/billing.constants';
+import { refundDaily, reserveDaily } from '../billing/daily-counter';
+import { QuotaExceededException } from '../common/errors/quota-exceeded.exception';
 import {
   Injectable,
   Logger,
   HttpException,
   HttpStatus,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { MealsService } from '../meals/meals.service';
+import {
+  getDayBounds,
+  keyToDate,
+  resolveTimezone as resolveZone,
+  todayKey,
+} from '../common/utils/date-zone.util';
+import {
+  SafeFood,
+  detectTextViolations,
+  getAllowedFoods,
+} from '../recommendations/food-safety';
 import { FoodRecognitionResultDto } from './dto/food-recognition-response.dto';
 import { AiQuotaResponseDto } from './dto/ai-quota-response.dto';
-import {
-  PurchaseAiQuotaDto,
-  AiScanPackageDto,
-} from './dto/purchase-ai-quota.dto';
 import {
   ChatQuotaInfoDto,
   ChatResponseDto,
@@ -22,110 +35,26 @@ import {
   ChatMessageDto,
 } from './dto/chat-history-response.dto';
 import {
-  PurchaseChatQuotaDto,
-  ChatPlanPackageId,
-} from './dto/purchase-chat-quota.dto';
-import {
   SuggestMealResponseDto,
   SuggestedMealItemDto,
   NutritionGapDto,
 } from './dto/suggest-meal-response.dto';
 import { ScanMenuResponseDto, MenuItemDto } from './dto/menu-scan.dto';
 
-export interface ChatPackageInfo {
-  id: string;
-  name: string;
-  credits: number;
-  priceVnd: number;
-  description: string;
-  isPopular?: boolean;
-  bestValue?: boolean;
+interface ChatReservation {
+  date: string;
+  /** true: tin nhắn đã được đếm lúc giữ chỗ (Free), không cộng lại khi xong. */
+  countedMessage: boolean;
+}
+
+interface PhotoReservation {
+  usedQuotaType: 'FREE' | 'PURCHASED';
+  /** Ngày giữ chỗ (YYYY-MM-DD theo múi giờ user) — dùng khi hoàn lượt. */
+  date: string;
 }
 
 @Injectable()
 export class AiService {
-  /**
-   * Giới hạn số lượt nhận diện ảnh món ăn miễn phí mỗi ngày (5 ảnh/ngày)
-   */
-  public static readonly DAILY_FREE_LIMIT = 5;
-
-  /**
-   * Giới hạn số token trò chuyện với AI Coach miễn phí mỗi ngày (50,000 tokens/ngày)
-   */
-  public static readonly DAILY_CHAT_TOKEN_LIMIT = 50000;
-
-  /**
-   * Danh mục các gói mua thêm lượt chụp ảnh AI
-   */
-  public static readonly SCAN_PACKAGES: AiScanPackageDto[] = [
-    {
-      id: 'PACKAGE_10',
-      name: 'Gói Khởi Động',
-      credits: 10,
-      priceVnd: 29000,
-      description:
-        '10 lượt chụp ảnh AI nhận diện món ăn (không hết hạn, dùng sau khi hết 5 lượt free/ngày)',
-    },
-    {
-      id: 'PACKAGE_20',
-      name: 'Gói Tiêu Chuẩn',
-      credits: 20,
-      priceVnd: 49000,
-      description:
-        '20 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 15%, không giới hạn thời gian)',
-      isPopular: true,
-    },
-    {
-      id: 'PACKAGE_50',
-      name: 'Gói Nâng Cao',
-      credits: 50,
-      priceVnd: 99000,
-      description:
-        '50 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 30%, không giới hạn thời gian)',
-    },
-    {
-      id: 'PACKAGE_100',
-      name: 'Gói Siêu Cấp',
-      credits: 100,
-      priceVnd: 179000,
-      description:
-        '100 lượt chụp ảnh AI nhận diện món ăn (tiết kiệm 40%, giá tốt nhất)',
-      bestValue: true,
-    },
-  ];
-
-  /**
-   * Danh mục 3 bản nâng cấp AI Coach (Plus, Pro, Max)
-   */
-  public static readonly CHAT_PLANS: ChatPackageInfo[] = [
-    {
-      id: 'PLUS',
-      name: 'Bản Plus',
-      credits: 200000,
-      priceVnd: 29000,
-      description:
-        'Mở rộng trò chuyện với AI Coach, phân tích sâu thực đơn & chế độ ăn mỗi ngày',
-    },
-    {
-      id: 'PRO',
-      name: 'Bản Pro',
-      credits: 500000,
-      priceVnd: 59000,
-      description:
-        'Trò chuyện không giới hạn, phân tích dinh dưỡng cá nhân hóa chuyên sâu suốt tháng',
-      isPopular: true,
-    },
-    {
-      id: 'MAX',
-      name: 'Bản Max',
-      credits: 1000000,
-      priceVnd: 99000,
-      description:
-        'Bản cao cấp nhất - Huấn luyện viên AI toàn diện đồng hành mọi lúc mọi nơi',
-      bestValue: true,
-    },
-  ];
-
   private readonly logger = new Logger(AiService.name);
   private genAI: GoogleGenerativeAI | null = null;
   private readonly modelName: string;
@@ -175,63 +104,21 @@ export class AiService {
   // PHẦN 1: QUẢN LÝ QUOTA & GÓI CHỤP ẢNH (FOOD RECOGNITION)
   // =========================================================================
 
-  getAvailablePackages(): AiScanPackageDto[] {
-    return AiService.SCAN_PACKAGES;
-  }
-
-  async purchaseScanCredits(
-    userId: string,
-    dto: PurchaseAiQuotaDto,
-  ): Promise<AiQuotaResponseDto> {
-    let creditsToAdd = 0;
-    const packageId = dto.packageId?.trim();
-    if (packageId) {
-      const pkg = AiService.SCAN_PACKAGES.find((p) => p.id === packageId);
-      if (!pkg) {
-        throw new BadRequestException(
-          `Gói '${packageId}' không tồn tại. Vui lòng chọn: ${AiService.SCAN_PACKAGES.map((p) => p.id).join(', ')}`,
-        );
-      }
-      creditsToAdd = pkg.credits;
-    } else if (dto.customCredits && dto.customCredits > 0) {
-      creditsToAdd = dto.customCredits;
-    } else {
-      throw new BadRequestException(
-        'Vui lòng cung cấp packageId hoặc customCredits hợp lệ.',
-      );
-    }
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        purchasedAiQuota: { increment: creditsToAdd },
-      },
-    });
-
-    this.logger.log(
-      `User ${userId} đã mua thành công ${creditsToAdd} lượt chụp ảnh AI`,
-    );
-    return this.getDailyPhotoQuota(userId);
-  }
-
   async getDailyPhotoQuota(userId: string): Promise<AiQuotaResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { timezone: true, purchasedAiQuota: true },
     });
 
-    const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
-    const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
+    const timezone = this.resolveTimezone(user?.timezone);
+    const { resetsAt } = this.getTimezoneDayBounds(timezone);
 
-    const freeUsedToday = await this.prisma.apiUsageLog.count({
-      where: {
-        userId,
-        feature: 'food_recognition',
-        createdAt: { gte: startOfDay },
-      },
+    const counter = await this.prisma.usageCounter.findUnique({
+      where: { userId_date: { userId, date: this.getDateKey(timezone) } },
     });
+    const freeUsedToday = counter?.aiPhoto ?? 0;
 
-    const dailyFreeLimit = AiService.DAILY_FREE_LIMIT;
+    const dailyFreeLimit = (await getPlanLimits(this.prisma, userId)).aiPhotoPerDay;
     const freeRemaining = Math.max(0, dailyFreeLimit - freeUsedToday);
     const purchasedCredits = Math.max(0, user?.purchasedAiQuota ?? 0);
     const totalRemaining = freeRemaining + purchasedCredits;
@@ -247,176 +134,204 @@ export class AiService {
     };
   }
 
-  private async checkAndDetermineQuotaType(userId: string): Promise<{
-    quota: AiQuotaResponseDto;
-    usedQuotaType: 'FREE' | 'PURCHASED';
-  }> {
-    const quota = await this.getDailyPhotoQuota(userId);
+  /**
+   * BR-11.4: giữ chỗ 1 lượt chụp ảnh bằng MỘT câu lệnh UPDATE có điều kiện (`aiPhoto < limit`),
+   * nên hai request đồng thời khi chỉ còn 1 lượt thì đúng 1 request giữ được chỗ, request kia nhận 429.
+   * Ưu tiên lượt miễn phí trong ngày, hết thì trừ lượt mua thêm (cũng bằng UPDATE có điều kiện).
+   * Nếu xử lý lỗi sau đó phải gọi refundPhotoQuota() để hoàn lượt.
+   */
+  private async reservePhotoQuota(userId: string): Promise<PhotoReservation> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const date = this.getDateKey(this.resolveTimezone(user?.timezone));
 
-    if (quota.totalRemaining <= 0) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message:
-            'Bạn đã sử dụng hết 5 lượt chụp ảnh miễn phí hôm nay và không còn lượt mua thêm. Hãy mua thêm gói lượt chụp hoặc quay lại vào ngày mai nhé!',
-          error: 'Too Many Requests',
-          dailyFreeLimit: quota.dailyFreeLimit,
-          freeUsedToday: quota.freeUsedToday,
-          freeRemaining: 0,
-          purchasedCredits: 0,
-          totalRemaining: 0,
-          resetsAt: quota.resetsAt,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    await this.ensureUsageCounterRow(userId, date);
+    const photoLimit = (await getPlanLimits(this.prisma, userId)).aiPhotoPerDay;
+
+    const free = await this.prisma.usageCounter.updateMany({
+      where: { userId, date, aiPhoto: { lt: photoLimit } },
+      data: { aiPhoto: { increment: 1 } },
+    });
+    if (free.count === 1) {
+      return { usedQuotaType: 'FREE', date };
     }
 
-    const usedQuotaType: 'FREE' | 'PURCHASED' =
-      quota.freeRemaining > 0 ? 'FREE' : 'PURCHASED';
-    return { quota, usedQuotaType };
+    const paid = await this.prisma.user.updateMany({
+      where: { id: userId, purchasedAiQuota: { gt: 0 } },
+      data: { purchasedAiQuota: { decrement: 1 } },
+    });
+    if (paid.count === 1) {
+      return { usedQuotaType: 'PURCHASED', date };
+    }
+
+    const quota = await this.getDailyPhotoQuota(userId);
+    throw new QuotaExceededException({
+      feature: 'AI_FOOD_SCAN',
+      limit: quota.dailyFreeLimit,
+      used: quota.freeUsedToday,
+      period: 'day',
+      resetsAt: quota.resetsAt,
+      premiumBenefit: `Mở Premium để có ${PLAN_LIMITS.PREMIUM.aiPhotoPerDay} lượt nhận diện mỗi ngày.`,
+      isPremium: quota.dailyFreeLimit >= PLAN_LIMITS.PREMIUM.aiPhotoPerDay,
+    });
   }
 
-  private async deductQuotaAfterSuccess(
+  /**
+   * Giữ chỗ MỘT lượt cho tính năng đếm theo ngày (quét thực đơn, gợi ý món) bằng UPDATE có điều kiện. Hết lượt thì
+   * ném QUOTA_EXCEEDED thống nhất. Xử lý thất bại sau đó phải gọi releaseDaily() để hoàn lượt.
+   */
+  private async reserveFeature(
     userId: string,
-    usedQuotaType: 'FREE' | 'PURCHASED',
-    quota: AiQuotaResponseDto,
+    feature: 'AI_MENU_SCAN' | 'AI_SUGGEST_MEAL',
+  ): Promise<{ date: string; column: 'menuScans' | 'suggestMeals' }> {
+    const limits = await getPlanLimits(this.prisma, userId);
+    const premium = limits.aiPhotoPerDay >= PLAN_LIMITS.PREMIUM.aiPhotoPerDay;
+    const cfg =
+      feature === 'AI_MENU_SCAN'
+        ? {
+            column: 'menuScans' as const,
+            limit: limits.menuScanPerDay,
+            benefit: `Mở Premium để quét thực đơn ${PLAN_LIMITS.PREMIUM.menuScanPerDay} lần mỗi ngày.`,
+          }
+        : {
+            column: 'suggestMeals' as const,
+            limit: limits.suggestMealPerDay,
+            benefit: `Mở Premium để có ${PLAN_LIMITS.PREMIUM.suggestMealPerDay} lượt gợi ý món mỗi ngày.`,
+          };
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const timezone = this.resolveTimezone(user?.timezone);
+    const date = this.getDateKey(timezone);
+
+    const ok = await reserveDaily(this.prisma, userId, date, cfg.column, cfg.limit);
+    if (!ok) {
+      throw new QuotaExceededException({
+        feature,
+        limit: cfg.limit,
+        used: cfg.limit,
+        period: 'day',
+        resetsAt: this.getTimezoneDayBounds(timezone).resetsAt,
+        premiumBenefit: cfg.benefit,
+        isPremium: premium,
+      });
+    }
+    return { date, column: cfg.column };
+  }
+
+  private async releaseDaily(
+    userId: string,
+    r: { date: string; column: 'menuScans' | 'suggestMeals' },
+  ) {
+    await refundDaily(this.prisma, userId, r.date, r.column);
+  }
+
+  private async ensureUsageCounterRow(userId: string, date: string) {
+    try {
+      await this.prisma.usageCounter.upsert({
+        where: { userId_date: { userId, date } },
+        create: { userId, date },
+        update: {},
+      });
+    } catch (e) {
+      // Request khác vừa tạo dòng này cùng lúc (vi phạm unique) — dòng đã tồn tại, bỏ qua.
+      if ((e as { code?: string })?.code !== 'P2002') throw e;
+    }
+  }
+
+  /** Hoàn lại lượt đã giữ chỗ khi xử lý thất bại (NOT_FOOD, ảnh hỏng, AI không khả dụng...). */
+  private async refundPhotoQuota(userId: string, r: PhotoReservation) {
+    try {
+      if (r.usedQuotaType === 'FREE') {
+        await this.prisma.usageCounter.updateMany({
+          where: { userId, date: r.date, aiPhoto: { gt: 0 } },
+          data: { aiPhoto: { decrement: 1 } },
+        });
+      } else {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { purchasedAiQuota: { increment: 1 } },
+        });
+      }
+    } catch (e) {
+      this.logger.error(
+        `Không hoàn được lượt chụp ảnh cho user ${userId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
+  /** Ghi log chi phí cho một lượt đã xử lý thành công và trả lại hạn mức còn lại. */
+  private async finalizePhotoUsage(
+    userId: string,
+    r: PhotoReservation,
     tokens: { promptTokens: number; outputTokens: number; costUsd: number },
   ): Promise<{
     freeRemaining: number;
     purchasedCredits: number;
     totalRemaining: number;
   }> {
-    if (usedQuotaType === 'FREE') {
-      await this.logApiUsage(
-        userId,
-        'food_recognition',
-        tokens.promptTokens,
-        tokens.outputTokens,
-        tokens.costUsd,
-      );
-      const newFreeRemaining = Math.max(0, quota.freeRemaining - 1);
-      const newPurchased = quota.purchasedCredits;
-      return {
-        freeRemaining: newFreeRemaining,
-        purchasedCredits: newPurchased,
-        totalRemaining: newFreeRemaining + newPurchased,
-      };
-    } else {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          purchasedAiQuota: { decrement: 1 },
-        },
-      });
-      await this.logApiUsage(
-        userId,
-        'food_recognition_paid',
-        tokens.promptTokens,
-        tokens.outputTokens,
-        tokens.costUsd,
-      );
-      const newPurchased = Math.max(0, quota.purchasedCredits - 1);
-      return {
-        freeRemaining: 0,
-        purchasedCredits: newPurchased,
-        totalRemaining: newPurchased,
-      };
-    }
-  }
-
-  // =========================================================================
-  // PHẦN 2: QUẢN LÝ CÁC BẢN NÂNG CẤP CHAT AI COACH (BẢN PLUS, PRO, MAX)
-  // =========================================================================
-
-  getAvailableChatPackages(): ChatPackageInfo[] {
-    return AiService.CHAT_PLANS;
-  }
-
-  async purchaseChatCredits(
-    userId: string,
-    dto: PurchaseChatQuotaDto,
-  ): Promise<ChatQuotaInfoDto> {
-    let creditsToAdd = 0;
-
-    if (dto.packageId === ChatPlanPackageId.CUSTOM) {
-      if (!dto.customCredits || dto.customCredits <= 0) {
-        throw new BadRequestException(
-          'Vui lòng nhập hạn mức customCredits hợp lệ (> 0).',
-        );
-      }
-      creditsToAdd = dto.customCredits;
-    } else {
-      const plan = AiService.CHAT_PLANS.find((p) => p.id === dto.packageId);
-      if (!plan) {
-        throw new BadRequestException(
-          `Bản nâng cấp '${dto.packageId}' không tồn tại. Vui lòng chọn: ${AiService.CHAT_PLANS.map((p) => p.id).join(', ')}`,
-        );
-      }
-      creditsToAdd = plan.credits;
-    }
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        purchasedChatQuota: { increment: creditsToAdd },
-      },
-    });
-
-    this.logger.log(
-      `User ${userId} đã nâng cấp thành công gói ${dto.packageId} AI Coach`,
+    await this.logApiUsage(
+      userId,
+      r.usedQuotaType === 'FREE' ? 'food_recognition' : 'food_recognition_paid',
+      tokens.promptTokens,
+      tokens.outputTokens,
+      tokens.costUsd,
     );
-    return this.getDailyChatQuota(userId);
+    const q = await this.getDailyPhotoQuota(userId);
+    return {
+      freeRemaining: q.freeRemaining,
+      purchasedCredits: q.purchasedCredits,
+      totalRemaining: q.totalRemaining,
+    };
   }
 
+  /** BR-11.2: lỗi AI thì báo lỗi, không trả dữ liệu dinh dưỡng giả. */
+  private aiUnavailable(reason: string): ServiceUnavailableException {
+    this.logger.error(`AI_UNAVAILABLE: ${reason}`);
+    return new ServiceUnavailableException({
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      code: 'AI_UNAVAILABLE',
+      message:
+        'AI tạm thời không khả dụng. Bạn có thể tìm món thủ công trong kho món.',
+      error: 'Service Unavailable',
+    });
+  }
+
+  // =========================================================================
+  // PHẦN 2: HẠN MỨC AI COACH THEO GÓI (Free / Premium)
+  // =========================================================================
+
+  /**
+   * Hạn mức AI Coach theo gói (đặc tả Free/Premium): Free 10 tin nhắn/ngày; Premium 50.000 token/ngày. Không còn
+   * các gói Plus/Pro/Max. Premium không phải "không giới hạn": backend vẫn giữ hạn mức để chống lạm dụng.
+   */
   async getDailyChatQuota(userId: string): Promise<ChatQuotaInfoDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { timezone: true, purchasedChatQuota: true },
+      select: { timezone: true },
     });
 
     const timezone = user?.timezone || 'Asia/Ho_Chi_Minh';
-    const { startOfDay, resetsAt } = this.getTimezoneDayBounds(timezone);
+    const { resetsAt } = this.getTimezoneDayBounds(timezone);
 
-    // Tính tổng dung lượng đã dùng trong ngày hôm nay từ ApiUsageLog
-    const usageToday = await this.prisma.apiUsageLog.findMany({
+    const counter = await this.prisma.usageCounter.findUnique({
       where: {
-        userId,
-        feature: 'chat_coach',
-        createdAt: { gte: startOfDay },
+        userId_date: { userId, date: this.getDateKey(this.resolveTimezone(timezone)) },
       },
-      select: { promptTokens: true, outputTokens: true },
     });
 
-    const freeUsedToday = usageToday.reduce(
-      (acc, log) => acc + (log.promptTokens || 0) + (log.outputTokens || 0),
-      0,
-    );
+    const limits = await getPlanLimits(this.prisma, userId);
+    const byTokens = limits.chatTokensPerDay !== null;
+    const unit: 'MESSAGES' | 'TOKENS' = byTokens ? 'TOKENS' : 'MESSAGES';
+    const limit = (byTokens ? limits.chatTokensPerDay : limits.chatMessagesPerDay) ?? 0;
+    const used = byTokens ? (counter?.chatTokens ?? 0) : (counter?.chatMessages ?? 0);
 
-    const dailyFreeLimit = AiService.DAILY_CHAT_TOKEN_LIMIT; // 50,000
-    const freeRemaining = Math.max(0, dailyFreeLimit - freeUsedToday);
-    const purchasedCredits = Math.max(0, user?.purchasedChatQuota ?? 0);
-    const totalRemaining = freeRemaining + purchasedCredits;
-
-    // Xác định bản nâng cấp hiện tại của người dùng
-    let currentTier: 'FREE' | 'PLUS' | 'PRO' | 'MAX' = 'FREE';
-    let tierName = 'Bản Miễn Phí';
-    if (purchasedCredits >= 1000000) {
-      currentTier = 'MAX';
-      tierName = 'Bản Max';
-    } else if (purchasedCredits >= 500000) {
-      currentTier = 'PRO';
-      tierName = 'Bản Pro';
-    } else if (purchasedCredits >= 200000) {
-      currentTier = 'PLUS';
-      tierName = 'Bản Plus';
-    }
-
-    const totalCapacity = dailyFreeLimit + purchasedCredits;
-    const remainingPercent = Math.min(
-      100,
-      Math.max(0, Math.round((totalRemaining / totalCapacity) * 100)),
-    );
-    const hasQuota = totalRemaining > 0;
+    const remaining = Math.max(0, limit - used);
+    const remainingPercent = limit > 0 ? Math.min(100, Math.max(0, Math.round((remaining / limit) * 100))) : 0;
+    const hasQuota = remaining > 0;
 
     let status: 'COMFORTABLE' | 'GOOD' | 'LOW' | 'EXHAUSTED' = 'COMFORTABLE';
     let statusMessage = 'Hạn mức trò chuyện rất dồi dào';
@@ -433,91 +348,104 @@ export class AiService {
 
     return {
       hasQuota,
-      currentTier,
-      tierName,
+      currentTier: byTokens ? 'PREMIUM' : 'FREE',
+      tierName: byTokens ? 'Gói Premium' : 'Gói Miễn phí',
       remainingPercent,
       status,
       statusMessage,
       resetsAt: resetsAt.toISOString(),
+      unit,
+      limit,
+      used,
     };
   }
 
-  private async checkAndDetermineChatQuota(
-    userId: string,
-  ): Promise<{ quota: ChatQuotaInfoDto; usedQuotaType: 'FREE' | 'PURCHASED' }> {
-    const quota = await this.getDailyChatQuota(userId);
-
-    if (!quota.hasQuota) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message:
-            'Bạn đã sử dụng hết lượt trò chuyện AI Coach miễn phí hôm nay. Hãy nâng cấp lên bản Plus, Pro hoặc Max để tiếp tục trò chuyện hoặc quay lại vào ngày mai nhé!',
-          error: 'Too Many Requests',
-          hasQuota: false,
-          currentTier: quota.currentTier,
-          tierName: quota.tierName,
-          remainingPercent: 0,
-          status: 'EXHAUSTED',
-          statusMessage: 'Đã hết lượt trò chuyện hôm nay',
-          resetsAt: quota.resetsAt,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    // Đếm lại freeRemaining để biết đang trừ vào free hay purchased
+  /**
+   * Giữ chỗ trước khi trả lời. Free đếm theo tin nhắn nên giữ chỗ NGUYÊN TỬ (UPDATE có điều kiện), hai tin đồng
+   * thời khi chỉ còn một lượt thì đúng một tin được gửi. Premium đếm theo token: dung lượng chỉ biết sau khi AI
+   * trả lời nên chỉ kiểm tra còn hạn mức, rồi cộng token sau khi xong.
+   */
+  private async reserveChat(userId: string): Promise<ChatReservation> {
+    const limits = await getPlanLimits(this.prisma, userId);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { timezone: true },
     });
-    const { startOfDay } = this.getTimezoneDayBounds(
-      user?.timezone || 'Asia/Ho_Chi_Minh',
-    );
-    const logsToday = await this.prisma.apiUsageLog.findMany({
-      where: { userId, feature: 'chat_coach', createdAt: { gte: startOfDay } },
-      select: { promptTokens: true, outputTokens: true },
-    });
-    const used = logsToday.reduce(
-      (acc, l) => acc + (l.promptTokens || 0) + (l.outputTokens || 0),
-      0,
-    );
-    const usedQuotaType: 'FREE' | 'PURCHASED' =
-      used < AiService.DAILY_CHAT_TOKEN_LIMIT ? 'FREE' : 'PURCHASED';
+    const timezone = this.resolveTimezone(user?.timezone);
+    const date = this.getDateKey(timezone);
 
-    return { quota, usedQuotaType };
+    if (limits.chatMessagesPerDay !== null) {
+      const ok = await reserveDaily(this.prisma, userId, date, 'chatMessages', limits.chatMessagesPerDay);
+      if (!ok) {
+        throw new QuotaExceededException({
+          feature: 'AI_COACH',
+          limit: limits.chatMessagesPerDay,
+          used: limits.chatMessagesPerDay,
+          period: 'day',
+          resetsAt: this.getTimezoneDayBounds(timezone).resetsAt,
+          premiumBenefit: `Premium có hạn mức trò chuyện ${PLAN_LIMITS.PREMIUM.chatTokensPerDay?.toLocaleString('vi-VN')} token mỗi ngày.`,
+          isPremium: false,
+        });
+      }
+      return { date, countedMessage: true };
+    }
+
+    const quota = await this.getDailyChatQuota(userId);
+    if (!quota.hasQuota) {
+      throw new QuotaExceededException({
+        feature: 'AI_COACH',
+        limit: quota.limit,
+        used: quota.used,
+        period: 'day',
+        unit: 'token',
+        resetsAt: quota.resetsAt,
+        isPremium: true,
+      });
+    }
+    return { date, countedMessage: false };
   }
 
+  /** Hoàn lại tin nhắn đã giữ chỗ khi xử lý thất bại. */
+  private async releaseChat(userId: string, r: ChatReservation) {
+    if (r.countedMessage) await refundDaily(this.prisma, userId, r.date, 'chatMessages');
+  }
+
+  /**
+   * Cộng token của tin nhắn đã xử lý vào bộ đếm ngày bằng `increment` NGUYÊN TỬ (không đọc rồi ghi), nên nhiều tin
+   * nhắn đồng thời không làm mất lượt tính. Tin nhắn của Free đã được tính lúc giữ chỗ nên không cộng lại.
+   */
   private async deductChatQuotaAfterSuccess(
     userId: string,
-    usedQuotaType: 'FREE' | 'PURCHASED',
+    reservation: ChatReservation,
     tokens: { promptTokens: number; outputTokens: number; costUsd: number },
   ): Promise<ChatQuotaInfoDto> {
-    const totalTokensConsumed = tokens.promptTokens + tokens.outputTokens;
+    const totalTokensConsumed = Math.max(
+      0,
+      Math.round(tokens.promptTokens + tokens.outputTokens),
+    );
 
-    if (usedQuotaType === 'FREE') {
-      await this.logApiUsage(
-        userId,
-        'chat_coach',
-        tokens.promptTokens,
-        tokens.outputTokens,
-        tokens.costUsd,
-      );
-    } else {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          purchasedChatQuota: { decrement: totalTokensConsumed },
-        },
-      });
-      await this.logApiUsage(
-        userId,
-        'chat_coach_paid',
-        tokens.promptTokens,
-        tokens.outputTokens,
-        tokens.costUsd,
-      );
-    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const date = this.getDateKey(this.resolveTimezone(user?.timezone));
+    await this.ensureUsageCounterRow(userId, date);
+
+    await this.prisma.usageCounter.update({
+      where: { userId_date: { userId, date } },
+      data: {
+        chatTokens: { increment: totalTokensConsumed },
+        ...(reservation.countedMessage ? {} : { chatMessages: { increment: 1 } }),
+      },
+    });
+
+    await this.logApiUsage(
+      userId,
+      'chat_coach',
+      tokens.promptTokens,
+      tokens.outputTokens,
+      tokens.costUsd,
+    );
 
     return this.getDailyChatQuota(userId);
   }
@@ -551,11 +479,15 @@ export class AiService {
   async getChatHistory(userId: string): Promise<ChatHistoryResponseDto> {
     await this.cleanupOldChatMessages(userId);
 
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // Lưu 7 ngày cho mọi người; Free chỉ được xem 3 ngày gần nhất (không xoá dữ liệu để nâng cấp xong xem lại được)
+    const visibleDays = (await isFreeTierLimited(this.prisma, userId))
+      ? PLAN_LIMITS.FREE.chatHistoryDays
+      : PLAN_LIMITS.PREMIUM.chatHistoryDays;
+    const since = new Date(Date.now() - visibleDays * 24 * 60 * 60 * 1000);
     const messages = await this.prisma.aiMessage.findMany({
       where: {
         userId,
-        createdAt: { gte: sevenDaysAgo },
+        createdAt: { gte: since },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -594,9 +526,21 @@ export class AiService {
   // =========================================================================
 
   async chat(userId: string, userMessage: string): Promise<ChatResponseDto> {
-    // 1. Kiểm tra hạn mức chat (10 tin free/ngày hoặc lượt mua thêm)
-    const { quota, usedQuotaType } =
-      await this.checkAndDetermineChatQuota(userId);
+    // 1. Giữ chỗ hạn mức (Free: 10 tin/ngày; Premium: 50.000 token/ngày); lỗi bất kỳ sau đó đều hoàn lượt
+    const reservation = await this.reserveChat(userId);
+    try {
+      return await this.chatInner(userId, userMessage, reservation);
+    } catch (err) {
+      await this.releaseChat(userId, reservation);
+      throw err;
+    }
+  }
+
+  private async chatInner(
+    userId: string,
+    userMessage: string,
+    reservation: ChatReservation,
+  ): Promise<ChatResponseDto> {
 
     // 2. Dọn dẹp tin nhắn cũ hơn 7 ngày
     await this.cleanupOldChatMessages(userId);
@@ -626,7 +570,7 @@ export class AiService {
     const todayMeals = await this.prisma.meal.findMany({
       where: {
         userId,
-        date: { gte: startOfDay, lt: resetsAt },
+        logDate: keyToDate(todayKey(timezone)),
       },
       include: {
         items: true,
@@ -651,10 +595,12 @@ export class AiService {
       0,
     );
 
-    const targetCalories = user?.targetCalories || 2000;
-    const targetProtein = user?.targetProtein || 140;
-    const targetCarb = user?.targetCarb || 200;
-    const targetFat = user?.targetFat || 60;
+    // Chưa có mục tiêu: không bịa số, prompt nói rõ để AI không nêu con số mục tiêu
+    const hasTarget = !!user?.targetCalories;
+    const targetCalories = user?.targetCalories ?? 0;
+    const targetProtein = user?.targetProtein ?? 0;
+    const targetCarb = user?.targetCarb ?? 0;
+    const targetFat = user?.targetFat ?? 0;
 
     const remainingCalories = Math.round(targetCalories - consumedCalories);
     const remainingProtein = Math.round(targetProtein - consumedProtein);
@@ -720,9 +666,9 @@ Nhiệm vụ: Tư vấn dinh dưỡng, chế độ ăn, tập luyện khoa học
 --- THÔNG TIN NGƯỜI DÙNG ---
 - Tên: ${user?.name || 'Bạn'}
 - Mục tiêu: ${user?.goal || 'Duy trì vóc dáng'} (Cân nặng: ${user?.weightKg || 65}kg -> Mục tiêu: ${user?.targetWeightKg || 60}kg)
-- Mục tiêu mỗi ngày: ${targetCalories} kcal | ${targetProtein}g Protein | ${targetCarb}g Carb | ${targetFat}g Fat
+${hasTarget ? `- Mục tiêu mỗi ngày: ${targetCalories} kcal | ${targetProtein}g Protein | ${targetCarb}g Carb | ${targetFat}g Fat` : '- Mục tiêu mỗi ngày: người dùng CHƯA thiết lập (đừng nêu con số mục tiêu hay lượng còn lại, hãy nhắc họ hoàn tất hồ sơ nếu liên quan)'}
 - Hôm nay đã nạp: ${consumedCalories} kcal | ${consumedProtein}g Protein | ${consumedCarb}g Carb | ${consumedFat}g Fat
-- Còn lại trong ngày: ${remainingCalories} kcal | ${remainingProtein}g Protein | ${remainingCarb}g Carb | ${remainingFat}g Fat
+${hasTarget ? `- Còn lại trong ngày: ${remainingCalories} kcal | ${remainingProtein}g Protein | ${remainingCarb}g Carb | ${remainingFat}g Fat` : ''}
 
 --- CÁC MÓN ĐÃ ĂN HÔM NAY ---
 ${mealSummary}
@@ -780,7 +726,7 @@ Hãy đưa ra lời tư vấn thực tế, ưu tiên gợi ý các món ăn Vi�
     const tokensUsed = promptTokens + outputTokens;
     const updatedQuota = await this.deductChatQuotaAfterSuccess(
       userId,
-      usedQuotaType,
+      reservation,
       {
         promptTokens,
         outputTokens,
@@ -843,6 +789,17 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
   // =========================================================================
 
   async suggestMeal(userId: string): Promise<SuggestMealResponseDto> {
+    // Hạn mức theo gói (Free 2 lượt/ngày); hồ sơ chưa đủ hoặc lỗi bất kỳ thì hoàn lượt
+    const reservation = await this.reserveFeature(userId, 'AI_SUGGEST_MEAL');
+    try {
+      return await this.suggestMealCore(userId);
+    } catch (err) {
+      await this.releaseDaily(userId, reservation);
+      throw err;
+    }
+  }
+
+  private async suggestMealCore(userId: string): Promise<SuggestMealResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -853,6 +810,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
         targetFat: true,
         timezone: true,
         allergies: true,
+        dietType: true,
       },
     });
 
@@ -862,7 +820,7 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
     const todayMeals = await this.prisma.meal.findMany({
       where: {
         userId,
-        date: { gte: startOfDay, lt: resetsAt },
+        logDate: keyToDate(todayKey(timezone)),
       },
     });
 
@@ -883,10 +841,11 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
       0,
     );
 
-    const targetCalories = user?.targetCalories || 2000;
-    const targetProtein = user?.targetProtein || 140;
-    const targetCarb = user?.targetCarb || 200;
-    const targetFat = user?.targetFat || 60;
+    if (!user?.targetCalories) throw new ProfileIncompleteException();
+    const targetCalories = user.targetCalories;
+    const targetProtein = user.targetProtein ?? 0;
+    const targetCarb = user.targetCarb ?? 0;
+    const targetFat = user.targetFat ?? 0;
 
     const remainingCalories = Math.max(
       0,
@@ -906,7 +865,12 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
       remainingFat,
     };
 
-    return this.suggestMealForGap(user?.goal || null, nutritionGap, user?.allergies || []);
+    return this.suggestMealForGap(
+      user?.goal || null,
+      nutritionGap,
+      user?.allergies || [],
+      user?.dietType || null,
+    );
   }
 
   /**
@@ -918,13 +882,28 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
     goal: string | null,
     nutritionGap: NutritionGapDto,
     allergies: string[] = [],
+    dietType: string | null = null,
   ): Promise<SuggestMealResponseDto> {
-    const {
-      remainingCalories,
-      remainingProtein,
-      remainingCarbs,
-      remainingFat,
-    } = nutritionGap;
+    const { remainingCalories, remainingProtein } = nutritionGap;
+
+    // BR-11.5: ứng viên lấy từ kho món SAU KHI loại món vi phạm dị ứng / chế độ ăn (lọc cứng ở backend).
+    // Số liệu dinh dưỡng luôn lấy từ kho món, không lấy từ LLM (NT3).
+    const candidates = this.rankCandidateFoods(
+      nutritionGap,
+      getAllowedFoods({ dietType, allergies }),
+    );
+
+    if (candidates.length === 0) {
+      return {
+        nutritionGap,
+        suggestions: [],
+        advice:
+          'Chưa tìm được món phù hợp với chế độ ăn và dị ứng của bạn trong kho món. Bạn có thể tự tìm món trong mục Thêm bữa ăn.',
+      };
+    }
+
+    let picks: { food: SafeFood; reason: string }[] = [];
+    let advice = '';
 
     if (this.genAI) {
       try {
@@ -936,41 +915,27 @@ Bạn có thể tham khảo 1 tô Phở gà ức ít bánh (~420 kcal, 38g đạ
           },
         });
 
-        const allergyNote =
-          allergies.length > 0
-            ? `
-Dị ứng/kiêng TUYỆT ĐỐI không được gợi ý món chứa: ${allergies.join(', ')}.`
-            : '';
+        const list = candidates
+          .map(
+            (f, i) =>
+              `${i + 1}. ${f.name} (${f.servingSize}): ${f.calories} kcal, ${f.protein}g đạm`,
+          )
+          .join('\n');
         const prompt = `
-Bạn là chuyên gia dinh dưỡng thể hình hàng đầu tại Việt Nam.
-Người dùng đang có mục tiêu: ${goal || 'Duy trì vóc dáng'}.
-Ngân sách dinh dưỡng CÒN THIẾU hôm nay cần bù đắp:
-- Calo còn thiếu: ${remainingCalories} kcal
-- Protein còn thiếu: ${remainingProtein} g
-- Carbs còn thiếu: ${remainingCarbs} g
-- Fat còn thiếu: ${remainingFat} g
-${allergyNote}
+Bạn là chuyên gia dinh dưỡng thể hình tại Việt Nam.
+Người dùng có mục tiêu: ${goal || 'Duy trì vóc dáng'}.
+Phần dinh dưỡng CÒN THIẾU hôm nay: ${remainingCalories} kcal, ${remainingProtein}g protein.
 
-Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ biến, dễ mua hoặc dễ nấu để bù đắp vừa vặn nhất cho lượng calo và macro còn thiếu này.
+CHỈ ĐƯỢC chọn 1-2 món trong danh sách dưới đây (đã được lọc theo dị ứng và chế độ ăn của người dùng).
+TUYỆT ĐỐI không thêm món khác, không đổi tên món, không nêu con số dinh dưỡng.
+${list}
 
 Định dạng JSON trả về DUY NHẤT:
 {
-  "advice": "Lời khuyên tổng quan súc tích về tình trạng dinh dưỡng hôm nay (1-2 câu)",
-  "suggestions": [
-    {
-      "name": "Tên món ăn Việt Nam (kèm định lượng)",
-      "mealType": "Bữa tối / Bữa phụ",
-      "calories": 450,
-      "protein": 38,
-      "carbs": 45,
-      "fat": 10,
-      "reason": "Giải thích vì sao món này phù hợp nhất với lượng calo/macro còn thiếu hôm nay",
-      "ingredients": ["Thành phần 1", "Thành phần 2"]
-    }
-  ]
+  "advice": "Lời khuyên ngắn gọn 1-2 câu về dinh dưỡng hôm nay",
+  "picks": [{ "name": "Tên món chép NGUYÊN VĂN từ danh sách", "reason": "Vì sao món này phù hợp (1 câu)" }]
 }
 `;
-
         const response = await model.generateContent(prompt);
         const text = response.response
           .text()
@@ -979,96 +944,80 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
           .trim();
         const parsed = JSON.parse(text);
 
-        return {
-          nutritionGap,
-          suggestions: parsed.suggestions || [],
-          advice:
-            parsed.advice ||
-            `Bạn còn thiếu ${remainingProtein}g protein và ${remainingCalories} kcal. Hãy nạp thêm bữa ăn lành mạnh nhé!`,
-        };
+        const byName = new Map(candidates.map((f) => [f.name.trim(), f]));
+        const seen = new Set<string>();
+        for (const p of Array.isArray(parsed.picks) ? parsed.picks : []) {
+          const key = String(p?.name ?? '').trim();
+          const food = byName.get(key);
+          // Backend kiểm tra lại: món không nằm trong danh sách ứng viên thì loại bỏ
+          if (food && !seen.has(key)) {
+            seen.add(key);
+            picks.push({
+              food,
+              reason: String(p?.reason || '').trim() || this.defaultReason(food, nutritionGap),
+            });
+          }
+        }
+        picks = picks.slice(0, 2);
+        advice = typeof parsed.advice === 'string' ? parsed.advice.trim() : '';
       } catch (err) {
         this.logger.error(
-          `Lỗi khi gọi Gemini Suggest Meal: ${err.message}. Chuyển sang Smart Fallback.`,
+          `Lỗi khi gọi Gemini Suggest Meal: ${(err as Error).message}. Dùng xếp hạng theo kho món.`,
         );
       }
     }
 
-    // Smart Fallback gợi ý món Việt thông minh
-    return this.getSmartMealSuggestions(nutritionGap);
-  }
-
-  private getSmartMealSuggestions(
-    gap: NutritionGapDto,
-  ): SuggestMealResponseDto {
-    const suggestions: SuggestedMealItemDto[] = [];
-
-    if (gap.remainingProtein >= 30) {
-      suggestions.push({
-        name: 'Phở gà ức ít bánh + 2 trứng chần',
-        mealType: 'Bữa tối giàu đạm',
-        calories: Math.min(gap.remainingCalories, 480),
-        protein: 42,
-        carbs: 50,
-        fat: 10,
-        reason:
-          'Cung cấp lượng protein tinh khiết dồi dào từ ức gà và trứng, bù đắp tức thì chỉ tiêu protein còn thiếu trong ngày.',
-        ingredients: [
-          '150g ức gà xé',
-          '150g bánh phở tươi',
-          '2 quả trứng chần',
-          'Giá đỗ và rau thơm',
-        ],
-      });
-      suggestions.push({
-        name: 'Cơm gạo lứt + Ức gà nướng áp chảo + Bông cải luộc',
-        mealType: 'Bữa tối Eat Clean',
-        calories: Math.min(gap.remainingCalories, 450),
-        protein: 45,
-        carbs: 48,
-        fat: 8,
-        reason:
-          'Tinh bột hấp thu chậm từ gạo lứt và protein nạc giúp no lâu, chống dị hóa cơ ban đêm.',
-        ingredients: [
-          '150g cơm gạo lứt',
-          '180g ức gà ướp sốt tỏi ớt',
-          '150g bông cải xanh luộc',
-        ],
-      });
-    } else if (gap.remainingCalories > 200) {
-      suggestions.push({
-        name: 'Salad ức gà xé sốt mè rang',
-        mealType: 'Bữa tối nhẹ nhàng',
-        calories: 320,
-        protein: 28,
-        carbs: 16,
-        fat: 12,
-        reason:
-          'Lượng calo vừa phải, bổ sung chất xơ và đủ lượng protein còn thiếu nhẹ trong ngày.',
-        ingredients: [
-          '100g ức gà luộc xé',
-          'Xà lách, dưa leo, cà chua bi',
-          '2 thìa sốt mè rang',
-        ],
-      });
-    } else {
-      suggestions.push({
-        name: '1 Hũ Sữa chua Hy Lạp + 1 thìa hạt chia',
-        mealType: 'Bữa phụ nhẹ',
-        calories: 140,
-        protein: 15,
-        carbs: 10,
-        fat: 4,
-        reason:
-          'Calo rất thấp, bổ sung men vi sinh và đạm casein tiêu hóa chậm giúp ngủ ngon.',
-        ingredients: ['100g sữa chua Hy Lạp không đường', '10g hạt chia'],
-      });
+    // Không có AI hoặc AI trả kết quả không hợp lệ: xếp hạng theo kho món. Đây là số liệu thật của kho
+    // món (đã lọc an toàn), không phải dữ liệu bịa.
+    if (picks.length === 0) {
+      picks = candidates
+        .slice(0, 2)
+        .map((food) => ({ food, reason: this.defaultReason(food, nutritionGap) }));
     }
 
     return {
-      nutritionGap: gap,
-      suggestions,
-      advice: `Hôm nay bạn còn thiếu ${gap.remainingProtein}g Protein và ${gap.remainingCalories} kcal. Hãy ưu tiên nạp nguồn đạm nạc để hoàn thành mục tiêu ngày nhé!`,
+      nutritionGap,
+      suggestions: picks.map(({ food, reason }) => ({
+        name: `${food.name} (${food.servingSize})`,
+        mealType: food.calories >= 300 ? 'Bữa chính' : 'Bữa phụ',
+        calories: Math.round(food.calories),
+        protein: Math.round(food.protein),
+        carbs: Math.round(food.carb),
+        fat: Math.round(food.fat),
+        reason,
+      })),
+      advice:
+        advice ||
+        `Hôm nay bạn còn thiếu ${remainingProtein}g protein và ${remainingCalories} kcal. Hãy chọn món giàu đạm để hoàn thành mục tiêu ngày nhé!`,
     };
+  }
+
+  /** Xếp hạng món (đã lọc an toàn) theo độ vừa với phần calo và protein còn thiếu; lấy tối đa 10 món. */
+  private rankCandidateFoods(
+    gap: NutritionGapDto,
+    foods: SafeFood[],
+  ): SafeFood[] {
+    if (foods.length === 0) return [];
+    const targetCal = Math.max(100, Math.min(gap.remainingCalories, 700));
+    const targetPro = Math.max(0, Math.min(gap.remainingProtein, 50));
+
+    const fitting = foods.filter((f) => f.calories <= targetCal * 1.25);
+    const pool = fitting.length > 0 ? fitting : [...foods].sort((a, b) => a.calories - b.calories).slice(0, 5);
+
+    return pool
+      .map((food) => ({
+        food,
+        cost:
+          Math.abs(food.calories - targetCal) / targetCal +
+          (targetPro > 0 ? (Math.max(0, targetPro - food.protein) / targetPro) * 0.8 : 0),
+      }))
+      .sort((a, b) => a.cost - b.cost)
+      .slice(0, 10)
+      .map((x) => x.food);
+  }
+
+  private defaultReason(food: SafeFood, gap: NutritionGapDto): string {
+    return `Cung cấp khoảng ${Math.round(food.protein)}g đạm và ${Math.round(food.calories)} kcal, phù hợp với phần ${gap.remainingCalories} kcal bạn còn lại hôm nay.`;
   }
 
   // =========================================================================
@@ -1091,15 +1040,30 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
     userId: string,
     note?: string,
   ): Promise<ScanMenuResponseDto> {
-    // 1. Kiểm tra hạn mức quét ảnh (5 lượt free/ngày hoặc lượt mua thêm)
-    const { quota, usedQuotaType } =
-      await this.checkAndDetermineQuotaType(userId);
+    // 1. Giữ chỗ 1 lượt quét thực đơn (bộ đếm riêng: Free 1/ngày, Premium 5/ngày); lỗi bất kỳ sau đó đều hoàn lượt
+    const reservation = await this.reserveFeature(userId, 'AI_MENU_SCAN');
+    try {
+      return await this.scanMenuCore(base64Data, mimeType, userId, note);
+    } catch (err) {
+      await this.releaseDaily(userId, reservation);
+      throw err;
+    }
+  }
+
+  private async scanMenuCore(
+    base64Data: string,
+    mimeType: string,
+    userId: string,
+    note?: string,
+  ): Promise<ScanMenuResponseDto> {
 
     // 2. Lấy gap calo/protein của người dùng hôm nay
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         goal: true,
+        allergies: true,
+        dietType: true,
         targetCalories: true,
         targetProtein: true,
         timezone: true,
@@ -1112,7 +1076,7 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
     const todayMeals = await this.prisma.meal.findMany({
       where: {
         userId,
-        date: { gte: startOfDay, lt: resetsAt },
+        logDate: keyToDate(todayKey(timezone)),
       },
     });
 
@@ -1124,13 +1088,14 @@ Nhiệm vụ: Gợi ý CHÍNH XÁC 1-2 món ăn Việt Nam quen thuộc, phổ b
       (acc, m) => acc + (m.totalProtein || 0),
       0,
     );
+    if (!user?.targetCalories) throw new ProfileIncompleteException();
     const remainingCalories = Math.max(
       0,
-      (user?.targetCalories || 2000) - consumedCalories,
+      user.targetCalories - consumedCalories,
     );
     const remainingProtein = Math.max(
       0,
-      (user?.targetProtein || 140) - consumedProtein,
+      (user.targetProtein ?? 0) - consumedProtein,
     );
 
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
@@ -1154,6 +1119,8 @@ Nhiệm vụ:
 3. Người dùng đang có mục tiêu: ${user?.goal || 'Duy trì vóc dáng'}.
    Ngân sách còn lại hôm nay: ${remainingCalories} kcal và ${remainingProtein}g Protein.
    ${note ? `Ghi chú thêm của người dùng: "${note}"` : ''}
+   ${(user?.allergies?.length ?? 0) > 0 ? `Người dùng DỊ ỨNG: ${user!.allergies.join(', ')}. Không đánh dấu isRecommended cho món có thể chứa các chất này.` : ''}
+   ${user?.dietType && user.dietType !== 'OMNIVORE' ? `Chế độ ăn của người dùng: ${user.dietType}. Không đánh dấu isRecommended cho món không phù hợp.` : ''}
 4. Chọn ra TOP 1-2 MÓN TỐI ƯU NHẤT từ menu phù hợp với ngân sách calo và protein còn lại này. Đánh dấu isRecommended = true và ghi rõ recommendationReason.
 
 ĐỊNH DẠNG JSON TRẢ VỀ DUY NHẤT:
@@ -1201,16 +1168,31 @@ Nhiệm vụ:
           .trim();
         const parsed = JSON.parse(text);
 
-        await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
-          promptTokens: 600,
-          outputTokens: 350,
-          costUsd: 0.0007,
-        });
+        await this.logApiUsage(userId, 'menu_scan', 600, 350, 0.0007);
 
-        const allItems: MenuItemDto[] = Array.isArray(parsed.items)
-          ? parsed.items
-          : [];
-        const recommendedItems = allItems.filter((it) => it.isRecommended);
+        const rules = {
+          dietType: user?.dietType ?? null,
+          allergies: user?.allergies ?? [],
+        };
+        // BR-11.3: kiểm tra lại ở backend — món có thể vi phạm dị ứng/chế độ ăn bị gắn cảnh báo
+        // và không bao giờ được đề xuất, dù AI có đánh dấu isRecommended.
+        const allItems: MenuItemDto[] = (
+          Array.isArray(parsed.items) ? (parsed.items as MenuItemDto[]) : []
+        ).map((it) => {
+          const reasons = detectTextViolations(
+            `${it.name ?? ''} ${it.description ?? ''}`,
+            rules,
+          );
+          return reasons.length > 0
+            ? {
+                ...it,
+                isRecommended: false,
+                warning: `Có thể không phù hợp: ${[...new Set(reasons)].join(', ')}`,
+              }
+            : it;
+        });
+        const safeItems = allItems.filter((it) => !it.warning);
+        const recommendedItems = safeItems.filter((it) => it.isRecommended);
 
         return {
           restaurantName: parsed.restaurantName || 'Thực Đơn Quán Ăn',
@@ -1218,91 +1200,21 @@ Nhiệm vụ:
           recommendedItems:
             recommendedItems.length > 0
               ? recommendedItems
-              : allItems.slice(0, 2),
+              : safeItems.slice(0, 2),
           summaryAdvice:
             parsed.summaryAdvice ||
             `Hôm nay bạn còn ${remainingCalories} kcal và ${remainingProtein}g protein. Hãy chọn món giàu đạm nhé!`,
         };
       } catch (err) {
-        if (err instanceof BadRequestException) {
+        if (err instanceof HttpException) {
           throw err;
         }
-        this.logger.error(
-          `Lỗi khi gọi Gemini Scan Menu: ${err.message}. Chuyển sang Smart Fallback.`,
-        );
+        throw this.aiUnavailable(`Gemini Scan Menu: ${(err as Error).message}`);
       }
     }
 
-    // 4. Smart Fallback cho Menu Scanner
-    await this.deductQuotaAfterSuccess(userId, usedQuotaType, quota, {
-      promptTokens: 100,
-      outputTokens: 50,
-      costUsd: 0,
-    });
-
-    return this.getSmartMenuFallback(remainingCalories, remainingProtein);
-  }
-
-  private getSmartMenuFallback(
-    remainingCalories: number,
-    remainingProtein: number,
-  ): ScanMenuResponseDto {
-    const mockItems: MenuItemDto[] = [
-      {
-        name: 'Phở bò tái nạc',
-        price: '55,000 VNĐ',
-        estimatedCalories: 480,
-        protein: 34,
-        carbs: 60,
-        fat: 10,
-        description:
-          'Bánh phở tươi, thịt bò tái nạc mềm ngọt, nước dùng thanh ít béo.',
-        isRecommended: true,
-        recommendationReason: `Lựa chọn tuyệt vời! Món này cung cấp 34g protein chất lượng cao, rất phù hợp với chỉ tiêu thiếu ~${remainingProtein}g protein của bạn hôm nay.`,
-      },
-      {
-        name: 'Bún chả thịt nướng',
-        price: '50,000 VNĐ',
-        estimatedCalories: 530,
-        protein: 26,
-        carbs: 65,
-        fat: 16,
-        description:
-          'Chả viên nướng than hoa, bún tươi, nước mắm chấm dưa góp.',
-        isRecommended: false,
-      },
-      {
-        name: 'Cơm tấm sườn nướng trứng ốp la',
-        price: '50,000 VNĐ',
-        estimatedCalories: 620,
-        protein: 30,
-        carbs: 72,
-        fat: 22,
-        description:
-          'Cơm tấm dẻo thơm, sườn heo ướp đậm đà, trứng ốp la lòng đào.',
-        isRecommended: false,
-      },
-      {
-        name: 'Gỏi cuốn tôm thịt (3 cuốn)',
-        price: '35,000 VNĐ',
-        estimatedCalories: 240,
-        protein: 18,
-        carbs: 32,
-        fat: 4,
-        description:
-          'Tôm tươi, thịt nạc luộc cuộn bánh tráng và rau sống chấm tương đậu.',
-        isRecommended: true,
-        recommendationReason:
-          'Calo thấp, thanh mát và giàu protein nạc. Rất lý tưởng nếu bạn muốn ăn nhẹ mà không lo quá calo.',
-      },
-    ];
-
-    return {
-      restaurantName: 'Quán Ẩm Thực Việt Nam (Smart Fallback)',
-      items: mockItems,
-      recommendedItems: mockItems.filter((i) => i.isRecommended),
-      summaryAdvice: `Bạn còn ${remainingCalories} kcal và ${remainingProtein}g Protein hôm nay. Món Phở bò tái nạc hoặc Gỏi cuốn tôm thịt là lựa chọn tối ưu nhất!`,
-    };
+    // Không có API key: không trả thực đơn giả (BR-11.2)
+    throw this.aiUnavailable('GEMINI_API_KEY chưa được cấu hình');
   }
 
   // =========================================================================
@@ -1323,68 +1235,48 @@ Nhiệm vụ:
     mimeType: string = 'image/jpeg',
     userId: string,
   ): Promise<FoodRecognitionResultDto> {
-    const { quota, usedQuotaType } =
-      await this.checkAndDetermineQuotaType(userId);
+    // BR-11.4: giữ chỗ lượt trước khi gọi AI (atomic); mọi lỗi sau đó đều hoàn lượt
+    const reservation = await this.reservePhotoQuota(userId);
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
-    if (this.genAI) {
-      try {
-        const result = await this.callGeminiVision(cleanBase64, mimeType);
-        if (result) {
-          const remaining = await this.deductQuotaAfterSuccess(
-            userId,
-            usedQuotaType,
-            quota,
-            {
-              promptTokens: 500,
-              outputTokens: 200,
-              costUsd: 0.0005,
-            },
-          );
-
-          return {
-            ...result,
-            usedQuotaType,
-            freeRemaining: remaining.freeRemaining,
-            purchasedCredits: remaining.purchasedCredits,
-            totalRemaining: remaining.totalRemaining,
-            remainingDailyQuota: remaining.totalRemaining,
-            dailyLimit: AiService.DAILY_FREE_LIMIT,
-            isFallback: false,
-          };
-        }
-      } catch (error) {
-        if (error instanceof BadRequestException) {
-          throw error;
-        }
-        this.logger.error(
-          `Lỗi khi gọi Gemini Vision API: ${error.message}. Chuyển sang Smart Fallback.`,
-        );
+    try {
+      if (!this.genAI) {
+        throw this.aiUnavailable('GEMINI_API_KEY chưa được cấu hình');
       }
+
+      let result: FoodRecognitionResultDto | null;
+      try {
+        result = await this.callGeminiVision(cleanBase64, mimeType);
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error; // NOT_FOOD hoặc ảnh hỏng (400)
+        }
+        throw this.aiUnavailable(`Gemini Vision: ${(error as Error).message}`);
+      }
+      if (!result) {
+        throw this.aiUnavailable('Phản hồi Gemini Vision không hợp lệ');
+      }
+
+      const remaining = await this.finalizePhotoUsage(userId, reservation, {
+        promptTokens: 500,
+        outputTokens: 200,
+        costUsd: 0.0005,
+      });
+
+      return {
+        ...result,
+        usedQuotaType: reservation.usedQuotaType,
+        freeRemaining: remaining.freeRemaining,
+        purchasedCredits: remaining.purchasedCredits,
+        totalRemaining: remaining.totalRemaining,
+        remainingDailyQuota: remaining.totalRemaining,
+        dailyLimit: (await getPlanLimits(this.prisma, userId)).aiPhotoPerDay,
+        isFallback: false,
+      };
+    } catch (err) {
+      await this.refundPhotoQuota(userId, reservation);
+      throw err;
     }
-
-    const remaining = await this.deductQuotaAfterSuccess(
-      userId,
-      usedQuotaType,
-      quota,
-      {
-        promptTokens: 100,
-        outputTokens: 50,
-        costUsd: 0,
-      },
-    );
-
-    const fallback = this.getSmartFallbackRecognition();
-    return {
-      ...fallback,
-      usedQuotaType,
-      freeRemaining: remaining.freeRemaining,
-      purchasedCredits: remaining.purchasedCredits,
-      totalRemaining: remaining.totalRemaining,
-      remainingDailyQuota: remaining.totalRemaining,
-      dailyLimit: AiService.DAILY_FREE_LIMIT,
-      isFallback: true,
-    };
   }
 
   private async callGeminiVision(
@@ -1529,114 +1421,25 @@ YÊU CẦU ĐẦU RA DUY NHẤT JSON:
     );
   }
 
-  private getSmartFallbackRecognition(): FoodRecognitionResultDto {
-    const mockDishes: FoodRecognitionResultDto[] = [
-      {
-        foodName: 'Phở bò tái nạm',
-        confidenceScore: 0.94,
-        servingSize: '1 tô vừa (~450g)',
-        totalCalories: 480,
-        totalProtein: 32,
-        totalCarb: 62,
-        totalFat: 12,
-        items: [
-          {
-            name: 'Bánh phở tươi',
-            servingSize: '200g',
-            calories: 220,
-            protein: 4,
-            carb: 48,
-            fat: 1,
-          },
-          {
-            name: 'Thịt bò tái & nạm',
-            servingSize: '120g',
-            calories: 200,
-            protein: 26,
-            carb: 0,
-            fat: 10,
-          },
-          {
-            name: 'Nước dùng & hành ngò',
-            servingSize: '1 tô',
-            calories: 60,
-            protein: 2,
-            carb: 14,
-            fat: 1,
-          },
-        ],
-        healthTip:
-          'Món ăn giàu đạm chất lượng cao và năng lượng dễ hấp thu. Có thể thêm giá đỗ, húng quế và vắt thêm chanh để bổ sung vitamin C.',
-        isFallback: true,
-      },
-      {
-        foodName: 'Cơm tấm sườn nướng',
-        confidenceScore: 0.92,
-        servingSize: '1 đĩa vừa (~400g)',
-        totalCalories: 560,
-        totalProtein: 28,
-        totalCarb: 70,
-        totalFat: 18,
-        items: [
-          {
-            name: 'Cơm tấm trắng',
-            servingSize: '1 chén (~160g)',
-            calories: 220,
-            protein: 4,
-            carb: 48,
-            fat: 1,
-          },
-          {
-            name: 'Sườn heo nướng',
-            servingSize: '1 miếng (~120g)',
-            calories: 280,
-            protein: 22,
-            carb: 6,
-            fat: 17,
-          },
-          {
-            name: 'Đồ chua & dưa leo',
-            servingSize: '1 phần',
-            calories: 30,
-            protein: 1,
-            carb: 6,
-            fat: 0,
-          },
-          {
-            name: 'Mỡ hành',
-            servingSize: '1 thìa',
-            calories: 30,
-            protein: 0,
-            carb: 0,
-            fat: 3,
-          },
-        ],
-        healthTip:
-          'Bữa ăn ngon miệng và giàu protein. Nếu đang kiểm soát calo nghiêm ngặt, bạn có thể yêu cầu giảm lượng mỡ hành chan lên cơm.',
-        isFallback: true,
-      },
-    ];
-
-    const selected = mockDishes[Math.floor(Math.random() * mockDishes.length)];
-    return {
-      ...selected,
-      healthTip: `${selected.healthTip} (💡 Smart Fallback đang kích hoạt: bạn có thể cấu hình GEMINI_API_KEY trong .env để nhận diện ảnh thực tế)`,
-    };
-  }
-
   // =========================================================================
   // TIỆN ÍCH HỆ THỐNG
   // =========================================================================
+
+  /** Trả về múi giờ IANA hợp lệ; sai hoặc thiếu thì dùng múi giờ Việt Nam. */
+  private resolveTimezone(tz?: string | null): string {
+    return resolveZone(tz);
+  }
+
+  /** Ngày hiện tại của user dạng YYYY-MM-DD theo múi giờ của họ. */
+  private getDateKey(timezone: string): string {
+    return todayKey(timezone);
+  }
 
   private getTimezoneDayBounds(timezone: string = 'Asia/Ho_Chi_Minh'): {
     startOfDay: Date;
     resetsAt: Date;
   } {
-    const now = new Date();
-    const ymd = now.toLocaleDateString('en-CA', { timeZone: timezone });
-    const startOfDay = new Date(`${ymd}T00:00:00+07:00`);
-    const resetsAt = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-    return { startOfDay, resetsAt };
+    return getDayBounds(timezone);
   }
 
   private async logApiUsage(

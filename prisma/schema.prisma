@@ -51,13 +51,11 @@ enum StressLevel {
 }
 
 enum DietType {
-  BALANCED
-  VEGETARIAN
-  VEGAN
-  KETO
-  LOW_CARB
-  PESCATARIAN
-  OTHER
+  OMNIVORE // Ăn tạp
+  PESCATARIAN // Ăn cá, không ăn thịt
+  VEGETARIAN // Ăn chay (không thịt, cá)
+  VEGAN // Thuần chay
+  HALAL // Không thịt heo
 }
 
 enum FoodBudgetLevel {
@@ -125,7 +123,10 @@ enum CheckInStatus {
   PENDING
   ACCEPTED
   DECLINED
-  DISMISSED
+  SNOOZED // "Để sau": tự quay lại PENDING sau 24 giờ (trước đây là DISMISSED)
+  EXPIRED // sang kỳ mới hoặc mục tiêu đã đổi nên đề xuất không còn phù hợp
+  INSUFFICIENT_DATA // chưa đủ dữ liệu để đề xuất; chỉ có thể "Đã hiểu"
+  ACKNOWLEDGED // người dùng đã bấm "Đã hiểu" với Check-in thiếu dữ liệu
 }
 
 enum Mood {
@@ -186,6 +187,7 @@ model User {
   activityLevel       ActivityLevel? @default(SEDENTARY)
   goal                GoalType?      @default(MAINTAIN)
   macroStyle          MacroStyle?    @default(BALANCED)
+  targetLimitedBy     TargetLimit?
   allergies           String[]       @default([]) // Dị ứng/kiêng thực phẩm (Onboarding Q050) — dùng để lọc gợi ý món AI
 
   // Lifestyle Profile (BRD Onboarding — nhóm 6/7)
@@ -194,7 +196,7 @@ model User {
   takesSupplements Boolean?     @default(false)
 
   // Nutrition Profile (BRD Onboarding — nhóm 7/7)
-  dietType        DietType?        @default(BALANCED)
+  dietType        DietType?        @default(OMNIVORE)
   mealsPerDay     Int?             @default(3)
   cookTimeMinutes Int?             @default(30)
   foodBudgetLevel FoodBudgetLevel? @default(MEDIUM)
@@ -203,6 +205,7 @@ model User {
   trainingExperience  WorkoutLevel?    @default(BEGINNER)
   trainingGoal        TrainingGoal?    @default(GENERAL_FITNESS)
   sessionsPerWeek     SessionsPerWeek? @default(THREE_TO_FOUR)
+  trainingDaysPerWeek Int? // 0–7; nguồn duy nhất để suy ra activityLevel (BR-03.2, BR-03.6)
   equipmentAccess     EquipmentAccess? @default(BODYWEIGHT_ONLY)
   injuries            String[]         @default([])
   injuriesOtherNote   String?
@@ -232,23 +235,34 @@ model User {
   expenditureStatus    String    @default("UPDATING") // UPDATING | HOLDING
   expenditureUpdatedAt DateTime?
 
-  dailyAiQuota       Int     @default(10)
-  purchasedAiQuota   Int     @default(0)
-  purchasedChatQuota Int     @default(0)
+  dailyAiQuota       Int       @default(10)
+  purchasedAiQuota   Int       @default(0)
+  purchasedChatQuota Int       @default(0)
   refreshTokenHash   String?
-  timezone         String  @default("Asia/Ho_Chi_Minh")
+  timezone           String    @default("Asia/Ho_Chi_Minh")
+  lastExportAt       DateTime? // lần xuất dữ liệu gần nhất (BR-18: tối đa 1 lần/ngày)
 
-  meals         Meal[]
-  weightLogs    WeightLog[]
-  workoutLogs   WorkoutLog[]
-  customFoods   CustomFood[]
-  favoriteFoods FavoriteFood[]
-  aiMessages    AiMessage[]
-  apiUsageLogs  ApiUsageLog[]
-  checkIns      CheckIn[]
-  weeklySummaries WeeklySummary[]
-  habitReminders  HabitReminder[]
-  waterLogs       WaterLog[]
+  meals                Meal[]
+  weightLogs           WeightLog[]
+  workoutLogs          WorkoutLog[]
+  customFoods          CustomFood[]
+  favoriteFoods        FavoriteFood[]
+  aiMessages           AiMessage[]
+  apiUsageLogs         ApiUsageLog[]
+  checkIns             CheckIn[]
+  weeklySummaries      WeeklySummary[]
+  habitReminders       HabitReminder[]
+  waterLogs            WaterLog[]
+  notifications        Notification[]
+  usageCounters        UsageCounter[]
+  targetChanges        TargetChange[]
+  dailyLogStatuses     DailyLogStatus[]
+  expenditureSnapshots ExpenditureSnapshot[]
+  subscriptionState    SubscriptionState?
+  purchases            Purchase[]
+  manualGrants         ManualGrant[]
+  paymentOrders        PaymentOrder[]
+  goals                Goal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -257,12 +271,17 @@ model User {
 }
 
 model Meal {
-  id       String   @id @default(uuid())
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mealType MealType @default(LUNCH)
-  date     DateTime
-  imageUrl String?
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealType  MealType @default(LUNCH)
+  date      DateTime
+  // Ngày của bữa ăn theo múi giờ của user, tính MỘT LẦN lúc tạo (BR-07.2). Mọi API theo ngày lọc theo cột này.
+  logDate   DateTime @db.Date
+  imageUrl  String?
+  // Khoá chống ghi trùng: băm nội dung bữa + khung 2 phút. Cùng nội dung gửi lại trong khung (bấm đúp, thử lại sau
+  // khi mạng chập chờn) chỉ ra MỘT bữa. Bữa sao chép/cũ không có khoá (null).
+  dedupeKey String?
 
   totalCalories Float @default(0)
   totalProtein  Float @default(0)
@@ -274,7 +293,9 @@ model Meal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, dedupeKey])
   @@index([userId, date])
+  @@index([userId, logDate])
 }
 
 model MealItem {
@@ -294,14 +315,31 @@ model MealItem {
 }
 
 model WeightLog {
-  id       String   @id @default(uuid())
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weightKg Float
-  note     String?
-  date     DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg  Float
+  note      String?
+  date      DateTime @default(now())
+  // Thứ tự nhập thật, dùng khi nhiều lần cân trùng ngày/giờ (BR-09.4)
+  createdAt DateTime @default(now())
 
   @@index([userId, date])
+}
+
+// Ghi lại 1 lần Adaptive Expenditure Engine tính lại VÀ lưu vào User (log cân nặng mới, cập nhật hồ sơ,
+// Weekly Check-in) — KHÔNG ghi khi chỉ xem màn hình (GET expenditure status đọc lại không snapshot).
+// Dùng để vẽ biểu đồ Expenditure thích ứng vs TDEE tĩnh theo thời gian (NUTRITION > Nutrition Progress).
+model ExpenditureSnapshot {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adaptiveExpenditure Float?
+  staticTdee          Float?
+  status              String // UPDATING | HOLDING
+  recordedAt          DateTime @default(now())
+
+  @@index([userId, recordedAt])
 }
 
 model CustomFood {
@@ -436,9 +474,9 @@ model WeeklySummary {
   avgFat            Float?
   avgCarb           Float?
   weightChangeKg    Float?
-  workoutsCompleted Int      @default(0)
+  workoutsCompleted Int     @default(0)
   highlightText     String
-  isFallback        Boolean  @default(false)
+  isFallback        Boolean @default(false)
 
   generatedAt DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -449,10 +487,10 @@ model WeeklySummary {
 }
 
 model CheckIn {
-  id          String  @id @default(uuid())
-  userId      String
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weekNumber  Int     // Tuần thứ N kể từ khi tạo program
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekNumber    Int // Tuần thứ N kể từ khi tạo program
   weekStartDate DateTime
   weekEndDate   DateTime
   status        CheckInStatus @default(PENDING)
@@ -462,8 +500,8 @@ model CheckIn {
   avgDailyProtein  Float?
   avgDailyCarb     Float?
   avgDailyFat      Float?
-  weightAtCheckin  Float?     // Trend weight tại thời điểm check-in
-  compliancePct    Float?     // % ngày đạt ≥80% target calo
+  weightAtCheckin  Float? // Trend weight tại thời điểm check-in
+  compliancePct    Float? // % ngày đạt ≥80% target calo
 
   // Đề xuất mới (công thức C018 ±10% guardrail)
   currentCalorieTarget  Int
@@ -476,19 +514,19 @@ model CheckIn {
   proposedFatTarget     Float?
 
   // Expenditure estimate mới
-  newExpenditure    Float?
-  adjustmentReason  CheckInAdjustmentReason @default(EXPENDITURE_CHANGE)
+  newExpenditure   Float?
+  adjustmentReason CheckInAdjustmentReason @default(EXPENDITURE_CHANGE)
 
   // Goal progress (% hướng tới goal weight)
-  goalProgressPct   Float @default(0)
+  goalProgressPct Float @default(0)
 
   // User input
-  mood  Mood?
-  note  String?
+  mood Mood?
+  note String?
 
   processedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, weekStartDate])
   @@index([userId, status])
@@ -553,7 +591,7 @@ model HabitReminderFood {
   carb        Float
   fat         Float
 
-  sortOrder Int @default(0)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 }
 
@@ -566,4 +604,221 @@ model WaterLog {
   loggedAt DateTime @default(now())
 
   @@index([userId, loggedAt])
+}
+
+// Thông báo trong app (nhắc bữa ăn, nhắc uống nước, đạt/vượt mục tiêu, tin từ AI).
+// Khác với ReminderWorker (bắn notification hệ thống Android cục bộ) — đây là nguồn sự thật
+// phía server cho màn hình Thông báo trong app, để đồng bộ giữa nhiều thiết bị của cùng 1 user.
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+}
+
+enum NotificationType {
+  MEAL_REMINDER
+  WATER_REMINDER
+  GOAL_ACHIEVED
+  GOAL_EXCEEDED
+  AI_MESSAGE
+  CHECKIN_READY // Check-in tuần vừa được tạo (BR-13.1)
+  DAY_COMPLETED // ngày đã kết thúc có calo trong 85–115% mục tiêu (thay GOAL_ACHIEVED giữa ngày)
+  BILLING_ISSUE // gia hạn Premium lỗi hoặc hết ân hạn (BR-16.6)
+}
+
+// Bộ đếm hạn mức AI theo ngày (BR-11.4). Mỗi (user, ngày theo múi giờ user) một dòng.
+// Trừ lượt bằng UPDATE có điều kiện `aiPhoto < limit` nên an toàn khi nhiều request chạy đồng thời.
+// `date` là chuỗi YYYY-MM-DD tính theo User.timezone. chatTokens/chatMessages dành cho chuyển hạn mức chat sang cùng cơ chế.
+model UsageCounter {
+  userId         String
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           String
+  aiPhoto        Int    @default(0)
+  chatTokens     Int    @default(0)
+  chatMessages   Int    @default(0)
+  menuScans      Int    @default(0) // quét thực đơn (AI_MENU_SCAN)
+  suggestMeals   Int    @default(0) // gợi ý món bằng AI (AI_SUGGEST_MEAL)
+  barcodeLookups Int    @default(0) // tra mã vạch (BARCODE)
+
+  @@id([userId, date])
+}
+
+// Nguồn thay đổi mục tiêu calo/macro (BR-04). Mục tiêu chỉ được đổi qua các sự kiện này.
+enum TargetChangeSource {
+  ONBOARDING // E1: hoàn tất Onboarding
+  GOAL_CHANGE // E2: user đổi mục tiêu (Giảm/Duy trì/Tăng, cân đích, tốc độ) và xác nhận
+  CHECKIN_ACCEPTED // E3: chấp nhận Weekly Check-in
+  MANUAL // E4: user tự đặt mục tiêu (chế độ MANUAL)
+  PROFILE_RECALC // E5: user bấm "Tính lại mục tiêu" sau khi đổi hồ sơ
+}
+
+// Lịch sử thay đổi mục tiêu: mỗi lần mục tiêu đổi có đúng một dòng.
+model TargetChange {
+  id          String             @id @default(uuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source      TargetChangeSource
+  oldCalories Float?
+  newCalories Float?
+  oldMacros   Json?
+  newMacros   Json?
+  checkinId   String?
+  createdAt   DateTime           @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// Mục tiêu calo bị giới hạn an toàn bởi quy tắc nào (BR-03.3). null = không bị giới hạn.
+enum TargetLimit {
+  FLOOR // chạm sàn calo (theo giới và BMR)
+  DEFICIT_CAP // thâm hụt bị chặn ở mức tối đa % của mức nền
+  SURPLUS_CAP // thặng dư bị chặn ở mức tối đa % của mức nền
+}
+
+// Trạng thái "đầy đủ" của một ngày ghi bữa ăn (BR-05.2): người dùng tự đánh dấu hoặc để hệ thống tự quyết định.
+enum DayCompleteness {
+  AUTO // để hệ thống quyết định theo quy tắc tự động (≥ 2 bữa và ≥ 60% mục tiêu)
+  COMPLETE // người dùng xác nhận "Đã ghi đủ hôm nay"
+  INCOMPLETE // người dùng xác nhận "Hôm nay ghi chưa đủ" — ngày bị loại khỏi tính toán
+}
+
+model DailyLogStatus {
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logDate      DateTime        @db.Date
+  completeness DayCompleteness @default(AUTO)
+  updatedAt    DateTime        @updatedAt
+
+  @@id([userId, logDate])
+}
+
+// ---------------------------------------------------------------------------
+// BR-16: Thanh toán Google Play (subscription), xác minh ở server
+// ---------------------------------------------------------------------------
+enum SubStatus {
+  PENDING
+  ACTIVE
+  CANCELED
+  IN_GRACE_PERIOD
+  ON_HOLD
+  PAUSED
+  EXPIRED
+  REVOKED
+}
+
+model Product {
+  productId String  @id // premium_monthly, premium_yearly
+  type      String  @default("SUBSCRIPTION")
+  isActive  Boolean @default(true)
+}
+
+model Purchase {
+  id                  String   @id @default(uuid())
+  purchaseToken       String   @unique // khoá idempotency
+  orderId             String?
+  userId              String? // null khi user đã xoá tài khoản
+  user                User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  productId           String
+  purchaseTime        DateTime
+  acknowledged        Boolean  @default(false)
+  linkedPurchaseToken String?
+  rawResponse         Json
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SubscriptionState {
+  userId               String    @id
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId            String
+  status               SubStatus
+  expiryTime           DateTime
+  autoRenewing         Boolean
+  isTrial              Boolean   @default(false)
+  currentPurchaseToken String
+  lastReconciledAt     DateTime?
+  updatedAt            DateTime  @updatedAt
+}
+
+model ManualGrant {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminId   String
+  reason    String
+  startsAt  DateTime
+  endsAt    DateTime
+  revokedAt DateTime?
+  revokedBy String?
+
+  @@index([userId])
+}
+
+model BillingEvent {
+  id            String   @id @default(uuid())
+  purchaseToken String?
+  userId        String?
+  type          String // VERIFY, RTDN_<loại>, RECONCILE, ADMIN_GRANT, ADMIN_REVOKE
+  messageId     String?  @unique // idempotency cho RTDN
+  actorId       String?
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Thanh toán bằng QR ngân hàng (VietQR). Admin đối chiếu sao kê rồi duyệt đơn để cấp Premium.
+enum PaymentOrderStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+}
+
+model PaymentOrder {
+  id         String             @id @default(uuid())
+  code       String             @unique // nội dung chuyển khoản, ví dụ NWK7M2QX9A
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  String
+  amount     Int // VND
+  status     PaymentOrderStatus @default(PENDING)
+  expiresAt  DateTime
+  paidAt     DateTime?
+  approvedBy String?
+  createdAt  DateTime           @default(now())
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// Mục tiêu cân nặng hiện hành (BR-09.5). Tại mọi thời điểm một user chỉ có MỘT Goal ACTIVE.
+// Đổi loại mục tiêu hoặc cân đích tạo Goal mới và đóng Goal cũ; tiến độ tính từ startWeight của Goal.
+enum GoalStatus {
+  ACTIVE
+  ENDED
+}
+
+model Goal {
+  id            String     @id @default(uuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalType      GoalType
+  startWeight   Float
+  startDate     DateTime   @default(now())
+  targetWeight  Float?
+  rateKgPerWeek Float?
+  status        GoalStatus @default(ACTIVE)
+  endedAt       DateTime?
+
+  @@index([userId, status])
 }

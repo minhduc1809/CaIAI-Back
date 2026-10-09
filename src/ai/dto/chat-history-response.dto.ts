@@ -25,11 +25,11 @@ export class ChatQuotaInfoDto {
   hasQuota: boolean;
 
   @ApiProperty({
-    example: 'PRO',
-    enum: ['FREE', 'PLUS', 'PRO', 'MAX'],
-    description: 'Gói thành viên AI Coach hiện tại',
+    example: 'PREMIUM',
+    enum: ['FREE', 'PREMIUM'],
+    description: 'Gói hiện tại',
   })
-  currentTier: 'FREE' | 'PLUS' | 'PRO' | 'MAX';
+  currentTier: 'FREE' | 'PREMIUM';
 
   @ApiProperty({
     example: 'Gói Pro',
@@ -61,6 +61,19 @@ export class ChatQuotaInfoDto {
     description: 'Thời điểm làm mới lượt miễn phí tiếp theo',
   })
   resetsAt: string;
+
+  @ApiProperty({
+    example: 'MESSAGES',
+    enum: ['MESSAGES', 'TOKENS'],
+    description: 'Đơn vị đếm hạn mức: Free đếm tin nhắn, Premium đếm token',
+  })
+  unit: 'MESSAGES' | 'TOKENS';
+
+  @ApiProperty({ example: 10, description: 'Hạn mức mỗi ngày theo đơn vị `unit`' })
+  limit: number;
+
+  @ApiProperty({ example: 3, description: 'Đã dùng hôm nay theo đơn vị `unit`' })
+  used: number;
 }
 
 export class ChatResponseDto {
