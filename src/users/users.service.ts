@@ -1,6 +1,20 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { isFreeTierLimited } from '../billing/entitlement.util';
+import { PLAN_LIMITS } from '../billing/billing.constants';
+import { startGoal } from './goal.util';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { TargetChangeSource } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { HealthCalculatorService } from './health-calculator.service';
+import {
+  HealthCalculatorService,
+  HealthMetricsInput,
+  activityLevelFromTrainingDays,
+  sessionsBucketFromTrainingDays,
+} from './health-calculator.service';
 import { AdaptiveExpenditureService } from './adaptive-expenditure.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -46,6 +60,7 @@ export class UsersService {
         targetProtein: true,
         targetCarb: true,
         targetFat: true,
+        targetLimitedBy: true,
         adaptiveExpenditure: true,
         expenditureStatus: true,
         sleepHours: true,
@@ -58,6 +73,7 @@ export class UsersService {
         trainingExperience: true,
         trainingGoal: true,
         sessionsPerWeek: true,
+        trainingDaysPerWeek: true,
         equipmentAccess: true,
         injuries: true,
         allergies: true,
@@ -124,52 +140,54 @@ export class UsersService {
           : null
         : currentUser.dateOfBirth;
     const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
+    // BR-03.2 / BR-03.6: số buổi tập là nguồn duy nhất để suy ra mức vận động và nhóm buổi tập
+    const trainingDaysPerWeek =
+      dto.trainingDaysPerWeek !== undefined
+        ? dto.trainingDaysPerWeek
+        : currentUser.trainingDaysPerWeek;
     const activityLevel =
-      dto.activityLevel !== undefined
-        ? dto.activityLevel
-        : currentUser.activityLevel;
+      dto.trainingDaysPerWeek !== undefined
+        ? activityLevelFromTrainingDays(dto.trainingDaysPerWeek)
+        : dto.activityLevel !== undefined
+          ? dto.activityLevel
+          : currentUser.activityLevel;
     const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
     const macroStyle =
       dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
 
-    // 3a. Tính TDEE công thức tĩnh trước (baseline & sanity bound cho Adaptive Engine)
-    const staticCalculations = this.healthCalculator.calculateAllMetrics({
-      heightCm,
-      weightKg,
-      targetWeightKg,
-      weightRateKgPerWeek,
-      bodyFatPercent,
-      dateOfBirth,
-      gender,
-      activityLevel,
-      goal,
-      macroStyle,
-    });
-
-    // 3b. Adaptive Expenditure Engine — hồi quy dữ liệu cân nặng + calo đã log thực tế
-    const expenditureResult = await this.adaptiveExpenditure.recalculate(
+    // 3. Tính chỉ số (TDEE tĩnh làm baseline, rồi Expenditure thích ứng nếu đã đủ dữ liệu)
+    const { calculations, expenditureResult } = await this.computeCalculations(
       userId,
-      staticCalculations.tdee,
-      currentUser.adaptiveExpenditure,
+      {
+        heightCm,
+        weightKg,
+        targetWeightKg,
+        weightRateKgPerWeek,
+        bodyFatPercent,
+        dateOfBirth,
+        gender,
+        activityLevel,
+        goal,
+        macroStyle,
+      },
     );
 
-    // 3c. Tính lại Target Calories/Macro dựa trên Expenditure thích ứng (nếu có) thay vì TDEE tĩnh
-    const calculations = this.healthCalculator.calculateAllMetrics({
-      heightCm,
-      weightKg,
-      targetWeightKg,
-      weightRateKgPerWeek,
-      bodyFatPercent,
-      dateOfBirth,
-      gender,
-      activityLevel,
-      goal,
-      macroStyle,
-      expenditureOverride:
-        expenditureResult.method === 'ADAPTIVE'
-          ? expenditureResult.estimatedExpenditure
-          : null,
-    });
+    // BR-04: mục tiêu chỉ đổi khi user xác nhận (applyTarget) hoặc khi chưa từng có mục tiêu
+    // (hoàn tất Onboarding). Các trường hợp khác chỉ trả về proposedTarget.
+    const hadTarget = currentUser.targetCalories != null;
+    const canCompute = calculations.targetCalories != null;
+    const applyTarget = canCompute && (dto.applyTarget === true || !hadTarget);
+    const goalChanged =
+      (dto.goal !== undefined && dto.goal !== currentUser.goal) ||
+      (dto.targetWeightKg !== undefined &&
+        dto.targetWeightKg !== currentUser.targetWeightKg) ||
+      (dto.weightRateKgPerWeek !== undefined &&
+        dto.weightRateKgPerWeek !== currentUser.weightRateKgPerWeek);
+    const source: TargetChangeSource = !hadTarget
+      ? TargetChangeSource.ONBOARDING
+      : goalChanged
+        ? TargetChangeSource.GOAL_CHANGE
+        : TargetChangeSource.PROFILE_RECALC;
 
     // 4. Cập nhật vào Database
     const updatedUser = await this.prisma.user.update({
@@ -223,10 +241,13 @@ export class UsersService {
           dto.trainingGoal !== undefined
             ? dto.trainingGoal
             : currentUser.trainingGoal,
+        trainingDaysPerWeek,
         sessionsPerWeek:
-          dto.sessionsPerWeek !== undefined
-            ? dto.sessionsPerWeek
-            : currentUser.sessionsPerWeek,
+          dto.trainingDaysPerWeek !== undefined
+            ? sessionsBucketFromTrainingDays(dto.trainingDaysPerWeek)
+            : dto.sessionsPerWeek !== undefined
+              ? dto.sessionsPerWeek
+              : currentUser.sessionsPerWeek,
         equipmentAccess:
           dto.equipmentAccess !== undefined
             ? dto.equipmentAccess
@@ -275,10 +296,15 @@ export class UsersService {
         bmi: calculations.bmi,
         bmr: calculations.bmr,
         tdee: calculations.tdee,
-        targetCalories: calculations.targetCalories,
-        targetProtein: calculations.targetProtein,
-        targetCarb: calculations.targetCarb,
-        targetFat: calculations.targetFat,
+        ...(applyTarget
+          ? {
+              targetCalories: calculations.targetCalories,
+              targetProtein: calculations.targetProtein,
+              targetCarb: calculations.targetCarb,
+              targetFat: calculations.targetFat,
+              targetLimitedBy: calculations.targetLimitedBy,
+            }
+          : {}),
         adaptiveExpenditure: expenditureResult.estimatedExpenditure,
         expenditureStatus: expenditureResult.status,
         expenditureUpdatedAt: new Date(),
@@ -309,6 +335,7 @@ export class UsersService {
         targetProtein: true,
         targetCarb: true,
         targetFat: true,
+        targetLimitedBy: true,
         adaptiveExpenditure: true,
         expenditureStatus: true,
         sleepHours: true,
@@ -321,6 +348,7 @@ export class UsersService {
         trainingExperience: true,
         trainingGoal: true,
         sessionsPerWeek: true,
+        trainingDaysPerWeek: true,
         equipmentAccess: true,
         injuries: true,
         allergies: true,
@@ -338,6 +366,47 @@ export class UsersService {
         updatedAt: true,
       },
     });
+
+    await this.adaptiveExpenditure.recordSnapshot(userId, expenditureResult);
+
+    if (applyTarget) {
+      await this.recordTargetChangeIfChanged(
+        userId,
+        source,
+        {
+          calories: currentUser.targetCalories,
+          protein: currentUser.targetProtein,
+          carb: currentUser.targetCarb,
+          fat: currentUser.targetFat,
+        },
+        {
+          calories: calculations.targetCalories,
+          protein: calculations.targetProtein,
+          carb: calculations.targetCarb,
+          fat: calculations.targetFat,
+        },
+        !hadTarget,
+      );
+    }
+
+    // BR-09.5: hoàn tất Onboarding hoặc đổi loại mục tiêu/cân đích thì bắt đầu Goal mới (tiến độ tính lại từ cân lúc này).
+    // Đổi tốc độ không tạo Goal mới vì không đổi đích đến.
+    const goalTypeChanged = dto.goal !== undefined && dto.goal !== currentUser.goal;
+    const targetWeightChanged =
+      dto.targetWeightKg !== undefined &&
+      dto.targetWeightKg !== currentUser.targetWeightKg;
+    if (goal && weightKg && (!hadTarget || goalTypeChanged || targetWeightChanged)) {
+      await startGoal(this.prisma, userId, {
+        goalType: goal,
+        startWeight: weightKg,
+        targetWeight: targetWeightKg,
+        rateKgPerWeek: weightRateKgPerWeek,
+      });
+    }
+
+    const proposedTarget = applyTarget
+      ? null
+      : this.buildProposedTarget(currentUser, calculations);
 
     // 5. Nếu có cập nhật cân nặng mới, tự động ghi 1 dòng vào WeightLog để vẽ biểu đồ
     if (dto.weightKg && dto.weightKg !== currentUser.weightKg) {
@@ -357,8 +426,188 @@ export class UsersService {
         bmiClassification: calculations.bmiClassification,
         bmrFormula: calculations.bmrFormula,
         expenditureMessage: expenditureResult.message,
+        targetApplied: applyTarget,
+        proposedTarget,
       },
     };
+  }
+
+  /**
+   * Tính TDEE tĩnh, chạy Adaptive Engine, rồi tính mục tiêu (ưu tiên Expenditure thích ứng nếu có).
+   */
+  private async computeCalculations(
+    userId: string,
+    profile: HealthMetricsInput,
+  ) {
+    const staticCalculations =
+      this.healthCalculator.calculateAllMetrics(profile);
+    const expenditureResult = await this.adaptiveExpenditure.recalculate(
+      userId,
+      staticCalculations.tdee,
+    );
+    const calculations = this.healthCalculator.calculateAllMetrics({
+      ...profile,
+      expenditureOverride:
+        expenditureResult.method === 'ADAPTIVE'
+          ? expenditureResult.estimatedExpenditure
+          : null,
+    });
+    return { calculations, expenditureResult };
+  }
+
+  /** Mục tiêu đề xuất kèm chênh lệch so với mục tiêu đang dùng; null nếu không có gì khác. */
+  private buildProposedTarget(
+    current: {
+      targetCalories: number | null;
+      targetProtein: number | null;
+      targetCarb: number | null;
+      targetFat: number | null;
+    },
+    calc: {
+      targetCalories: number | null;
+      targetProtein: number | null;
+      targetCarb: number | null;
+      targetFat: number | null;
+    },
+  ) {
+    if (calc.targetCalories == null) return null;
+    const same =
+      current.targetCalories === calc.targetCalories &&
+      current.targetProtein === calc.targetProtein &&
+      current.targetCarb === calc.targetCarb &&
+      current.targetFat === calc.targetFat;
+    if (same) return null;
+    return {
+      calories: calc.targetCalories,
+      protein: calc.targetProtein,
+      carb: calc.targetCarb,
+      fat: calc.targetFat,
+      diff: {
+        calories: calc.targetCalories - (current.targetCalories ?? 0),
+        protein: (calc.targetProtein ?? 0) - (current.targetProtein ?? 0),
+        carb: (calc.targetCarb ?? 0) - (current.targetCarb ?? 0),
+        fat: (calc.targetFat ?? 0) - (current.targetFat ?? 0),
+      },
+    };
+  }
+
+  /** Ghi một dòng TargetChange khi mục tiêu thực sự thay đổi (hoặc lần đầu đặt mục tiêu). */
+  private async recordTargetChangeIfChanged(
+    userId: string,
+    source: TargetChangeSource,
+    before: {
+      calories: number | null;
+      protein: number | null;
+      carb: number | null;
+      fat: number | null;
+    },
+    after: {
+      calories: number | null;
+      protein: number | null;
+      carb: number | null;
+      fat: number | null;
+    },
+    force = false,
+  ) {
+    const changed =
+      before.calories !== after.calories ||
+      before.protein !== after.protein ||
+      before.carb !== after.carb ||
+      before.fat !== after.fat;
+    if (!changed && !force) return;
+    await this.prisma.targetChange.create({
+      data: {
+        userId,
+        source,
+        oldCalories: before.calories,
+        newCalories: after.calories,
+        oldMacros: {
+          protein: before.protein,
+          carb: before.carb,
+          fat: before.fat,
+        },
+        newMacros: { protein: after.protein, carb: after.carb, fat: after.fat },
+      },
+    });
+  }
+
+  /**
+   * BR-04 sự kiện E5: user xem mục tiêu đề xuất sau khi đổi hồ sơ và bấm "Áp dụng".
+   */
+  async applyProposedTarget(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    const { calculations } = await this.computeCalculations(
+      userId,
+      {
+        heightCm: user.heightCm,
+        weightKg: user.weightKg,
+        targetWeightKg: user.targetWeightKg,
+        weightRateKgPerWeek: user.weightRateKgPerWeek,
+        bodyFatPercent: user.bodyFatPercent,
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        activityLevel: user.activityLevel,
+        goal: user.goal,
+        macroStyle: user.macroStyle,
+      },
+    );
+
+    if (calculations.targetCalories == null) {
+      throw new BadRequestException(
+        'Chưa đủ thông tin hồ sơ (chiều cao, cân nặng, ngày sinh, giới tính) để tính mục tiêu',
+      );
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        targetCalories: calculations.targetCalories,
+        targetProtein: calculations.targetProtein,
+        targetCarb: calculations.targetCarb,
+        targetFat: calculations.targetFat,
+        targetLimitedBy: calculations.targetLimitedBy,
+      },
+      select: {
+        targetCalories: true,
+        targetLimitedBy: true,
+        targetProtein: true,
+        targetCarb: true,
+        targetFat: true,
+      },
+    });
+
+    await this.recordTargetChangeIfChanged(
+      userId,
+      TargetChangeSource.PROFILE_RECALC,
+      {
+        calories: user.targetCalories,
+        protein: user.targetProtein,
+        carb: user.targetCarb,
+        fat: user.targetFat,
+      },
+      {
+        calories: updated.targetCalories,
+        protein: updated.targetProtein,
+        carb: updated.targetCarb,
+        fat: updated.targetFat,
+      },
+    );
+
+    return { message: 'Đã áp dụng mục tiêu mới', data: updated };
+  }
+
+  /** Lịch sử thay đổi mục tiêu, mới nhất trước. */
+  async getTargetHistory(userId: string, limit = 50) {
+    const items = await this.prisma.targetChange.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit > 0 ? limit : 50,
+    });
+    return { message: 'Lấy lịch sử mục tiêu thành công', data: items };
   }
 
   /**
@@ -386,12 +635,32 @@ export class UsersService {
     const expenditureResult = await this.adaptiveExpenditure.recalculate(
       userId,
       staticCalculations.tdee,
-      user.adaptiveExpenditure,
     );
 
     return {
       message: 'Lấy trạng thái Expenditure thành công',
       data: expenditureResult,
+    };
+  }
+
+  async getExpenditureHistory(userId: string, limit?: number) {
+    const history = await this.adaptiveExpenditure.getHistory(
+      userId,
+      limit && limit > 0 ? limit : undefined,
+    );
+    // Free chỉ xem lịch sử 7 ngày gần nhất (đặc tả 2.8); Premium xem đầy đủ. Chỉ áp dụng khi BILLING_ENFORCE=true.
+    const windowDays = (await isFreeTierLimited(this.prisma, userId))
+      ? PLAN_LIMITS.FREE.expenditureHistoryDays
+      : null;
+    const visible = windowDays
+      ? history.filter(
+          (h) => h.recordedAt.getTime() >= Date.now() - windowDays * 24 * 60 * 60 * 1000,
+        )
+      : history;
+    return {
+      message: 'Lấy lịch sử Expenditure thành công',
+      data: visible,
+      limitedToDays: windowDays,
     };
   }
 

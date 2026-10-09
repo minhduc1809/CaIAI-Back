@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   IsOptional,
   IsString,
   IsEnum,
@@ -45,6 +46,7 @@ export class UpdateMealDto {
   })
   @IsOptional()
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
+  @ArrayMaxSize(50, { message: 'Một bữa ăn tối đa 50 món' })
   @ValidateNested({ each: true })
   @Type(() => CreateMealItemDto)
   items?: CreateMealItemDto[];

@@ -1,9 +1,19 @@
+import { isFreeTierLimited } from '../billing/entitlement.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { MealsService } from '../meals/meals.service';
 import { WeeklySummaryResponseDto } from './dto/weekly-summary-response.dto';
+import {
+  addDaysToKey,
+  dateToKey,
+  dayBoundsForKey,
+  keyToDate,
+  mondayOnOrBefore,
+  resolveTimezone,
+  todayKey,
+} from '../common/utils/date-zone.util';
 
 @Injectable()
 export class WeeklySummaryService {
@@ -48,17 +58,37 @@ export class WeeklySummaryService {
    * tránh gọi Gemini lặp lại nhiều lần trong cùng một tuần.
    */
   async getWeeklySummary(userId: string): Promise<WeeklySummaryResponseDto> {
-    const { weekStartDate, weekEndDate } = this.getCurrentWeekRange();
+    const { weekStartDate, weekEndDate } = await this.getCurrentWeekRange(userId);
 
     const cached = await this.prisma.weeklySummary.findUnique({
       where: { userId_weekStartDate: { userId, weekStartDate } },
     });
 
-    if (cached) {
-      return this.toDto(cached);
-    }
+    const full = cached
+      ? this.toDto(cached)
+      : await this.generateWeeklySummary(userId, weekStartDate, weekEndDate);
+    return this.applyTier(userId, full);
+  }
 
-    return this.generateWeeklySummary(userId, weekStartDate, weekEndDate);
+  /**
+   * Free xem một phần Weekly Summary (calo trung bình, cân nặng, số buổi tập); phần macro và lời nhận xét do AI viết
+   * dành cho Premium. Chỉ áp dụng khi BILLING_ENFORCE=true.
+   */
+  private async applyTier(
+    userId: string,
+    dto: WeeklySummaryResponseDto,
+  ): Promise<WeeklySummaryResponseDto> {
+    if (!(await isFreeTierLimited(this.prisma, userId))) {
+      return { ...dto, isPreview: false };
+    }
+    return {
+      ...dto,
+      avgProtein: null,
+      avgFat: null,
+      avgCarb: null,
+      highlightText: '',
+      isPreview: true,
+    };
   }
 
   /**
@@ -68,8 +98,11 @@ export class WeeklySummaryService {
   async regenerateWeeklySummary(
     userId: string,
   ): Promise<WeeklySummaryResponseDto> {
-    const { weekStartDate, weekEndDate } = this.getCurrentWeekRange();
-    return this.generateWeeklySummary(userId, weekStartDate, weekEndDate);
+    const { weekStartDate, weekEndDate } = await this.getCurrentWeekRange(userId);
+    return this.applyTier(
+      userId,
+      await this.generateWeeklySummary(userId, weekStartDate, weekEndDate),
+    );
   }
 
   private async generateWeeklySummary(
@@ -77,11 +110,14 @@ export class WeeklySummaryService {
     weekStartDate: Date,
     weekEndDate: Date,
   ): Promise<WeeklySummaryResponseDto> {
-    const now = new Date();
-    const until = now < weekEndDate ? now : weekEndDate;
-
-    const startStr = weekStartDate.toISOString().split('T')[0];
-    const untilStr = until.toISOString().split('T')[0];
+    // Mọi mốc ngày tính theo múi giờ của user (BR-07.2)
+    const tz = await this.getUserTimezone(userId);
+    const startStr = dateToKey(weekStartDate);
+    const sundayKey = dateToKey(weekEndDate);
+    const today = todayKey(tz);
+    const untilStr = today < sundayKey ? today : sundayKey;
+    const weekStartTs = dayBoundsForKey(startStr, tz).start;
+    const untilTs = dayBoundsForKey(untilStr, tz).end;
 
     // 1. Tái sử dụng thống kê dinh dưỡng đã có sẵn ở MealsService
     const nutritionStats = await this.mealsService.getNutritionStatistics(
@@ -95,14 +131,17 @@ export class WeeklySummaryService {
 
     // 2. Số buổi tập đã hoàn thành trong tuần
     const workoutsCompleted = await this.prisma.workoutLog.count({
-      where: { userId, date: { gte: weekStartDate, lte: until } },
+      where: {
+        userId,
+        date: { gte: weekStartDate, lte: keyToDate(untilStr) },
+      },
     });
 
     // 3. Thay đổi cân nặng trong tuần (so với bản ghi gần nhất trước tuần này)
     const weightChangeKg = await this.computeWeightChange(
       userId,
-      weekStartDate,
-      until,
+      weekStartTs,
+      untilTs,
     );
 
     const avgCalories = hasNutritionData ? dailyCalories : null;
@@ -312,24 +351,30 @@ Yêu cầu: KHÔNG lặp lại nguyên văn các con số dạng bảng, hãy vi
       highlightText: row.highlightText,
       isFallback: row.isFallback,
       generatedAt: row.generatedAt.toISOString(),
+      isPreview: false,
     };
   }
 
   /**
    * Tuần bắt đầu Thứ 2, kết thúc Chủ Nhật — cùng quy ước với CheckinsService.
    */
-  private getCurrentWeekRange(): { weekStartDate: Date; weekEndDate: Date } {
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
-    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const weekStartDate = new Date(now);
-    weekStartDate.setDate(now.getDate() + diffToMonday);
-    weekStartDate.setHours(0, 0, 0, 0);
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return resolveTimezone(user?.timezone);
+  }
 
-    const weekEndDate = new Date(weekStartDate);
-    weekEndDate.setDate(weekStartDate.getDate() + 6);
-    weekEndDate.setHours(23, 59, 59, 999);
-
-    return { weekStartDate, weekEndDate };
+  private async getCurrentWeekRange(
+    userId: string,
+  ): Promise<{ weekStartDate: Date; weekEndDate: Date }> {
+    const tz = await this.getUserTimezone(userId);
+    const mondayKey = mondayOnOrBefore(todayKey(tz));
+    const sundayKey = addDaysToKey(mondayKey, 6);
+    return {
+      weekStartDate: keyToDate(mondayKey),
+      weekEndDate: new Date(keyToDate(sundayKey).getTime() + 86_399_999),
+    };
   }
 }
