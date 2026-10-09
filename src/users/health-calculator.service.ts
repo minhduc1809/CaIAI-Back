@@ -6,10 +6,12 @@ import {
   MacroStyle,
   SessionsPerWeek,
   TargetLimit,
+  PregnancyStatus,
+  ProteinPreference,
 } from '@prisma/client';
 
 /**
- * Giới hạn an toàn của mục tiêu calo (BR-03.3). Đây là mặc định; BR-19 sẽ chuyển sang SystemConfig.
+ * Giới hạn an toàn của mục tiêu calo (BR-03.3 đến BR-03.7).
  */
 export const NUTRITION_LIMITS = {
   calorieFloorFemale: 1200,
@@ -18,20 +20,34 @@ export const NUTRITION_LIMITS = {
   maxDeficitPctOfE: 25,
   /** Thặng dư tối đa so với mức năng lượng nền E (%). */
   maxSurplusPctOfE: 15,
+  /** Năng lượng bổ sung cho thai kỳ (kcal/ngày, BR-02.2). */
+  pregnancyEnergyAddKcal: 300,
+  /** Năng lượng bổ sung cho con bú (kcal/ngày, BR-02.2). */
+  lactationEnergyAddKcal: 500,
+  /** Sàn chất béo tối thiểu g/kg cân nặng (BR-03.5: ưu tiên an toàn nội tiết tố). */
+  minFatGramPerKg: 0.7,
+  /** Tỷ lệ calo tối thiểu từ chất béo (%). */
+  minFatPctOfCalories: 20,
+  /** Sàn chất béo tuyệt đối cho nữ (g). */
+  minFatAbsoluteFemale: 40,
+  /** Sàn chất béo tuyệt đối cho nam (g). */
+  minFatAbsoluteMale: 45,
 } as const;
-
 
 export interface HealthMetricsInput {
   heightCm?: number | null;
   weightKg?: number | null;
   targetWeightKg?: number | null;
   weightRateKgPerWeek?: number | null;
+  weightRatePercent?: number | null;
   bodyFatPercent?: number | null;
   dateOfBirth?: Date | string | null;
   gender?: Gender | null;
+  pregnancyStatus?: PregnancyStatus | null;
   activityLevel?: ActivityLevel | null;
   goal?: GoalType | null;
   macroStyle?: MacroStyle | null;
+  proteinPreference?: ProteinPreference | null;
   /** Ước tính Expenditure thích ứng (Adaptive Expenditure Engine) — khi có, dùng thay TDEE công thức tĩnh để tính Target Calories. */
   expenditureOverride?: number | null;
 }
@@ -112,19 +128,36 @@ export class HealthCalculatorService {
     // 4. Tính TDEE
     const tdee = this.calculateTDEE(bmrResult.bmr, activityLevel);
 
+    const effectiveRate =
+      weightRateKgPerWeek !== undefined && weightRateKgPerWeek !== null
+        ? weightRateKgPerWeek
+        : input.weightRatePercent && weightKg
+          ? (input.weightRatePercent * weightKg) / 100
+          : null;
+
     // 5. Tính Calo mục tiêu — ưu tiên Adaptive Expenditure (nếu đã hội tụ/đang cập nhật) thay vì TDEE công thức tĩnh
     const expenditureForTarget = expenditureOverride ?? tdee;
     const { calories: targetCalories, limitedBy: targetLimitedBy } =
       this.calculateTargetFromEnergy(
         expenditureForTarget,
         goal,
-        weightRateKgPerWeek,
-        { gender, bmr: bmrResult.bmr },
+        effectiveRate,
+        {
+          gender,
+          bmr: bmrResult.bmr,
+          pregnancyStatus: input.pregnancyStatus,
+        },
       );
 
-    // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle)
+    // 6. Phân bổ Macros theo trường phái dinh dưỡng đã chọn (MacroStyle, BR-03.4 & BR-03.5)
     const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;
-    const macros = this.calculateMacros(targetCalories, resolvedMacroStyle);
+    const macros = this.calculateMacros(targetCalories, resolvedMacroStyle, {
+      weightKg,
+      gender,
+      goal,
+      proteinPreference: input.proteinPreference,
+      bodyFatPercent,
+    });
 
     return {
       bmi,
@@ -271,9 +304,32 @@ export class HealthCalculatorService {
     energy: number | null,
     goal?: GoalType | null,
     weightRateKgPerWeek?: number | null,
-    opts?: { gender?: Gender | null; bmr?: number | null },
+    opts?: {
+      gender?: Gender | null;
+      bmr?: number | null;
+      pregnancyStatus?: PregnancyStatus | null;
+    },
   ): { calories: number | null; limitedBy: TargetLimit | null } {
     if (!energy) return { calories: null, limitedBy: null };
+
+    // Điều chỉnh năng lượng thai kỳ / cho con bú (BR-02.2)
+    let adjustedEnergy = energy;
+    if (opts?.gender === Gender.FEMALE) {
+      if (opts?.pregnancyStatus === PregnancyStatus.PREGNANT) {
+        adjustedEnergy += NUTRITION_LIMITS.pregnancyEnergyAddKcal;
+      } else if (opts?.pregnancyStatus === PregnancyStatus.LACTATING) {
+        adjustedEnergy += NUTRITION_LIMITS.lactationEnergyAddKcal;
+      }
+    }
+
+    // Phụ nữ mang thai hoặc cho con bú: cấm thâm hụt calo, duy trì hoặc tăng nhẹ
+    const effectiveGoal =
+      opts?.gender === Gender.FEMALE &&
+      (opts?.pregnancyStatus === PregnancyStatus.PREGNANT ||
+        opts?.pregnancyStatus === PregnancyStatus.LACTATING) &&
+      goal === GoalType.LOSE_WEIGHT
+        ? GoalType.MAINTAIN
+        : goal;
 
     const rate =
       weightRateKgPerWeek && weightRateKgPerWeek > 0
@@ -281,15 +337,16 @@ export class HealthCalculatorService {
         : 0.5;
     let delta = (rate * 7700) / 7;
     let limitedBy: TargetLimit | null = null;
-    let target = energy;
+    let target = adjustedEnergy;
 
-    if (goal === GoalType.LOSE_WEIGHT) {
-      const maxDeficit = (energy * NUTRITION_LIMITS.maxDeficitPctOfE) / 100;
+    if (effectiveGoal === GoalType.LOSE_WEIGHT) {
+      const maxDeficit =
+        (adjustedEnergy * NUTRITION_LIMITS.maxDeficitPctOfE) / 100;
       if (delta > maxDeficit) {
         delta = maxDeficit;
         limitedBy = TargetLimit.DEFICIT_CAP;
       }
-      target = energy - delta;
+      target = adjustedEnergy - delta;
 
       const floor = Math.max(
         this.calorieFloorFor(opts?.gender),
@@ -297,68 +354,206 @@ export class HealthCalculatorService {
       );
       if (target < floor) {
         // Sàn không bao giờ đẩy mục tiêu giảm cân lên cao hơn mức nền
-        target = Math.min(floor, energy);
+        target = Math.min(floor, adjustedEnergy);
         limitedBy = TargetLimit.FLOOR;
       }
-    } else if (goal === GoalType.GAIN_WEIGHT) {
-      const maxSurplus = (energy * NUTRITION_LIMITS.maxSurplusPctOfE) / 100;
+    } else if (effectiveGoal === GoalType.GAIN_WEIGHT) {
+      const maxSurplus =
+        (adjustedEnergy * NUTRITION_LIMITS.maxSurplusPctOfE) / 100;
       if (delta > maxSurplus) {
         delta = maxSurplus;
         limitedBy = TargetLimit.SURPLUS_CAP;
       }
-      target = energy + delta;
+      target = adjustedEnergy + delta;
     }
 
     return { calories: Math.round(target), limitedBy };
   }
 
   /**
-   * Phân bổ tỷ lệ Macro theo từng trường phái dinh dưỡng:
-   * - BALANCED: 30% Protein, 40% Carb, 30% Fat
-   * - HIGH_CARB_LOW_FAT: 30% Protein, 55% Carb, 15% Fat (VĐV / chạy bền)
-   * - LOW_CARB_HIGH_FAT: 35% Protein, 20% Carb, 45% Fat
-   * - KETO: 25% Protein, 5% Carb, 70% Fat
+   * Phân bổ tỷ lệ Macro (BR-03.3 đến BR-03.7):
+   * 1. Đạm theo g/kg (BR-03.4):
+   *    - LOSE_WEIGHT (bảo toàn khối cơ): 2.0 g/kg (LOW=1.6, MID=2.0, HIGH=2.2, VERY_HIGH=2.4)
+   *    - MAINTAIN: 1.8 g/kg (LOW=1.4, MID=1.8, HIGH=2.0, VERY_HIGH=2.2)
+   *    - GAIN_WEIGHT: 1.8 - 2.0 g/kg
+   *    - Béo phì (BMI >= 30 hoặc mỡ cao): tính theo Lean Body Mass (LBM) để chống đạm vượt trần.
+   * 2. Béo tối thiểu (Fat Floor - BR-03.5):
+   *    - Sàn an toàn: tối thiểu 0.7 g/kg cân nặng, tối thiểu 20% tổng calo, và tối thiểu sàn tuyệt đối (nữ 40g, nam 45g).
+   * 3. Carb nhận phần calo còn lại: Carb = (TargetCalories - Protein * 4 - Fat * 9) / 4.
+   * 4. Cân bằng sai số làm tròn để tổng calo từ P, C, F khớp TargetCalories (BR-03.7).
    */
-  private calculateMacros(targetCalories: number | null, style: MacroStyle) {
+  calculateMacros(
+    targetCalories: number | null,
+    style: MacroStyle,
+    opts?: {
+      weightKg?: number | null;
+      gender?: Gender | null;
+      goal?: GoalType | null;
+      proteinPreference?: ProteinPreference | null;
+      bodyFatPercent?: number | null;
+    },
+  ) {
     if (!targetCalories) {
       return { protein: null, carb: null, fat: null };
     }
 
-    let proteinRatio = 0.3;
-    let carbRatio = 0.4;
-    let fatRatio = 0.3;
+    const weightKg = opts?.weightKg;
+    let proteinGram: number;
 
+    if (weightKg && weightKg > 0) {
+      const pref = opts?.proteinPreference || ProteinPreference.MID;
+      const isLose = opts?.goal === GoalType.LOSE_WEIGHT;
+      const isGain = opts?.goal === GoalType.GAIN_WEIGHT;
+
+      // Hệ số g/kg cơ bản theo mục tiêu và proteinPreference
+      let factor = 1.8;
+      if (isLose) {
+        switch (pref) {
+          case ProteinPreference.LOW:
+            factor = 1.6;
+            break;
+          case ProteinPreference.MID:
+            factor = 2.0;
+            break;
+          case ProteinPreference.HIGH:
+            factor = 2.2;
+            break;
+          case ProteinPreference.VERY_HIGH:
+            factor = 2.4;
+            break;
+          default:
+            factor = 2.0;
+        }
+      } else if (isGain) {
+        switch (pref) {
+          case ProteinPreference.LOW:
+            factor = 1.6;
+            break;
+          case ProteinPreference.MID:
+            factor = 2.0;
+            break;
+          case ProteinPreference.HIGH:
+            factor = 2.2;
+            break;
+          case ProteinPreference.VERY_HIGH:
+            factor = 2.4;
+            break;
+          default:
+            factor = 2.0;
+        }
+      } else {
+        // MAINTAIN
+        switch (pref) {
+          case ProteinPreference.LOW:
+            factor = 1.4;
+            break;
+          case ProteinPreference.MID:
+            factor = 1.8;
+            break;
+          case ProteinPreference.HIGH:
+            factor = 2.0;
+            break;
+          case ProteinPreference.VERY_HIGH:
+            factor = 2.2;
+            break;
+          default:
+            factor = 1.8;
+        }
+      }
+
+      // Nếu có % mỡ cao (Nam >= 28%, Nữ >= 35%): tính theo LBM để tránh dư thừa đạm
+      const isHighBodyFat =
+        opts?.bodyFatPercent &&
+        (opts.gender === Gender.FEMALE
+          ? opts.bodyFatPercent >= 35
+          : opts.bodyFatPercent >= 28);
+
+      if (isHighBodyFat && opts?.bodyFatPercent) {
+        const lbm = weightKg * (1 - opts.bodyFatPercent / 100);
+        proteinGram = Math.round(lbm * factor * 1.25);
+      } else {
+        proteinGram = Math.round(weightKg * factor);
+      }
+
+      // Giới hạn đạm không vượt quá 45% tổng calo (tránh chiếm hết calo của fat và carb)
+      const maxProteinGram = Math.round((targetCalories * 0.45) / 4);
+      proteinGram = Math.min(proteinGram, maxProteinGram);
+    } else {
+      // Fallback khi chưa có cân nặng: 30% calo
+      proteinGram = Math.round((targetCalories * 0.3) / 4);
+    }
+
+    const proteinCals = proteinGram * 4;
+
+    // 2. Tính sàn chất béo tối thiểu (Fat Floor - BR-03.5)
+    const refWeight = weightKg && weightKg > 0 ? weightKg : 60;
+    const isFemale = opts?.gender === Gender.FEMALE;
+    const absoluteMinFat = isFemale
+      ? NUTRITION_LIMITS.minFatAbsoluteFemale
+      : NUTRITION_LIMITS.minFatAbsoluteMale;
+    const fatFloor = Math.max(
+      Math.round(refWeight * NUTRITION_LIMITS.minFatGramPerKg),
+      Math.round(
+        (targetCalories * (NUTRITION_LIMITS.minFatPctOfCalories / 100)) / 9,
+      ),
+      absoluteMinFat,
+    );
+
+    let targetFatRatio = 0.28;
     switch (style) {
       case MacroStyle.HIGH_CARB_LOW_FAT:
-        proteinRatio = 0.3;
-        carbRatio = 0.55;
-        fatRatio = 0.15;
+        targetFatRatio = 0.2;
         break;
       case MacroStyle.LOW_CARB_HIGH_FAT:
-        proteinRatio = 0.35;
-        carbRatio = 0.2;
-        fatRatio = 0.45;
+        targetFatRatio = 0.42;
         break;
       case MacroStyle.KETO:
-        proteinRatio = 0.25;
-        carbRatio = 0.05;
-        fatRatio = 0.7;
+        targetFatRatio = 0.7;
         break;
       case MacroStyle.BALANCED:
       default:
-        proteinRatio = 0.3;
-        carbRatio = 0.4;
-        fatRatio = 0.3;
+        targetFatRatio = 0.28;
     }
 
-    const proteinGram = Math.round((targetCalories * proteinRatio) / 4);
-    const carbGram = Math.round((targetCalories * carbRatio) / 4);
-    const fatGram = Math.round((targetCalories * fatRatio) / 9);
+    let fatGram = Math.round((targetCalories * targetFatRatio) / 9);
+    // Áp dụng sàn chất béo tối thiểu (ưu tiên an toàn nội tiết tố)
+    fatGram = Math.max(fatGram, fatFloor);
+
+    // Đảm bảo Fat không chiếm vượt quá calo sau khi đã trừ đạm
+    const minCarbCalories = style === MacroStyle.KETO ? 80 : 120; // 20g carb cho keto, 30g carb tối thiểu thông thường
+    const maxFatGram = Math.max(
+      fatFloor,
+      Math.round((targetCalories - proteinCals - minCarbCalories) / 9),
+    );
+    fatGram = Math.min(fatGram, maxFatGram);
+    const fatCals = fatGram * 9;
+
+    // 3. Carb nhận phần calo còn lại
+    const remainingCals = Math.max(0, targetCalories - proteinCals - fatCals);
+    let carbGram = Math.round(remainingCals / 4);
+
+    // KETO: giới hạn carb <= 35g, calo dư chuyển sang béo
+    if (style === MacroStyle.KETO && carbGram > 35) {
+      const excessCarb = carbGram - 30;
+      carbGram = 30;
+      fatGram += Math.round((excessCarb * 4) / 9);
+    }
+
+    // 4. Cân bằng sai số làm tròn (BR-03.7)
+    const currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
+    const diff = targetCalories - currentTotal;
+    if (Math.abs(diff) >= 4) {
+      if (style !== MacroStyle.KETO) {
+        carbGram += Math.round(diff / 4);
+      } else {
+        fatGram += Math.round(diff / 9);
+      }
+    }
 
     return {
-      protein: proteinGram,
-      carb: carbGram,
-      fat: fatGram,
+      protein: Math.max(0, proteinGram),
+      carb: Math.max(0, carbGram),
+      fat: Math.max(0, fatGram),
     };
   }
 }
