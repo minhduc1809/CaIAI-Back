@@ -153,6 +153,7 @@ export class HealthCalculatorService {
     const resolvedMacroStyle = macroStyle || MacroStyle.BALANCED;
     const macros = this.calculateMacros(targetCalories, resolvedMacroStyle, {
       weightKg,
+      heightCm,
       gender,
       goal,
       proteinPreference: input.proteinPreference,
@@ -387,6 +388,7 @@ export class HealthCalculatorService {
     style: MacroStyle,
     opts?: {
       weightKg?: number | null;
+      heightCm?: number | null;
       gender?: Gender | null;
       goal?: GoalType | null;
       proteinPreference?: ProteinPreference | null;
@@ -405,78 +407,44 @@ export class HealthCalculatorService {
       const isLose = opts?.goal === GoalType.LOSE_WEIGHT;
       const isGain = opts?.goal === GoalType.GAIN_WEIGHT;
 
-      // Hệ số g/kg cơ bản theo mục tiêu và proteinPreference
-      let factor = 1.8;
-      if (isLose) {
-        switch (pref) {
-          case ProteinPreference.LOW:
-            factor = 1.6;
-            break;
-          case ProteinPreference.MID:
-            factor = 2.0;
-            break;
-          case ProteinPreference.HIGH:
-            factor = 2.2;
-            break;
-          case ProteinPreference.VERY_HIGH:
-            factor = 2.4;
-            break;
-          default:
-            factor = 2.0;
-        }
-      } else if (isGain) {
-        switch (pref) {
-          case ProteinPreference.LOW:
-            factor = 1.6;
-            break;
-          case ProteinPreference.MID:
-            factor = 2.0;
-            break;
-          case ProteinPreference.HIGH:
-            factor = 2.2;
-            break;
-          case ProteinPreference.VERY_HIGH:
-            factor = 2.4;
-            break;
-          default:
-            factor = 2.0;
-        }
-      } else {
-        // MAINTAIN
-        switch (pref) {
-          case ProteinPreference.LOW:
-            factor = 1.4;
-            break;
-          case ProteinPreference.MID:
-            factor = 1.8;
-            break;
-          case ProteinPreference.HIGH:
-            factor = 2.0;
-            break;
-          case ProteinPreference.VERY_HIGH:
-            factor = 2.2;
-            break;
-          default:
-            factor = 1.8;
-        }
-      }
+      // Hệ số g/kg cơ bản theo mục tiêu và proteinPreference (C1 / BR-03.4)
+      // LOSE: 2.0, MAINTAIN: 1.6, GAIN: 1.8
+      let baseFactor = 1.6;
+      if (isLose) baseFactor = 2.0;
+      else if (isGain) baseFactor = 1.8;
+      else baseFactor = 1.6;
 
-      // Nếu có % mỡ cao (Nam >= 28%, Nữ >= 35%): tính theo LBM để tránh dư thừa đạm
-      const isHighBodyFat =
+      let prefStep = 0;
+      if (pref === ProteinPreference.LOW) prefStep = -0.2;
+      else if (pref === ProteinPreference.HIGH) prefStep = 0.2;
+      else if (pref === ProteinPreference.VERY_HIGH) prefStep = 0.4;
+
+      const factor = baseFactor + prefStep;
+
+      // Cân nặng dùng để tính đạm (C1):
+      // - Có % mỡ (3–60%): LBM / 0.85 (LBM = cân × (1 − %mỡ))
+      // - BMI ≥ 30 và không có % mỡ: cân nặng ứng với BMI 25 (tránh thổi phồng đạm cho người béo phì)
+      // - Còn lại: cân nặng hiện tại
+      let weightForProtein = weightKg;
+      if (
         opts?.bodyFatPercent &&
-        (opts.gender === Gender.FEMALE
-          ? opts.bodyFatPercent >= 35
-          : opts.bodyFatPercent >= 28);
-
-      if (isHighBodyFat && opts?.bodyFatPercent) {
+        opts.bodyFatPercent >= 3 &&
+        opts.bodyFatPercent <= 60
+      ) {
         const lbm = weightKg * (1 - opts.bodyFatPercent / 100);
-        proteinGram = Math.round(lbm * factor * 1.25);
-      } else {
-        proteinGram = Math.round(weightKg * factor);
+        weightForProtein = lbm / 0.85;
+      } else if (opts?.heightCm && opts.heightCm > 0) {
+        const heightM = opts.heightCm / 100;
+        const currentBmi = weightKg / (heightM * heightM);
+        if (currentBmi >= 30) {
+          weightForProtein = 25 * (heightM * heightM);
+        }
       }
 
-      // Giới hạn đạm không vượt quá 45% tổng calo (tránh chiếm hết calo của fat và carb)
-      const maxProteinGram = Math.round((targetCalories * 0.45) / 4);
+      proteinGram = Math.round(weightForProtein * factor);
+
+      // Ràng buộc trần: đạm ≤ 35% tổng calo (C1 / macro.proteinMaxPctKcal)
+      const maxProteinGram = Math.round((targetCalories * 0.35) / 4);
       proteinGram = Math.min(proteinGram, maxProteinGram);
     } else {
       // Fallback khi chưa có cân nặng: 30% calo
@@ -540,13 +508,19 @@ export class HealthCalculatorService {
     }
 
     // 4. Cân bằng sai số làm tròn (BR-03.7)
-    const currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
-    const diff = targetCalories - currentTotal;
-    if (Math.abs(diff) >= 4) {
-      if (style !== MacroStyle.KETO) {
+    let currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
+    let diff = targetCalories - currentTotal;
+
+    if (style !== MacroStyle.KETO) {
+      const carbAdjust = Math.round(diff / 4);
+      carbGram += carbAdjust;
+    } else {
+      const fatAdjust = Math.round(diff / 9);
+      fatGram += fatAdjust;
+      currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
+      diff = targetCalories - currentTotal;
+      if (Math.abs(diff) > 3) {
         carbGram += Math.round(diff / 4);
-      } else {
-        fatGram += Math.round(diff / 9);
       }
     }
 
