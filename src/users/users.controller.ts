@@ -3,6 +3,8 @@ import {
   Get,
   Patch,
   Post,
+  Put,
+  Delete,
   Body,
   Query,
   UseGuards,
@@ -17,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveOnboardingDraftDto } from './dto/onboarding-draft.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -51,6 +54,38 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(userId, updateProfileDto);
+  }
+
+  @Get('me/onboarding-draft')
+  @ApiOperation({
+    summary: 'Lấy dữ liệu nháp Onboarding đã lưu (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Lấy dữ liệu nháp thành công' })
+  async getOnboardingDraft(@CurrentUser('id') userId: string) {
+    return this.usersService.getOnboardingDraft(userId);
+  }
+
+  @Put('me/onboarding-draft')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lưu tiến độ và dữ liệu nháp Onboarding (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Lưu nháp thành công' })
+  async saveOnboardingDraft(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SaveOnboardingDraftDto,
+  ) {
+    return this.usersService.saveOnboardingDraft(userId, dto);
+  }
+
+  @Delete('me/onboarding-draft')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Xóa dữ liệu nháp Onboarding (BR-02.4)',
+  })
+  @ApiResponse({ status: 200, description: 'Xóa nháp thành công' })
+  async clearOnboardingDraft(@CurrentUser('id') userId: string) {
+    return this.usersService.clearOnboardingDraft(userId);
   }
 
   @Post('me/target/apply')
@@ -109,7 +144,10 @@ export class UsersController {
     description:
       'Mỗi điểm ứng với 1 lần log cân nặng/cập nhật hồ sơ/Weekly Check-in thực sự lưu lại giá trị mới — không phải lấy mẫu theo ngày cố định.',
   })
-  @ApiResponse({ status: 200, description: 'Lấy lịch sử Expenditure thành công' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy lịch sử Expenditure thành công',
+  })
   async getExpenditureHistory(
     @CurrentUser('id') userId: string,
     @Query('limit') limit?: string,

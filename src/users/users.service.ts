@@ -7,7 +7,13 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { TargetChangeSource } from '@prisma/client';
+import {
+  TargetChangeSource,
+  PregnancyStatus,
+  GoalType,
+  Gender,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HealthCalculatorService,
@@ -17,6 +23,7 @@ import {
 } from './health-calculator.service';
 import { AdaptiveExpenditureService } from './adaptive-expenditure.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveOnboardingDraftDto } from './dto/onboarding-draft.dto';
 
 @Injectable()
 export class UsersService {
@@ -44,11 +51,14 @@ export class UsersService {
         authProvider: true,
         isEmailVerified: true,
         gender: true,
+        pregnancyStatus: true,
         dateOfBirth: true,
         heightCm: true,
         weightKg: true,
         targetWeightKg: true,
         weightRateKgPerWeek: true,
+        weightRatePercent: true,
+        onboardingDraft: true,
         bodyFatPercent: true,
         activityLevel: true,
         goal: true,
@@ -121,14 +131,6 @@ export class UsersService {
       dto.heightCm !== undefined ? dto.heightCm : currentUser.heightCm;
     const weightKg =
       dto.weightKg !== undefined ? dto.weightKg : currentUser.weightKg;
-    const targetWeightKg =
-      dto.targetWeightKg !== undefined
-        ? dto.targetWeightKg
-        : currentUser.targetWeightKg;
-    const weightRateKgPerWeek =
-      dto.weightRateKgPerWeek !== undefined
-        ? dto.weightRateKgPerWeek
-        : currentUser.weightRateKgPerWeek;
     const bodyFatPercent =
       dto.bodyFatPercent !== undefined
         ? dto.bodyFatPercent
@@ -140,6 +142,138 @@ export class UsersService {
           : null
         : currentUser.dateOfBirth;
     const gender = dto.gender !== undefined ? dto.gender : currentUser.gender;
+
+    // Kiểm tra độ tuổi (BR-02.2)
+    if (dateOfBirth) {
+      const today = new Date();
+      let age = today.getFullYear() - dateOfBirth.getFullYear();
+      const monthDiff = today.getMonth() - dateOfBirth.getMonth();
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())
+      ) {
+        age--;
+      }
+      if (age < 18) {
+        throw new BadRequestException(
+          'Người dùng phải từ đủ 18 tuổi trở lên để sử dụng ứng dụng.',
+        );
+      }
+      if (age > 100) {
+        throw new BadRequestException('Ngày sinh không hợp lệ.');
+      }
+    }
+
+    const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
+
+    // Kiểm tra mang thai / cho con bú (BR-02.2)
+    const pregnancyStatus =
+      dto.pregnancyStatus !== undefined
+        ? dto.pregnancyStatus
+        : currentUser.pregnancyStatus;
+
+    if (pregnancyStatus && pregnancyStatus !== PregnancyStatus.NONE) {
+      if (gender === Gender.MALE) {
+        throw new BadRequestException(
+          'Chỉ người dùng nữ mới có thể thiết lập trạng thái mang thai hoặc cho con bú.',
+        );
+      }
+      if (goal === GoalType.LOSE_WEIGHT) {
+        throw new BadRequestException(
+          'Phụ nữ mang thai hoặc đang cho con bú không được phép áp dụng chế độ giảm cân thâm hụt calo.',
+        );
+      }
+    }
+
+    // Kiểm tra cân đích bắt buộc và đúng chiều (BR-02.3)
+    let targetWeightKg =
+      dto.targetWeightKg !== undefined
+        ? dto.targetWeightKg
+        : currentUser.targetWeightKg;
+
+    if (goal === GoalType.LOSE_WEIGHT) {
+      if (
+        !targetWeightKg &&
+        (dto.goal !== undefined ||
+          !currentUser.targetCalories ||
+          dto.applyTarget)
+      ) {
+        throw new BadRequestException(
+          'Cân nặng mục tiêu là bắt buộc khi chọn mục tiêu giảm cân.',
+        );
+      }
+      if (
+        weightKg &&
+        targetWeightKg &&
+        targetWeightKg >= weightKg &&
+        dto.targetWeightKg !== undefined
+      ) {
+        throw new BadRequestException(
+          'Cân nặng mục tiêu phải nhỏ hơn cân nặng hiện tại khi giảm cân.',
+        );
+      }
+    } else if (goal === GoalType.GAIN_WEIGHT) {
+      if (
+        !targetWeightKg &&
+        (dto.goal !== undefined ||
+          !currentUser.targetCalories ||
+          dto.applyTarget)
+      ) {
+        throw new BadRequestException(
+          'Cân nặng mục tiêu là bắt buộc khi chọn mục tiêu tăng cân.',
+        );
+      }
+      if (
+        weightKg &&
+        targetWeightKg &&
+        targetWeightKg <= weightKg &&
+        dto.targetWeightKg !== undefined
+      ) {
+        throw new BadRequestException(
+          'Cân nặng mục tiêu phải lớn hơn cân nặng hiện tại khi tăng cân.',
+        );
+      }
+    } else if (goal === GoalType.MAINTAIN && !targetWeightKg && weightKg) {
+      targetWeightKg = weightKg;
+    }
+
+    // Tính tốc độ theo % cân nặng và kiểm tra trần an toàn (BR-02.3)
+    let weightRateKgPerWeek =
+      dto.weightRateKgPerWeek !== undefined
+        ? dto.weightRateKgPerWeek
+        : currentUser.weightRateKgPerWeek;
+
+    let weightRatePercent =
+      dto.weightRatePercent !== undefined
+        ? dto.weightRatePercent
+        : currentUser.weightRatePercent;
+
+    if (dto.weightRatePercent !== undefined && weightKg && weightKg > 0) {
+      weightRateKgPerWeek =
+        Math.round(((dto.weightRatePercent * weightKg) / 100) * 100) / 100;
+    } else if (weightRateKgPerWeek && weightKg && weightKg > 0) {
+      weightRatePercent =
+        Math.round((weightRateKgPerWeek / weightKg) * 100 * 100) / 100;
+    }
+
+    if (
+      goal === GoalType.LOSE_WEIGHT &&
+      weightRateKgPerWeek &&
+      weightKg &&
+      weightKg > 0 &&
+      (dto.weightRateKgPerWeek !== undefined ||
+        dto.weightRatePercent !== undefined)
+    ) {
+      const pct = (weightRateKgPerWeek / weightKg) * 100;
+      const bmi = heightCm ? weightKg / Math.pow(heightCm / 100, 2) : 22;
+      const maxSafePct = bmi >= 30 ? 1.5 : 1.0;
+      if (pct > maxSafePct + 0.05) {
+        throw new BadRequestException(
+          'Tốc độ giảm cân vượt quá giới hạn an toàn (> 1% cân nặng/tuần), có nguy cơ mất cơ bắp.',
+        );
+      }
+    }
+
     // BR-03.2 / BR-03.6: số buổi tập là nguồn duy nhất để suy ra mức vận động và nhóm buổi tập
     const trainingDaysPerWeek =
       dto.trainingDaysPerWeek !== undefined
@@ -151,9 +285,12 @@ export class UsersService {
         : dto.activityLevel !== undefined
           ? dto.activityLevel
           : currentUser.activityLevel;
-    const goal = dto.goal !== undefined ? dto.goal : currentUser.goal;
     const macroStyle =
       dto.macroStyle !== undefined ? dto.macroStyle : currentUser.macroStyle;
+    const proteinPreference =
+      dto.proteinPreference !== undefined
+        ? dto.proteinPreference
+        : currentUser.proteinPreference;
 
     // 3. Tính chỉ số (TDEE tĩnh làm baseline, rồi Expenditure thích ứng nếu đã đủ dữ liệu)
     const { calculations, expenditureResult } = await this.computeCalculations(
@@ -163,12 +300,15 @@ export class UsersService {
         weightKg,
         targetWeightKg,
         weightRateKgPerWeek,
+        weightRatePercent,
         bodyFatPercent,
         dateOfBirth,
         gender,
+        pregnancyStatus,
         activityLevel,
         goal,
         macroStyle,
+        proteinPreference,
       },
     );
 
@@ -196,11 +336,13 @@ export class UsersService {
         name: dto.name !== undefined ? dto.name : currentUser.name,
         avatar: dto.avatar !== undefined ? dto.avatar : currentUser.avatar,
         gender,
+        pregnancyStatus,
         dateOfBirth,
         heightCm,
         weightKg,
         targetWeightKg,
         weightRateKgPerWeek,
+        weightRatePercent,
         bodyFatPercent,
         activityLevel,
         goal,
@@ -303,6 +445,7 @@ export class UsersService {
               targetCarb: calculations.targetCarb,
               targetFat: calculations.targetFat,
               targetLimitedBy: calculations.targetLimitedBy,
+              onboardingDraft: Prisma.DbNull,
             }
           : {}),
         adaptiveExpenditure: expenditureResult.estimatedExpenditure,
@@ -391,11 +534,16 @@ export class UsersService {
 
     // BR-09.5: hoàn tất Onboarding hoặc đổi loại mục tiêu/cân đích thì bắt đầu Goal mới (tiến độ tính lại từ cân lúc này).
     // Đổi tốc độ không tạo Goal mới vì không đổi đích đến.
-    const goalTypeChanged = dto.goal !== undefined && dto.goal !== currentUser.goal;
+    const goalTypeChanged =
+      dto.goal !== undefined && dto.goal !== currentUser.goal;
     const targetWeightChanged =
       dto.targetWeightKg !== undefined &&
       dto.targetWeightKg !== currentUser.targetWeightKg;
-    if (goal && weightKg && (!hadTarget || goalTypeChanged || targetWeightChanged)) {
+    if (
+      goal &&
+      weightKg &&
+      (!hadTarget || goalTypeChanged || targetWeightChanged)
+    ) {
       await startGoal(this.prisma, userId, {
         goalType: goal,
         startWeight: weightKg,
@@ -540,21 +688,18 @@ export class UsersService {
       throw new NotFoundException('Không tìm thấy người dùng');
     }
 
-    const { calculations } = await this.computeCalculations(
-      userId,
-      {
-        heightCm: user.heightCm,
-        weightKg: user.weightKg,
-        targetWeightKg: user.targetWeightKg,
-        weightRateKgPerWeek: user.weightRateKgPerWeek,
-        bodyFatPercent: user.bodyFatPercent,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        activityLevel: user.activityLevel,
-        goal: user.goal,
-        macroStyle: user.macroStyle,
-      },
-    );
+    const { calculations } = await this.computeCalculations(userId, {
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      targetWeightKg: user.targetWeightKg,
+      weightRateKgPerWeek: user.weightRateKgPerWeek,
+      bodyFatPercent: user.bodyFatPercent,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      activityLevel: user.activityLevel,
+      goal: user.goal,
+      macroStyle: user.macroStyle,
+    });
 
     if (calculations.targetCalories == null) {
       throw new BadRequestException(
@@ -654,7 +799,9 @@ export class UsersService {
       : null;
     const visible = windowDays
       ? history.filter(
-          (h) => h.recordedAt.getTime() >= Date.now() - windowDays * 24 * 60 * 60 * 1000,
+          (h) =>
+            h.recordedAt.getTime() >=
+            Date.now() - windowDays * 24 * 60 * 60 * 1000,
         )
       : history;
     return {
@@ -728,5 +875,51 @@ export class UsersService {
       return 'Để tăng cân / tăng cơ lành mạnh, hãy nạp dư thừa calo sạch từ nguồn tinh bột phức, thịt nạc, trứng, sữa và kết hợp tập kháng lực (Gym/Kháng lực).';
     }
     return 'Duy trì năng lượng nạp vào tương đương năng lượng tiêu hao (TDEE) để giữ cân nặng và vóc dáng ổn định.';
+  }
+
+  /**
+   * Lấy dữ liệu nháp Onboarding (BR-02.4).
+   */
+  async getOnboardingDraft(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingDraft: true },
+    });
+    return {
+      message: 'Lấy dữ liệu nháp Onboarding thành công',
+      data: user?.onboardingDraft ?? null,
+    };
+  }
+
+  /**
+   * Lưu tiến độ nháp Onboarding (BR-02.4).
+   */
+  async saveOnboardingDraft(userId: string, dto: SaveOnboardingDraftDto) {
+    const draftPayload = {
+      step: dto.step,
+      data: dto.data,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingDraft: draftPayload },
+    });
+    return {
+      message: 'Lưu nháp Onboarding thành công',
+      data: draftPayload,
+    };
+  }
+
+  /**
+   * Xóa dữ liệu nháp Onboarding (BR-02.4).
+   */
+  async clearOnboardingDraft(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingDraft: Prisma.DbNull },
+    });
+    return {
+      message: 'Xóa nháp Onboarding thành công',
+    };
   }
 }

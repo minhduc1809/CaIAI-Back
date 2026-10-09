@@ -23,6 +23,12 @@ enum Gender {
   OTHER
 }
 
+enum PregnancyStatus {
+  NONE
+  PREGNANT
+  LACTATING
+}
+
 enum GoalType {
   LOSE_WEIGHT
   MAINTAIN
@@ -178,17 +184,20 @@ model User {
   passwordResetExpiresAt     DateTime?
 
   gender              Gender?
+  pregnancyStatus     PregnancyStatus? @default(NONE)
   dateOfBirth         DateTime?
   heightCm            Float?
   weightKg            Float?
   targetWeightKg      Float?
   weightRateKgPerWeek Float?         @default(0.5)
+  weightRatePercent   Float?         // % cân nặng mỗi tuần (BR-02.3: an toàn 0.25%–1.0%/tuần)
   bodyFatPercent      Float?
   activityLevel       ActivityLevel? @default(SEDENTARY)
   goal                GoalType?      @default(MAINTAIN)
   macroStyle          MacroStyle?    @default(BALANCED)
   targetLimitedBy     TargetLimit?
   allergies           String[]       @default([]) // Dị ứng/kiêng thực phẩm (Onboarding Q050) — dùng để lọc gợi ý món AI
+  onboardingDraft     Json?          // Lưu nháp Onboarding (BR-02.4: step + dữ liệu nháp)
 
   // Lifestyle Profile (BRD Onboarding — nhóm 6/7)
   sleepHours       Float?

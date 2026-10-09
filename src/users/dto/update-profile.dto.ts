@@ -17,8 +17,10 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ALLERGEN_CODES } from '../../recommendations/data/food-safety-tags.data';
+import { IsValidAge } from '../../common/validators/age-limit.validator';
 import {
   Gender,
+  PregnancyStatus,
   GoalType,
   ActivityLevel,
   MacroStyle,
@@ -60,11 +62,25 @@ export class UpdateProfileDto {
   gender?: Gender;
 
   @ApiPropertyOptional({
+    enum: PregnancyStatus,
+    example: PregnancyStatus.NONE,
+    description:
+      'Tình trạng mang thai/cho con bú (NONE, PREGNANT, LACTATING) — chỉ áp dụng cho nữ (BR-02.2)',
+  })
+  @IsOptional()
+  @IsEnum(PregnancyStatus, {
+    message: 'Tình trạng mang thai không hợp lệ (NONE, PREGNANT, LACTATING)',
+  })
+  pregnancyStatus?: PregnancyStatus;
+
+  @ApiPropertyOptional({
     example: '2000-01-15',
-    description: 'Ngày sinh (YYYY-MM-DD)',
+    description:
+      'Ngày sinh (YYYY-MM-DD), người dùng phải từ đủ 18 đến 100 tuổi (BR-02.2)',
   })
   @IsOptional()
   @IsDateString({}, { message: 'Ngày sinh phải đúng định dạng YYYY-MM-DD' })
+  @IsValidAge(18, 100)
   dateOfBirth?: string;
 
   @ApiPropertyOptional({ example: 175, description: 'Chiều cao (cm)' })
@@ -97,6 +113,17 @@ export class UpdateProfileDto {
   @Min(0.1, { message: 'Tốc độ tối thiểu 0.1 kg/tuần' })
   @Max(1.5, { message: 'Tốc độ tối đa 1.5 kg/tuần' })
   weightRateKgPerWeek?: number;
+
+  @ApiPropertyOptional({
+    example: 0.5,
+    description:
+      'Tốc độ thay đổi cân nặng theo % cân nặng mỗi tuần (0.25%–1.0%/tuần, BR-02.3)',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Tốc độ % cân nặng phải là số' })
+  @Min(0.1, { message: 'Tốc độ tối thiểu 0.1% cân nặng/tuần' })
+  @Max(2.0, { message: 'Tốc độ tối đa 2.0% cân nặng/tuần' })
+  weightRatePercent?: number;
 
   @ApiPropertyOptional({ example: 18.5, description: 'Tỷ lệ mỡ cơ thể (%)' })
   @IsOptional()
