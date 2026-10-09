@@ -855,3 +855,24 @@ model Goal {
 
   @@index([userId, status])
 }
+
+// Nhật ký kiểm toán hành động quản trị (BR-17.1). Bảng chỉ thêm (append-only), cấm sửa/xoá.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  adminEmail String?
+  action     String   // LOGIN, APPROVE_PAYMENT, REJECT_PAYMENT, GRANT_PREMIUM, REVOKE_PREMIUM, ...
+  targetType String   // User, PaymentOrder, ManualGrant
+  targetId   String?
+  before     Json?
+  after      Json?
+  reason     String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+}
+
