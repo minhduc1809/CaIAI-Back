@@ -272,6 +272,7 @@ model User {
   manualGrants         ManualGrant[]
   paymentOrders        PaymentOrder[]
   goals                Goal[]
+  refreshSessions      RefreshSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -290,7 +291,8 @@ model Meal {
   imageUrl  String?
   // Khoá chống ghi trùng: băm nội dung bữa + khung 2 phút. Cùng nội dung gửi lại trong khung (bấm đúp, thử lại sau
   // khi mạng chập chờn) chỉ ra MỘT bữa. Bữa sao chép/cũ không có khoá (null).
-  dedupeKey String?
+  dedupeKey       String?
+  clientRequestId String? // UUID từ client khi bấm Lưu để idempotency (BR-07.5)
 
   totalCalories Float @default(0)
   totalProtein  Float @default(0)
@@ -303,6 +305,7 @@ model Meal {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, dedupeKey])
+  @@unique([userId, clientRequestId])
   @@index([userId, date])
   @@index([userId, logDate])
 }
@@ -321,17 +324,21 @@ model MealItem {
   carb          Float
   fat           Float
   source        String       @default("manual")
+  sourceType    String?      // CATALOG | CUSTOM | BARCODE | AI_MATCHED | AI_ESTIMATE | QUICK_ADD | DIET_PLAN (BR-07.3)
+  sourceId      String?
 }
 
 model WeightLog {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weightKg  Float
-  note      String?
-  date      DateTime @default(now())
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg    Float
+  note        String?
+  date        DateTime  @default(now())
   // Thứ tự nhập thật, dùng khi nhiều lần cân trùng ngày/giờ (BR-09.4)
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  isOutlier   Boolean   @default(false) // Cờ cân ngoại lai (BR-05.3)
+  confirmedAt DateTime? // Mốc thời gian được xác nhận bởi lần cân kế tiếp (BR-05.3)
 
   @@index([userId, date])
 }
@@ -340,15 +347,32 @@ model WeightLog {
 // Weekly Check-in) — KHÔNG ghi khi chỉ xem màn hình (GET expenditure status đọc lại không snapshot).
 // Dùng để vẽ biểu đồ Expenditure thích ứng vs TDEE tĩnh theo thời gian (NUTRITION > Nutrition Progress).
 model ExpenditureSnapshot {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   adaptiveExpenditure Float?
   staticTdee          Float?
-  status              String // UPDATING | HOLDING
-  recordedAt          DateTime @default(now())
+  status              String    // STATIC | LEARNING | STABLE | STALE (BR-05.5)
+  snapshotDate        DateTime? @db.Date // Khoá ngày theo múi giờ user (BR-05.7)
+  recordedAt          DateTime  @default(now())
 
+  @@unique([userId, snapshotDate])
   @@index([userId, recordedAt])
+}
+
+// Phiên đăng nhập nhiều thiết bị và xoay vòng token (BR-01.3)
+model RefreshSession {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  deviceName String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+  replacedBy String?   // ID của session mới thay thế
+
+  @@index([userId, revokedAt])
 }
 
 model CustomFood {

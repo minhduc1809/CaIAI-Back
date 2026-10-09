@@ -1,9 +1,12 @@
 import {
   Controller,
+  Get,
   Post,
   Patch,
   Delete,
   Body,
+  Headers,
+  Param,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -23,6 +26,11 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import {
+  ReauthPasswordDto,
+  ReauthGoogleDto,
+  DeleteAccountDto,
+} from './dto/reauth.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -39,8 +47,11 @@ export class AuthController {
     description: 'Đăng ký thành công, trả về User & Tokens',
   })
   @ApiResponse({ status: 409, description: 'Email đã tồn tại' })
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.register(registerDto, userAgent);
   }
 
   @Post('login')
@@ -52,30 +63,73 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Email hoặc mật khẩu không đúng' })
   @ApiResponse({ status: 403, description: 'Tài khoản bị khóa' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.login(loginDto, userAgent);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Làm mới Access Token bằng Refresh Token' })
+  @ApiOperation({
+    summary: 'Làm mới Access Token bằng Refresh Token (BR-01.3)',
+  })
   @ApiResponse({ status: 200, description: 'Cấp mới token thành công' })
   @ApiResponse({
     status: 401,
-    description: 'Refresh token không hợp lệ hoặc hết hạn',
+    description: 'Refresh token không hợp lệ hoặc hết hạn / bị thu hồi',
   })
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshTokens(refreshTokenDto);
+  async refresh(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.refreshTokens(refreshTokenDto, userAgent);
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Đăng xuất tài khoản (Thu hồi Refresh Token)' })
+  @ApiOperation({ summary: 'Đăng xuất phiên hiện tại' })
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công' })
-  async logout(@CurrentUser('id') userId: string) {
-    return this.authService.logout(userId);
+  async logout(
+    @CurrentUser('id') userId: string,
+    @Body() body?: { refreshToken?: string },
+  ) {
+    return this.authService.logout(userId, body?.refreshToken);
+  }
+
+  @Post('logout-all')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Đăng xuất khỏi toàn bộ thiết bị (BR-01.3)' })
+  @ApiResponse({ status: 200, description: 'Đăng xuất tất cả thành công' })
+  async logoutAll(@CurrentUser('id') userId: string) {
+    return this.authService.logoutAll(userId);
+  }
+
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Xem danh sách thiết bị đang đăng nhập (BR-01.3)' })
+  @ApiResponse({ status: 200, description: 'Danh sách các phiên đăng nhập' })
+  async getSessions(@CurrentUser('id') userId: string) {
+    return this.authService.getSessions(userId);
+  }
+
+  @Delete('sessions/:id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Thu hồi phiên đăng nhập từ xa theo ID (BR-01.3)' })
+  @ApiResponse({ status: 200, description: 'Thu hồi phiên thành công' })
+  async revokeSession(
+    @CurrentUser('id') userId: string,
+    @Param('id') sessionId: string,
+  ) {
+    return this.authService.revokeSession(userId, sessionId);
   }
 
   @Patch('change-password')
@@ -128,8 +182,11 @@ export class AuthController {
     description: 'Đăng nhập Google thành công, trả về User & Tokens',
   })
   @ApiResponse({ status: 401, description: 'idToken không hợp lệ' })
-  async loginWithGoogle(@Body() googleLoginDto: GoogleLoginDto) {
-    return this.authService.loginWithGoogle(googleLoginDto.idToken);
+  async loginWithGoogle(
+    @Body() googleLoginDto: GoogleLoginDto,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.loginWithGoogle(googleLoginDto.idToken, userAgent);
   }
 
   @Post('send-verification-email')
@@ -156,15 +213,71 @@ export class AuthController {
     return this.authService.verifyEmail(userId, verifyEmailDto.code);
   }
 
+  @Post('reauth')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xác thực lại bằng mật khẩu trước thao tác nhạy cảm (BR-01.4)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Trả về reauthToken hiệu lực 5 phút',
+  })
+  @ApiResponse({ status: 401, description: 'Mật khẩu không chính xác' })
+  async reauth(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ReauthPasswordDto,
+  ) {
+    return this.authService.reauth(userId, dto.password);
+  }
+
+  @Post('reauth/google')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Xác thực lại bằng Google idToken trước thao tác nhạy cảm (BR-01.4)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Trả về reauthToken hiệu lực 5 phút',
+  })
+  @ApiResponse({ status: 401, description: 'Tài khoản Google không khớp' })
+  async reauthGoogle(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ReauthGoogleDto,
+  ) {
+    return this.authService.reauthGoogle(userId, dto.idToken);
+  }
+
   @Delete('me')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Xóa vĩnh viễn tài khoản người dùng và toàn bộ dữ liệu liên quan',
+    summary:
+      'Xóa vĩnh viễn tài khoản người dùng và toàn bộ dữ liệu liên quan (BR-01.4)',
   })
   @ApiResponse({ status: 200, description: 'Xóa tài khoản thành công' })
-  async deleteAccount(@CurrentUser('id') userId: string) {
-    return this.authService.deleteAccount(userId);
+  @ApiResponse({ status: 401, description: 'Cần reauthToken hợp lệ' })
+  async deleteAccount(
+    @CurrentUser('id') userId: string,
+    @Headers('x-reauth-token') headerToken?: string,
+    @Body() body?: DeleteAccountDto,
+  ) {
+    const reauthToken = headerToken || body?.reauthToken;
+    return this.authService.deleteAccount(userId, reauthToken);
+  }
+
+  @Get('privacy-policy')
+  @ApiOperation({ summary: 'Chính sách Quyền riêng tư của NutriWise (BR-18)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Nội dung chính sách quyền riêng tư',
+  })
+  getPrivacyPolicy() {
+    return this.authService.getPrivacyPolicy();
   }
 }
