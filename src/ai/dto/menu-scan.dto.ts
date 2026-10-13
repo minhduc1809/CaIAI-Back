@@ -49,6 +49,27 @@ export class MenuItemDto {
   recommendationReason?: string;
 
   @ApiPropertyOptional({
+    enum: ['AI_MATCHED', 'AI_ESTIMATE'],
+    description:
+      'AI_MATCHED: số liệu từ kho món (khẩu phần chuẩn). AI_ESTIMATE: món ngoài kho, số liệu ước tính (hiện nhãn "Ước tính")',
+  })
+  sourceType?: 'AI_MATCHED' | 'AI_ESTIMATE';
+
+  @ApiPropertyOptional({ description: 'Định danh món trong kho (chỉ có khi AI_MATCHED)' })
+  sourceId?: string;
+
+  @ApiPropertyOptional({ description: 'true khi số liệu là ước tính' })
+  isEstimate?: boolean;
+
+  @ApiPropertyOptional({ example: '1 tô vừa', description: 'Khẩu phần mà số liệu dinh dưỡng áp dụng' })
+  servingSize?: string;
+
+  @ApiPropertyOptional({
+    description: 'false khi chưa có số liệu dinh dưỡng cho món này (các trường calo/macro là 0, đừng hiển thị)',
+  })
+  nutritionAvailable?: boolean;
+
+  @ApiPropertyOptional({
     example: 'Có thể không phù hợp: có thịt',
     description:
       'Cảnh báo khi món có thể vi phạm dị ứng hoặc chế độ ăn của bạn (nhận diện theo từ khoá, cần kiểm tra lại với quán)',
@@ -80,4 +101,10 @@ export class ScanMenuResponseDto {
       'Bạn còn 650 kcal và 35g protein. Món Bún chả là lựa chọn lý tưởng nhất!',
   })
   summaryAdvice: string;
+
+  @ApiProperty({
+    example: 'Thành phần thực tế tuỳ cách chế biến của quán. Số liệu chỉ mang tính tham khảo.',
+    description: 'Cảnh báo chung luôn hiển thị cùng kết quả quét thực đơn',
+  })
+  disclaimer: string;
 }

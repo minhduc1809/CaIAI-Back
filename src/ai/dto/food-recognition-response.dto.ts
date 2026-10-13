@@ -1,4 +1,27 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class FoodAlternativeDto {
+  @ApiProperty({ example: 'Phở bò nạm gầu' })
+  name: string;
+
+  @ApiProperty({ example: '1 tô lớn', description: 'Khẩu phần chuẩn của món trong kho' })
+  servingSize: string;
+
+  @ApiProperty({ example: 'pho-bo-nam-gau', description: 'Định danh món trong kho' })
+  sourceId: string;
+
+  @ApiProperty({ example: 480 })
+  calories: number;
+
+  @ApiProperty({ example: 32 })
+  protein: number;
+
+  @ApiProperty({ example: 62 })
+  carb: number;
+
+  @ApiProperty({ example: 12 })
+  fat: number;
+}
 
 export class FoodItemRecognitionDto {
   @ApiProperty({
@@ -21,6 +44,34 @@ export class FoodItemRecognitionDto {
 
   @ApiProperty({ example: 8, description: 'Fat (g)' })
   fat: number;
+
+  @ApiPropertyOptional({
+    enum: ['AI_MATCHED', 'AI_ESTIMATE'],
+    description:
+      'AI_MATCHED: số liệu lấy từ kho món × khẩu phần. AI_ESTIMATE: không có trong kho, số liệu là ước tính (hiện nhãn "Ước tính")',
+  })
+  sourceType?: 'AI_MATCHED' | 'AI_ESTIMATE';
+
+  @ApiPropertyOptional({ description: 'Định danh món trong kho (chỉ có khi AI_MATCHED)' })
+  sourceId?: string;
+
+  @ApiPropertyOptional({ description: 'true khi số liệu là ước tính, không phải số liệu kho' })
+  isEstimate?: boolean;
+
+  @ApiPropertyOptional({ example: 0.9, description: 'Độ tin cậy nhận diện của AI (0–1)' })
+  confidence?: number;
+
+  @ApiPropertyOptional({ enum: ['HIGH', 'LOW'] })
+  confidenceLevel?: 'HIGH' | 'LOW';
+
+  @ApiPropertyOptional({ description: 'true khi calo ước tính đã được sửa theo 4P+4C+9F vì lệch > 15%' })
+  atwaterAdjusted?: boolean;
+
+  @ApiPropertyOptional({
+    type: [FoodAlternativeDto],
+    description: 'Tối đa 3 món gần nhất trong kho để người dùng đổi khi AI nhận sai',
+  })
+  alternatives?: FoodAlternativeDto[];
 }
 
 export class FoodRecognitionResultDto {
@@ -69,6 +120,12 @@ export class FoodRecognitionResultDto {
     description: 'Cờ đánh dấu kết quả thực từ Gemini API hay Fallback Engine',
   })
   isFallback: boolean;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Tên các món AI thấy nhưng không ước tính được số liệu (người dùng tự tìm trong kho món)',
+  })
+  unrecognized?: string[];
 
   @ApiProperty({
     example: 'FREE',
