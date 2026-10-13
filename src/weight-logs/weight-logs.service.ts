@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getActiveGoal, startGoal } from '../users/goal.util';
 import { HealthCalculatorService } from '../users/health-calculator.service';
@@ -21,7 +23,43 @@ export class WeightLogsService {
     private readonly prisma: PrismaService,
     private readonly healthCalculator: HealthCalculatorService,
     private readonly adaptiveExpenditure: AdaptiveExpenditureService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
+
+  /**
+   * BR-13.1: chạm cân đích của Goal đang hiệu lực thì báo MỘT lần (cờ reachedNotifiedAt), kèm gợi ý chuyển sang
+   * Duy trì. Dùng cập nhật có điều kiện nên hai request đồng thời vẫn chỉ gửi một thông báo.
+   */
+  async notifyGoalReachedIfNeeded(userId: string) {
+    if (!this.notifications) return;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { weightKg: true },
+      });
+      const goal = await getActiveGoal(this.prisma, userId);
+      if (!user?.weightKg || !goal || goal.targetWeight == null) return;
+      if (goal.reachedNotifiedAt) return;
+      const reached =
+        (goal.goalType === 'LOSE_WEIGHT' && user.weightKg <= goal.targetWeight) ||
+        (goal.goalType === 'GAIN_WEIGHT' && user.weightKg >= goal.targetWeight);
+      if (!reached) return;
+
+      const claimed = await this.prisma.goal.updateMany({
+        where: { id: goal.id, reachedNotifiedAt: null },
+        data: { reachedNotifiedAt: new Date() },
+      });
+      if (claimed.count === 0) return;
+      await this.notifications.create(
+        userId,
+        'GOAL_REACHED',
+        'Bạn đã chạm cân nặng mục tiêu!',
+        `Cân nặng của bạn đã đạt ${goal.targetWeight} kg. Bạn có muốn chuyển sang mục tiêu Duy trì để giữ vững thành quả không?`,
+      );
+    } catch {
+      // thông báo chỉ là phụ trợ: không làm hỏng việc ghi cân/xem tiến độ
+    }
+  }
 
   /**
    * Ghi nhận cân nặng mới và tự động cập nhật lại Profile + BMI của User
@@ -46,6 +84,7 @@ export class WeightLogsService {
 
     // 2. Cân hiện tại = bản ghi MỚI NHẤT THEO NGÀY (ghi bù ngày cũ không được ghi đè cân hiện tại)
     await this.refreshCurrentWeight(userId);
+    await this.notifyGoalReachedIfNeeded(userId);
 
     return {
       message: 'Ghi nhận cân nặng thành công',
@@ -391,6 +430,8 @@ export class WeightLogsService {
         }
       }
     }
+
+    await this.notifyGoalReachedIfNeeded(userId);
 
     return {
       message: 'Lấy tiến độ cân nặng thành công',

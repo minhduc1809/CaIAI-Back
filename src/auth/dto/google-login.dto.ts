@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GoogleLoginDto {
   @ApiProperty({
@@ -9,4 +9,9 @@ export class GoogleLoginDto {
   @IsString({ message: 'idToken phải là chuỗi ký tự' })
   @IsNotEmpty({ message: 'idToken không được để trống' })
   idToken: string;
+
+  @ApiPropertyOptional({ description: 'Đã đồng ý Chính sách quyền riêng tư; bắt buộc khi Google tạo tài khoản MỚI' })
+  @IsOptional()
+  @IsBoolean()
+  acceptPrivacy?: boolean;
 }

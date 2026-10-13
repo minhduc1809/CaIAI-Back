@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuotaExceededException } from '../common/errors/quota-exceeded.exception';
-import { dayBoundsForKey, resolveTimezone, todayKey } from '../common/utils/date-zone.util';
+import {
+  dayBoundsForKey,
+  resolveTimezone,
+  todayKey,
+} from '../common/utils/date-zone.util';
 import { CsvColumn, toCsv } from './csv';
 import { ZipEntry, createZip } from './zip';
 
@@ -40,7 +44,10 @@ export class DataExportService {
    * (theo múi giờ của người dùng). Lượt trong ngày được giữ chỗ nguyên tử TRƯỚC khi gom dữ liệu để hai yêu cầu
    * đồng thời không cùng xuất; nếu gom dữ liệu thất bại thì trả lại lượt.
    */
-  async exportUserData(userId: string, now: Date = new Date()): Promise<ExportResult> {
+  async exportUserData(
+    userId: string,
+    now: Date = new Date(),
+  ): Promise<ExportResult> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { timezone: true, lastExportAt: true },
@@ -77,12 +84,18 @@ export class DataExportService {
           data: { lastExportAt: user?.lastExportAt ?? null },
         })
         .catch(() => undefined);
-      this.logger.error(`Xuất dữ liệu thất bại cho ${userId}: ${(error as Error).message}`);
+      this.logger.error(
+        `Xuất dữ liệu thất bại cho ${userId}: ${(error as Error).message}`,
+      );
       throw error;
     }
   }
 
-  private async build(userId: string, now: Date, dayKey: string): Promise<ExportResult> {
+  private async build(
+    userId: string,
+    now: Date,
+    dayKey: string,
+  ): Promise<ExportResult> {
     const where = { userId };
     const p = this.prisma;
 
@@ -109,19 +122,35 @@ export class DataExportService {
       p.user.findUnique({ where: { id: userId } }),
       p.goal.findMany({ where, orderBy: { startDate: 'asc' } }),
       p.targetChange.findMany({ where, orderBy: { createdAt: 'asc' } }),
-      p.meal.findMany({ where, orderBy: [{ logDate: 'asc' }, { createdAt: 'asc' }], include: { items: true } }),
-      p.weightLog.findMany({ where, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] }),
+      p.meal.findMany({
+        where,
+        orderBy: [{ logDate: 'asc' }, { createdAt: 'asc' }],
+        include: { items: true },
+      }),
+      p.weightLog.findMany({
+        where,
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      }),
       p.workoutLog.findMany({
         where,
         orderBy: { date: 'asc' },
-        include: { exercises: { orderBy: { order: 'asc' }, include: { sets: { orderBy: { setNumber: 'asc' } } } } },
+        include: {
+          exercises: {
+            orderBy: { order: 'asc' },
+            include: { sets: { orderBy: { setNumber: 'asc' } } },
+          },
+        },
       }),
       p.checkIn.findMany({ where, orderBy: { createdAt: 'asc' } }),
       p.expenditureSnapshot.findMany({ where, orderBy: { recordedAt: 'asc' } }),
       p.waterLog.findMany({ where, orderBy: { loggedAt: 'asc' } }),
       p.customFood.findMany({ where, orderBy: { createdAt: 'asc' } }),
       p.favoriteFood.findMany({ where, orderBy: { createdAt: 'asc' } }),
-      p.habitReminder.findMany({ where, orderBy: { sortOrder: 'asc' }, include: { foods: true } }),
+      p.habitReminder.findMany({
+        where,
+        orderBy: { sortOrder: 'asc' },
+        include: { foods: true },
+      }),
       p.dailyLogStatus.findMany({ where, orderBy: { logDate: 'asc' } }),
       p.aiMessage.findMany({ where, orderBy: { createdAt: 'asc' } }),
       p.weeklySummary.findMany({ where, orderBy: { weekStartDate: 'asc' } }),
@@ -134,7 +163,8 @@ export class DataExportService {
     const profile: Record<string, unknown> = { ...(user ?? {}) };
     for (const field of PROFILE_EXCLUDED_FIELDS) delete profile[field];
 
-    const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2), 'utf8');
+    const json = (value: unknown) =>
+      Buffer.from(JSON.stringify(value, null, 2), 'utf8');
     const entries: ZipEntry[] = [];
     const counts: Record<string, number> = {};
     const add = (name: string, data: Buffer, count?: number) => {
@@ -168,7 +198,11 @@ export class DataExportService {
           autoRenewing: subscription.autoRenewing,
           isTrial: subscription.isTrial,
         },
-        grants: grants.map((g) => ({ startsAt: iso(g.startsAt), endsAt: iso(g.endsAt), revokedAt: iso(g.revokedAt) })),
+        grants: grants.map((g) => ({
+          startsAt: iso(g.startsAt),
+          endsAt: iso(g.endsAt),
+          revokedAt: iso(g.revokedAt),
+        })),
         paymentOrders: orders.map((o) => ({
           code: o.code,
           productId: o.productId,
@@ -181,8 +215,13 @@ export class DataExportService {
     );
 
     // ----- CSV dễ mở bằng Excel: mỗi dòng một bản ghi -----
-    type MealRow = { meal: (typeof meals)[number]; item: (typeof meals)[number]['items'][number] };
-    const mealRows: MealRow[] = meals.flatMap((meal) => meal.items.map((item) => ({ meal, item })));
+    type MealRow = {
+      meal: (typeof meals)[number];
+      item: (typeof meals)[number]['items'][number];
+    };
+    const mealRows: MealRow[] = meals.flatMap((meal) =>
+      meal.items.map((item) => ({ meal, item })),
+    );
     const mealColumns: CsvColumn<MealRow>[] = [
       { header: 'ngay', value: (r) => iso(r.meal.logDate)?.slice(0, 10) },
       { header: 'bua_an', value: (r) => r.meal.mealType },
@@ -193,7 +232,10 @@ export class DataExportService {
       { header: 'dam_g_tren_1_phan', value: (r) => r.item.protein },
       { header: 'tinh_bot_g_tren_1_phan', value: (r) => r.item.carb },
       { header: 'beo_g_tren_1_phan', value: (r) => r.item.fat },
-      { header: 'calo_tong', value: (r) => round1(r.item.calories * r.item.quantity) },
+      {
+        header: 'calo_tong',
+        value: (r) => round1(r.item.calories * r.item.quantity),
+      },
       { header: 'nguon', value: (r) => r.item.source },
     ];
     add('meals.csv', toCsv(mealRows, mealColumns), mealRows.length);
@@ -222,9 +264,20 @@ export class DataExportService {
       workouts.length,
     );
 
-    type SetRow = { workout: (typeof workouts)[number]; exercise: string; set: { setNumber: number; reps: number; weightKg: number; rpe: number | null } };
+    type SetRow = {
+      workout: (typeof workouts)[number];
+      exercise: string;
+      set: {
+        setNumber: number;
+        reps: number;
+        weightKg: number;
+        rpe: number | null;
+      };
+    };
     const setRows: SetRow[] = workouts.flatMap((workout) =>
-      workout.exercises.flatMap((ex) => ex.sets.map((set) => ({ workout, exercise: ex.name, set }))),
+      workout.exercises.flatMap((ex) =>
+        ex.sets.map((set) => ({ workout, exercise: ex.name, set })),
+      ),
     );
     add(
       'workout-sets.csv',
@@ -253,7 +306,10 @@ export class DataExportService {
       'expenditure-snapshots.csv',
       toCsv(expenditure, [
         { header: 'thoi_diem', value: (s) => s.recordedAt },
-        { header: 'tieu_hao_thich_ung_kcal', value: (s) => s.adaptiveExpenditure },
+        {
+          header: 'tieu_hao_thich_ung_kcal',
+          value: (s) => s.adaptiveExpenditure,
+        },
         { header: 'tdee_tinh_kcal', value: (s) => s.staticTdee },
         { header: 'trang_thai', value: (s) => s.status },
       ]),
@@ -308,7 +364,9 @@ export class DataExportService {
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
 function readme(now: Date, counts: Record<string, number>): string {
-  const lines = Object.entries(counts).map(([file, n]) => `  - ${file}: ${n} bản ghi`);
+  const lines = Object.entries(counts).map(
+    ([file, n]) => `  - ${file}: ${n} bản ghi`,
+  );
   return [
     'DỮ LIỆU CÁ NHÂN NUTRIWISE',
     `Xuất lúc: ${now.toISOString()}`,

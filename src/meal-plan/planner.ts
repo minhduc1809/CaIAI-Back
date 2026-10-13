@@ -127,7 +127,8 @@ export function slotBudgetsFor(
   targetCalories: number,
   mealsPerDay?: number | null,
 ): Record<MealSlot, number> {
-  const shares = (mealsPerDay ?? 3) >= 4 ? SLOT_SHARES_WITH_SNACK : SLOT_SHARES_NO_SNACK;
+  const shares =
+    (mealsPerDay ?? 3) >= 4 ? SLOT_SHARES_WITH_SNACK : SLOT_SHARES_NO_SNACK;
   return {
     BREAKFAST: Math.round(targetCalories * shares.BREAKFAST),
     LUNCH: Math.round(targetCalories * shares.LUNCH),
@@ -143,7 +144,9 @@ export const MIN_FOODS_FOR_PLAN = 12;
 const PROTEIN_RICH = 0.2;
 const PROTEIN_RICH_MIN_GRAMS = 8;
 function isProteinRich(f: PlanFood) {
-  return proteinDensity(f) >= PROTEIN_RICH && f.protein >= PROTEIN_RICH_MIN_GRAMS;
+  return (
+    proteinDensity(f) >= PROTEIN_RICH && f.protein >= PROTEIN_RICH_MIN_GRAMS
+  );
 }
 
 /**
@@ -185,7 +188,10 @@ function sumItems(items: PlanItem[]) {
 }
 
 export function buildDayPlan(foods: PlanFood[], opts: PlanOptions): DayPlan {
-  const budgets = { ...slotBudgetsFor(opts.targetCalories, opts.mealsPerDay), ...opts.slotBudgets };
+  const budgets = {
+    ...slotBudgetsFor(opts.targetCalories, opts.mealsPerDay),
+    ...opts.slotBudgets,
+  };
   const slots = opts.onlySlots ?? slotsFor(opts.mealsPerDay);
   const avoid = opts.avoid ?? new Set<string>();
   const used = new Set<string>(); // không lặp món trong cùng ngày
@@ -212,12 +218,20 @@ export function buildDayPlan(foods: PlanFood[], opts: PlanOptions): DayPlan {
     const budget = budgets[mealType];
 
     const pick = (pool: PlanFood[], preferProtein = false): PlanFood | null => {
-      let candidates = pool.filter((f) => !used.has(f.name) && !avoid.has(f.name));
-      if (candidates.length === 0) candidates = pool.filter((f) => !used.has(f.name));
+      let candidates = pool.filter(
+        (f) => !used.has(f.name) && !avoid.has(f.name),
+      );
+      if (candidates.length === 0)
+        candidates = pool.filter((f) => !used.has(f.name));
       if (candidates.length === 0) return null;
       if (preferProtein) {
-        candidates = [...candidates].sort((a, b) => proteinDensity(b) - proteinDensity(a));
-        candidates = candidates.slice(0, Math.max(1, Math.ceil(candidates.length / 2)));
+        candidates = [...candidates].sort(
+          (a, b) => proteinDensity(b) - proteinDensity(a),
+        );
+        candidates = candidates.slice(
+          0,
+          Math.max(1, Math.ceil(candidates.length / 2)),
+        );
       }
       const food = candidates[Math.floor(rng() * candidates.length)];
       used.add(food.name);
@@ -235,7 +249,10 @@ export function buildDayPlan(foods: PlanFood[], opts: PlanOptions): DayPlan {
         add(pick(pools.protein, true));
         add(pick(pools.veg));
       } else {
-        add(pick(pools.noodle.length ? pools.noodle : pools.starch), lowCarb ? 0.75 : 1);
+        add(
+          pick(pools.noodle.length ? pools.noodle : pools.starch),
+          lowCarb ? 0.75 : 1,
+        );
         if (!lowCarb) add(pick(pools.fruit));
       }
     } else if (mealType === 'SNACK') {
@@ -262,12 +279,27 @@ export function buildDayPlan(foods: PlanFood[], opts: PlanOptions): DayPlan {
     let totals = sumItems(items);
 
     // Còn thiếu nhiều so với ngân sách (khẩu phần đã chạm trần): thêm một món bổ sung phù hợp
-    if (budget > 0 && totals.calories < budget * (1 - TOLERANCE) && items.length < 4) {
-      const extraPool = mealType === 'SNACK' ? pools.fruit : isKeto ? pools.protein : pools.fruit;
+    if (
+      budget > 0 &&
+      totals.calories < budget * (1 - TOLERANCE) &&
+      items.length < 4
+    ) {
+      const extraPool =
+        mealType === 'SNACK'
+          ? pools.fruit
+          : isKeto
+            ? pools.protein
+            : pools.fruit;
       const extra = pick(extraPool.length ? extraPool : foods);
       if (extra) {
         const need = budget - totals.calories;
-        const q = Math.round(Math.min(QTY_MAX, Math.max(QTY_MIN, need / Math.max(1, extra.calories))) / QTY_STEP) * QTY_STEP;
+        const q =
+          Math.round(
+            Math.min(
+              QTY_MAX,
+              Math.max(QTY_MIN, need / Math.max(1, extra.calories)),
+            ) / QTY_STEP,
+          ) * QTY_STEP;
         items = [...items, toItem(extra, Math.max(QTY_MIN, q))];
         totals = sumItems(items);
       }
@@ -282,7 +314,9 @@ export function buildDayPlan(foods: PlanFood[], opts: PlanOptions): DayPlan {
       carb: round1(totals.carb),
       fat: round1(totals.fat),
       withinTolerance:
-        budget > 0 ? Math.abs(totals.calories - budget) / budget <= TOLERANCE : items.length === 0,
+        budget > 0
+          ? Math.abs(totals.calories - budget) / budget <= TOLERANCE
+          : items.length === 0,
     });
   }
 

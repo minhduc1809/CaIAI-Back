@@ -1,18 +1,20 @@
 import { isFreeTierLimited } from '../billing/entitlement.util';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { MealsService } from '../meals/meals.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { trackModel, withAiUsage } from '../ai/ai-usage';
 import { WeeklySummaryResponseDto } from './dto/weekly-summary-response.dto';
 import {
   addDaysToKey,
   dateToKey,
   dayBoundsForKey,
   keyToDate,
-  mondayOnOrBefore,
   resolveTimezone,
   todayKey,
+  weekdayOnOrBefore,
 } from '../common/utils/date-zone.util';
 
 @Injectable()
@@ -25,6 +27,7 @@ export class WeeklySummaryService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly mealsService: MealsService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.chatModelName =
@@ -58,7 +61,16 @@ export class WeeklySummaryService {
    * tránh gọi Gemini lặp lại nhiều lần trong cùng một tuần.
    */
   async getWeeklySummary(userId: string): Promise<WeeklySummaryResponseDto> {
-    const { weekStartDate, weekEndDate } = await this.getCurrentWeekRange(userId);
+    return withAiUsage(userId, 'weekly_summary', () =>
+      this.getWeeklySummaryInner(userId),
+    );
+  }
+
+  private async getWeeklySummaryInner(
+    userId: string,
+  ): Promise<WeeklySummaryResponseDto> {
+    const { weekStartDate, weekEndDate } =
+      await this.getCurrentWeekRange(userId);
 
     const cached = await this.prisma.weeklySummary.findUnique({
       where: { userId_weekStartDate: { userId, weekStartDate } },
@@ -67,6 +79,21 @@ export class WeeklySummaryService {
     const full = cached
       ? this.toDto(cached)
       : await this.generateWeeklySummary(userId, weekStartDate, weekEndDate);
+    // Tổng kết mới được tạo thì báo cho người dùng Premium (BR-13.1); lỗi thông báo không làm hỏng tổng kết
+    if (
+      !cached &&
+      full.avgCalories != null &&
+      !(await isFreeTierLimited(this.prisma, userId))
+    ) {
+      await this.notifications
+        ?.create(
+          userId,
+          'WEEKLY_SUMMARY_READY',
+          'Tổng kết tuần của bạn đã sẵn sàng',
+          'Xem lại tuần vừa qua của bạn cùng nhận xét từ NutriWise.',
+        )
+        .catch(() => undefined);
+    }
     return this.applyTier(userId, full);
   }
 
@@ -98,7 +125,16 @@ export class WeeklySummaryService {
   async regenerateWeeklySummary(
     userId: string,
   ): Promise<WeeklySummaryResponseDto> {
-    const { weekStartDate, weekEndDate } = await this.getCurrentWeekRange(userId);
+    return withAiUsage(userId, 'weekly_summary', () =>
+      this.regenerateInner(userId),
+    );
+  }
+
+  private async regenerateInner(
+    userId: string,
+  ): Promise<WeeklySummaryResponseDto> {
+    const { weekStartDate, weekEndDate } =
+      await this.getCurrentWeekRange(userId);
     return this.applyTier(
       userId,
       await this.generateWeeklySummary(userId, weekStartDate, weekEndDate),
@@ -221,9 +257,8 @@ export class WeeklySummaryService {
         return null;
       }
       return (
-        Math.round(
-          (latestLogInWeek.weightKg - firstLogInWeek.weightKg) * 10,
-        ) / 10
+        Math.round((latestLogInWeek.weightKg - firstLogInWeek.weightKg) * 10) /
+        10
       );
     }
 
@@ -240,16 +275,21 @@ export class WeeklySummaryService {
   }): Promise<{ highlightText: string; isFallback: boolean }> {
     if (this.genAI) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: this.chatModelName,
-          generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 256,
-          },
-        });
+        const model = trackModel(
+          this.prisma as any,
+          this.genAI.getGenerativeModel({
+            model: this.chatModelName,
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 256,
+            },
+          }),
+          this.chatModelName,
+          (m) => this.logger.debug(m),
+        );
 
         const prompt = `
-Bạn là AI Nutrition & Fitness Coach của ứng dụng CalAI (Việt Nam).
+Bạn là AI Nutrition & Fitness Coach của ứng dụng NutriWise (Việt Nam).
 Dựa trên dữ liệu tổng hợp 7 ngày gần nhất của người dùng, hãy viết một đoạn highlight ngắn gọn (2-4 câu), bằng tiếng Việt, giọng văn thân thiện, động viên, để hiển thị trong mục "Weekly Summary" của app.
 
 --- DỮ LIỆU TUẦN QUA ---
@@ -366,15 +406,26 @@ Yêu cầu: KHÔNG lặp lại nguyên văn các con số dạng bảng, hãy vi
     return resolveTimezone(user?.timezone);
   }
 
+  /**
+   * Kỳ dữ liệu của tổng kết tuần = kỳ dữ liệu của Check-in (BR-11.7, BR-06.2): 7 ngày đã hoàn tất kết thúc vào hôm
+   * qua của ngày Check-in gần nhất (ngày do người dùng chọn, mặc định Thứ Hai), theo múi giờ của họ. Nhờ vậy tổng
+   * kết và Check-in luôn nói về cùng một tuần, và không còn tình trạng "từ Thứ Hai đến hôm nay" chỉ có 1–2 ngày.
+   * Chỉ ngày ĐẦY ĐỦ mới vào trung bình (do getNutritionStatistics đảm nhiệm).
+   */
   private async getCurrentWeekRange(
     userId: string,
   ): Promise<{ weekStartDate: Date; weekEndDate: Date }> {
-    const tz = await this.getUserTimezone(userId);
-    const mondayKey = mondayOnOrBefore(todayKey(tz));
-    const sundayKey = addDaysToKey(mondayKey, 6);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true, checkinDay: true },
+    });
+    const tz = resolveTimezone(user?.timezone);
+    const checkinKey = weekdayOnOrBefore(todayKey(tz), user?.checkinDay ?? 1);
+    const startKey = addDaysToKey(checkinKey, -7);
+    const lastKey = addDaysToKey(checkinKey, -1);
     return {
-      weekStartDate: keyToDate(mondayKey),
-      weekEndDate: new Date(keyToDate(sundayKey).getTime() + 86_399_999),
+      weekStartDate: keyToDate(startKey),
+      weekEndDate: new Date(keyToDate(lastKey).getTime() + 86_399_999),
     };
   }
 }

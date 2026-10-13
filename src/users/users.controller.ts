@@ -1,3 +1,4 @@
+import { UpdateSettingsDto } from './dto/update-settings.dto';
 import {
   Controller,
   Get,
@@ -56,6 +57,19 @@ export class UsersController {
     return this.usersService.updateProfile(userId, updateProfileDto);
   }
 
+  @Get('me/settings')
+  @ApiOperation({ summary: 'Cài đặt cá nhân đồng bộ giữa các thiết bị (đơn vị, nhắc nhở, thông báo...)' })
+  async getSettings(@CurrentUser('id') userId: string) {
+    return this.usersService.getSettings(userId);
+  }
+
+  @Patch('me/settings')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cập nhật cài đặt cá nhân (không đổi mục tiêu calo/macro)' })
+  async updateSettings(@CurrentUser('id') userId: string, @Body() dto: UpdateSettingsDto) {
+    return this.usersService.updateSettings(userId, dto);
+  }
+
   @Get('me/onboarding-draft')
   @ApiOperation({
     summary: 'Lấy dữ liệu nháp Onboarding đã lưu (BR-02.4)',
@@ -110,6 +124,17 @@ export class UsersController {
       userId,
       limit ? parseInt(limit, 10) : undefined,
     );
+  }
+
+  @Get('me/macro-preview')
+  @ApiOperation({
+    summary:
+      'Xem trước tỉ lệ đạm/tinh bột/béo thực tế của 4 phong cách ăn với mức calo hiện tại (kèm cờ sàn béo tối thiểu)',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách 4 phong cách với số gram và % calo' })
+  @ApiResponse({ status: 400, description: 'PROFILE_INCOMPLETE: chưa đủ hồ sơ để có mục tiêu' })
+  async getMacroPreview(@CurrentUser('id') userId: string) {
+    return this.usersService.getMacroPreview(userId);
   }
 
   @Get('me/health-summary')

@@ -30,8 +30,15 @@ export class DailyStatusService {
    * BR-05.2 / BR-07.6: đánh dấu một ngày là đầy đủ, chưa đủ, hoặc để hệ thống quyết định.
    * Không cho đánh dấu ngày trong tương lai (theo múi giờ của user).
    */
-  async setStatus(userId: string, dateKey: string, completeness: DayCompleteness) {
-    if (!DAY_KEY_RE.test(dateKey) || Number.isNaN(keyToDate(dateKey).getTime())) {
+  async setStatus(
+    userId: string,
+    dateKey: string,
+    completeness: DayCompleteness,
+  ) {
+    if (
+      !DAY_KEY_RE.test(dateKey) ||
+      Number.isNaN(keyToDate(dateKey).getTime())
+    ) {
       throw new BadRequestException('Ngày phải có định dạng YYYY-MM-DD');
     }
     const tz = await this.getTimezone(userId);

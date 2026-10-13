@@ -23,7 +23,7 @@ export class WeeklySummaryController {
     summary:
       'Tổng hợp hoạt động 7 ngày gần nhất (dinh dưỡng, cân nặng, tập luyện) kèm highlight do AI viết',
     description:
-      'Tính từ Thứ 2 tuần hiện tại đến hôm nay. Kết quả được cache lại trong tuần (sinh mới nếu chưa có hoặc đã sang tuần mới) để tránh gọi Gemini lặp lại.',
+      'Kỳ dữ liệu trùng kỳ Check-in: 7 ngày kết thúc hôm qua của ngày Check-in gần nhất (User.checkinDay, múi giờ người dùng), chỉ ngày ghi đủ vào trung bình. Kết quả được cache theo kỳ để tránh gọi Gemini lặp lại.',
   })
   @ApiResponse({ status: 200, type: WeeklySummaryResponseDto })
   async getWeeklySummary(

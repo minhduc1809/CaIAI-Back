@@ -39,9 +39,9 @@ const EWMA_ALPHA = 0.1;
 const CONVERGENCE_ALPHA = 0.25;
 
 // Điều kiện tối thiểu để tính Expenditure thích ứng (BR-05.4)
-const MIN_WEIGHT_DAYS = 4;
+export const ENGINE_MIN_WEIGHT_DAYS = 4;
 const MIN_WINDOW_SPAN_DAYS = 10;
-const MIN_LOGGED_DAYS = 5;
+export const ENGINE_MIN_LOGGED_DAYS = 5;
 
 // Điều kiện trạng thái ổn định (BR-05.5)
 const STABLE_MIN_SPAN_DAYS = 21;
@@ -153,8 +153,8 @@ export class AdaptiveExpenditureService {
       confidence: 'LOW',
       bandKcal: 250,
       todoList: [
-        validWeightDays.length < MIN_WEIGHT_DAYS
-          ? `Cần cân thêm ít nhất ${MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa`
+        validWeightDays.length < ENGINE_MIN_WEIGHT_DAYS
+          ? `Cần cân thêm ít nhất ${ENGINE_MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa`
           : '',
       ].filter(Boolean),
       estimatedExpenditure: staticTdee,
@@ -168,9 +168,9 @@ export class AdaptiveExpenditureService {
       message,
     });
 
-    if (validWeightDays.length < MIN_WEIGHT_DAYS) {
+    if (validWeightDays.length < ENGINE_MIN_WEIGHT_DAYS) {
       return fallback(
-        `Cần cân thêm ít nhất ${MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa (trong ${LOOKBACK_DAYS} ngày gần đây) để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
+        `Cần cân thêm ít nhất ${ENGINE_MIN_WEIGHT_DAYS - validWeightDays.length} ngày nữa (trong ${LOOKBACK_DAYS} ngày gần đây) để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
         'STATIC',
       );
     }
@@ -215,7 +215,8 @@ export class AdaptiveExpenditureService {
 
     // Chỉ ngày ĐẦY ĐỦ mới được dùng (BR-05.2)
     const flags = await loadDayFlags(this.prisma, userId, firstKey, lastKey);
-    const targetForRule = tzUser?.targetCalories ?? staticTdee ?? 2000;
+    // Không dùng số giả (2000) khi chưa có mục tiêu: isCompleteDay chỉ nhận ngày được xác nhận tay trong trường hợp đó
+    const targetForRule = tzUser?.targetCalories ?? staticTdee ?? null;
     const perDay = new Map<string, { meals: number; calories: number }>();
     for (const meal of meals) {
       const key = dateToKey(meal.logDate);
@@ -232,9 +233,9 @@ export class AdaptiveExpenditureService {
     }
     const loggedDaysCount = caloriesByDay.size;
 
-    if (loggedDaysCount < MIN_LOGGED_DAYS) {
+    if (loggedDaysCount < ENGINE_MIN_LOGGED_DAYS) {
       return fallback(
-        `Cần log bữa ăn thêm ít nhất ${MIN_LOGGED_DAYS - loggedDaysCount} ngày nữa trong ${windowDays} ngày gần đây để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
+        `Cần log bữa ăn thêm ít nhất ${ENGINE_MIN_LOGGED_DAYS - loggedDaysCount} ngày nữa trong ${windowDays} ngày gần đây để bắt đầu tính Expenditure thích ứng. Hiện đang dùng công thức TDEE tĩnh.`,
         'STATIC',
       );
     }
