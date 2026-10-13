@@ -55,7 +55,10 @@ export class BillingService {
     const [sub, premium, user] = await Promise.all([
       this.prisma.subscriptionState.findUnique({ where: { userId } }),
       isPremiumNow(this.prisma, userId, now),
-      this.prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { timezone: true },
+      }),
     ]);
     const counter = await this.prisma.usageCounter.findUnique({
       where: { userId_date: { userId, date: todayKey(user?.timezone, now) } },
@@ -63,7 +66,12 @@ export class BillingService {
 
     // Premium cấp tay (QR hoặc admin) hiển thị hạn của lần cấp còn dài nhất
     const grant = await this.prisma.manualGrant.findFirst({
-      where: { userId, revokedAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
+      where: {
+        userId,
+        revokedAt: null,
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
       orderBy: { endsAt: 'desc' },
     });
     const subActive = !!sub && isPremiumStatus(sub.status, sub.expiryTime, now);
@@ -79,8 +87,10 @@ export class BillingService {
       plan: premium ? 'PREMIUM' : 'FREE',
       status: sub?.status ?? null,
       source: subActive ? 'GOOGLE_PLAY' : grant ? 'MANUAL' : null,
-      expiryTime: subActive ? sub!.expiryTime : (grant?.endsAt ?? sub?.expiryTime ?? null),
-      autoRenewing: subActive ? sub!.autoRenewing : false,
+      expiryTime: subActive
+        ? sub.expiryTime
+        : (grant?.endsAt ?? sub?.expiryTime ?? null),
+      autoRenewing: subActive ? sub.autoRenewing : false,
       isTrial: sub?.isTrial ?? false,
       productId: sub?.productId ?? null,
       banner,
@@ -102,8 +112,15 @@ export class BillingService {
 
   /** BR-16.6: quá expiryTime mà chưa có RTDN mới thì hỏi lại Google, tối đa 1 lần/giờ/user. */
   private async reconcileIfNeeded(userId: string, now: Date) {
-    const sub = await this.prisma.subscriptionState.findUnique({ where: { userId } });
-    if (!sub || sub.expiryTime > now || !RECONCILE_STATUSES.includes(sub.status)) return;
+    const sub = await this.prisma.subscriptionState.findUnique({
+      where: { userId },
+    });
+    if (
+      !sub ||
+      sub.expiryTime > now ||
+      !RECONCILE_STATUSES.includes(sub.status)
+    )
+      return;
     if (
       sub.lastReconciledAt &&
       now.getTime() - sub.lastReconciledAt.getTime() < RECONCILE_MIN_INTERVAL_MS
@@ -125,7 +142,9 @@ export class BillingService {
         payload: { status: fresh.status },
       });
     } catch (e) {
-      this.logger.warn(`Đối soát thất bại cho ${userId}: ${(e as Error).message}`);
+      this.logger.warn(
+        `Đối soát thất bại cho ${userId}: ${(e as Error).message}`,
+      );
       // Không xác minh được: quyền vẫn tắt theo expiryTime; dọn hệ quả mất Premium (idempotent)
       await this.onPremiumLost(userId);
     }
@@ -134,15 +153,23 @@ export class BillingService {
 
   // --------------------------------------------------------------------- verify
 
-  async verify(userId: string, dto: { purchaseToken: string; productId: string }) {
-    const product = await this.prisma.product.findUnique({ where: { productId: dto.productId } });
-    if (!product?.isActive) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT' });
+  async verify(
+    userId: string,
+    dto: { purchaseToken: string; productId: string },
+  ) {
+    const product = await this.prisma.product.findUnique({
+      where: { productId: dto.productId },
+    });
+    if (!product?.isActive)
+      throw new BadRequestException({ code: 'UNKNOWN_PRODUCT' });
 
     const existing = await this.prisma.purchase.findUnique({
       where: { purchaseToken: dto.purchaseToken },
     });
     if (existing?.userId && existing.userId !== userId) {
-      throw new ConflictException({ code: 'PURCHASE_BELONGS_TO_OTHER_ACCOUNT' });
+      throw new ConflictException({
+        code: 'PURCHASE_BELONGS_TO_OTHER_ACCOUNT',
+      });
     }
 
     let sub: PlaySubscription;
@@ -176,7 +203,9 @@ export class BillingService {
         purchaseToken: dto.purchaseToken,
         payload: {},
       });
-      throw new ConflictException({ code: 'PURCHASE_BELONGS_TO_OTHER_ACCOUNT' });
+      throw new ConflictException({
+        code: 'PURCHASE_BELONGS_TO_OTHER_ACCOUNT',
+      });
     }
 
     await this.applySubscription(userId, dto.purchaseToken, sub, 'VERIFY');
@@ -196,14 +225,20 @@ export class BillingService {
 
     let data: any;
     try {
-      data = JSON.parse(Buffer.from(body.message.data ?? '', 'base64').toString('utf-8'));
+      data = JSON.parse(
+        Buffer.from(body.message.data ?? '', 'base64').toString('utf-8'),
+      );
     } catch {
       throw new BadRequestException();
     }
 
     const n = data?.subscriptionNotification;
     if (!n?.purchaseToken) {
-      await this.logEvent({ type: 'RTDN_OTHER', messageId, payload: data ?? {} });
+      await this.logEvent({
+        type: 'RTDN_OTHER',
+        messageId,
+        payload: data ?? {},
+      });
       return { ignored: true };
     }
 
@@ -213,7 +248,8 @@ export class BillingService {
     if (purchase?.userId) {
       // Gọi lại Google để lấy trạng thái mới nhất, không tin nội dung message (BR-16.6)
       const fresh = await this.google.getSubscription(n.purchaseToken);
-      if (n.notificationType === RTDN_SUBSCRIPTION_REVOKED) fresh.status = SubStatus.REVOKED;
+      if (n.notificationType === RTDN_SUBSCRIPTION_REVOKED)
+        fresh.status = SubStatus.REVOKED;
       await this.applySubscription(purchase.userId, n.purchaseToken, fresh);
     }
     await this.logEvent({
@@ -239,13 +275,18 @@ export class BillingService {
     eventType?: string,
   ) {
     const now = new Date();
-    const before = await this.prisma.subscriptionState.findUnique({ where: { userId } });
-    const wasPremium = !!before && isPremiumStatus(before.status, before.expiryTime, now);
+    const before = await this.prisma.subscriptionState.findUnique({
+      where: { userId },
+    });
+    const wasPremium =
+      !!before && isPremiumStatus(before.status, before.expiryTime, now);
 
     const isCurrentToken = !before || before.currentPurchaseToken === token;
-    const isUpgrade = !!before && sub.linkedPurchaseToken === before.currentPurchaseToken;
+    const isUpgrade =
+      !!before && sub.linkedPurchaseToken === before.currentPurchaseToken;
     const newIsPremium = isPremiumStatus(sub.status, sub.expiryTime, now);
-    const takesOver = isCurrentToken || isUpgrade || (newIsPremium && !wasPremium);
+    const takesOver =
+      isCurrentToken || isUpgrade || (newIsPremium && !wasPremium);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.purchase.upsert({
@@ -303,13 +344,16 @@ export class BillingService {
           });
         } catch (e) {
           // Sẽ thử lại ở lần verify/đối soát sau; Google hoàn tiền nếu quá 3 ngày không acknowledge
-          this.logger.error(`Acknowledge thất bại cho ${userId}: ${(e as Error).message}`);
+          this.logger.error(
+            `Acknowledge thất bại cho ${userId}: ${(e as Error).message}`,
+          );
         }
       }
       if (wasPremium && !newIsPremium) await this.onPremiumLost(userId);
       if (
         before?.status !== sub.status &&
-        (sub.status === SubStatus.IN_GRACE_PERIOD || sub.status === SubStatus.ON_HOLD)
+        (sub.status === SubStatus.IN_GRACE_PERIOD ||
+          sub.status === SubStatus.ON_HOLD)
       ) {
         await this.notifications
           .create(

@@ -1,3 +1,4 @@
+import { cfg } from '../../system-config/config.holder';
 import { dateToKey, keyToDate } from './date-zone.util';
 
 /**
@@ -12,21 +13,29 @@ import { dateToKey, keyToDate } from './date-zone.util';
  * Đây là mặc định; BR-19 sẽ chuyển sang SystemConfig (engine.autoCompleteMinMeals / MinPctTarget).
  */
 export const DAY_COMPLETENESS = {
-  autoMinMeals: 2,
-  autoMinPctTarget: 60,
-} as const;
+  /** Số bữa tối thiểu để ngày tự động coi là đầy đủ (`engine.autoCompleteMinMeals`). */
+  get autoMinMeals() {
+    return cfg('engine.autoCompleteMinMeals');
+  },
+  /** % mục tiêu calo tối thiểu để ngày tự động coi là đầy đủ (`engine.autoCompleteMinPctTarget`). */
+  get autoMinPctTarget() {
+    return cfg('engine.autoCompleteMinPctTarget');
+  },
+};
 
 export type DayCompletenessFlag = 'AUTO' | 'COMPLETE' | 'INCOMPLETE';
 
 export function isCompleteDay(
   mealCount: number,
   calories: number,
-  targetCalories: number,
+  targetCalories: number | null | undefined,
   flag: DayCompletenessFlag | null | undefined = null,
 ): boolean {
   if (mealCount < 1) return false;
   if (flag === 'INCOMPLETE') return false;
   if (flag === 'COMPLETE') return true;
+  // Chưa có mục tiêu thì không có mốc 60% để so: chỉ ngày người dùng tự xác nhận mới được dùng, không bịa mục tiêu
+  if (!targetCalories || targetCalories <= 0) return false;
   return (
     mealCount >= DAY_COMPLETENESS.autoMinMeals &&
     calories >= (targetCalories * DAY_COMPLETENESS.autoMinPctTarget) / 100
@@ -37,9 +46,9 @@ export function isCompleteDay(
 export async function loadDayFlags(
   prisma: {
     dailyLogStatus: {
-      findMany: (args: any) => Promise<
-        { logDate: Date; completeness: DayCompletenessFlag }[]
-      >;
+      findMany: (
+        args: any,
+      ) => Promise<{ logDate: Date; completeness: DayCompletenessFlag }[]>;
     };
   },
   userId: string,

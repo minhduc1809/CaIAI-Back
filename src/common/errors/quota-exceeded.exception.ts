@@ -59,7 +59,10 @@ export class QuotaExceededException extends HttpException {
         used: input.used,
         period: input.period,
         unit,
-        resetsAt: typeof input.resetsAt === 'string' ? input.resetsAt : input.resetsAt.toISOString(),
+        resetsAt:
+          typeof input.resetsAt === 'string'
+            ? input.resetsAt
+            : input.resetsAt.toISOString(),
         premiumBenefit: input.premiumBenefit ?? null,
         // Gợi ý app mở màn nâng cấp: chỉ khi người dùng chưa phải Premium
         upgrade: !input.isPremium,

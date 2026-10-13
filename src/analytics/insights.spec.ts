@@ -1,8 +1,17 @@
 import { AnalyticsService } from './analytics.service';
 
-const mondays = ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31', '2026-09-07'];
+const mondays = [
+  '2026-08-03',
+  '2026-08-10',
+  '2026-08-17',
+  '2026-08-24',
+  '2026-08-31',
+  '2026-09-07',
+];
 const add = (key: string, n: number) =>
-  new Date(new Date(`${key}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+  new Date(new Date(`${key}T00:00:00Z`).getTime() + n * 86400000)
+    .toISOString()
+    .slice(0, 10);
 
 /** Mỗi tuần một điểm xu hướng cân vào thứ Tư. */
 const trend = (pairs: [string, number][]) =>
@@ -14,7 +23,10 @@ function mealsFor(weeks: string[], daysPerWeek = 7) {
   for (const w of weeks) {
     for (let d = 0; d < daysPerWeek; d++) {
       const logDate = new Date(`${add(w, d)}T00:00:00Z`);
-      rows.push({ logDate, totalCalories: 900 }, { logDate, totalCalories: 900 });
+      rows.push(
+        { logDate, totalCalories: 900 },
+        { logDate, totalCalories: 900 },
+      );
     }
   }
   return rows;
@@ -42,12 +54,16 @@ function build(opts: {
     dailyLogStatus: { findMany: jest.fn(async () => []) },
     subscriptionState: {
       findUnique: jest.fn(async () =>
-        opts.premium ? { status: 'ACTIVE', expiryTime: new Date(Date.now() + 86400000) } : null,
+        opts.premium
+          ? { status: 'ACTIVE', expiryTime: new Date(Date.now() + 86400000) }
+          : null,
       ),
     },
     manualGrant: { findFirst: jest.fn(async () => null) },
   };
-  const weights: any = { getWeightTrend: jest.fn(async () => ({ data: opts.trend })) };
+  const weights: any = {
+    getWeightTrend: jest.fn(async () => ({ data: opts.trend })),
+  };
   return new AnalyticsService(prisma, weights);
 }
 
@@ -65,7 +81,11 @@ describe('P1 Insight Plateau', () => {
   });
 
   it('người đang DUY TRÌ đi ngang là thành công → KHÔNG báo Plateau', async () => {
-    const svc = build({ goal: 'MAINTAIN', trend: flat, meals: mealsFor(flatWeeks) });
+    const svc = build({
+      goal: 'MAINTAIN',
+      trend: flat,
+      meals: mealsFor(flatWeeks),
+    });
     expect((await svc.getInsights('u1')).data.insights).toEqual([]);
   });
 
@@ -75,33 +95,57 @@ describe('P1 Insight Plateau', () => {
   });
 
   it('chỉ một tuần trong ba tuần thiếu dữ liệu cũng không báo', async () => {
-    const svc = build({ trend: flat, meals: [...mealsFor(flatWeeks.slice(0, 2)), ...mealsFor([flatWeeks[2]], 2)] });
+    const svc = build({
+      trend: flat,
+      meals: [
+        ...mealsFor(flatWeeks.slice(0, 2)),
+        ...mealsFor([flatWeeks[2]], 2),
+      ],
+    });
     expect((await svc.getInsights('u1')).data.insights).toEqual([]);
   });
 
   it('tuần không có cân cắt đứt chuỗi: không nối hai tuần cách nhau rồi coi như thay đổi trong một tuần', async () => {
     // tuần 1, 2 có cân; bỏ tuần 3; tuần 4, 5 có cân → không đủ 3 mức thay đổi LIỀN NHAU
     const gap = trend([
-      [mondays[0], 80], [mondays[1], 80], [mondays[3], 80], [mondays[4], 80],
+      [mondays[0], 80],
+      [mondays[1], 80],
+      [mondays[3], 80],
+      [mondays[4], 80],
     ]);
     const svc = build({ trend: gap, meals: mealsFor(mondays) });
     expect((await svc.getInsights('u1')).data.insights).toEqual([]);
   });
 
   it('cân vẫn giảm đều (-0,5 kg/tuần) thì không phải Plateau', async () => {
-    const dropping = trend(mondays.slice(0, 4).map((m, i) => [m, 80 - i * 0.5] as [string, number]));
+    const dropping = trend(
+      mondays.slice(0, 4).map((m, i) => [m, 80 - i * 0.5] as [string, number]),
+    );
     const svc = build({ trend: dropping, meals: mealsFor(flatWeeks) });
     expect((await svc.getInsights('u1')).data.insights).toEqual([]);
   });
 
   it('chưa đủ dữ liệu cân hoặc chưa có mục tiêu → không có insight', async () => {
-    expect((await build({ trend: [], meals: [] }).getInsights('u1')).data.insights).toEqual([]);
-    expect((await build({ trend: flat.slice(0, 2), meals: [] }).getInsights('u1')).data.insights).toEqual([]);
+    expect(
+      (await build({ trend: [], meals: [] }).getInsights('u1')).data.insights,
+    ).toEqual([]);
+    expect(
+      (await build({ trend: flat.slice(0, 2), meals: [] }).getInsights('u1'))
+        .data.insights,
+    ).toEqual([]);
   });
 
   it('nội dung nhắc khác nhau theo chương trình: MANUAL xem lại mục tiêu, còn lại chờ Check-in', async () => {
-    const manual = (await build({ programType: 'MANUAL', trend: flat, meals: mealsFor(flatWeeks) }).getInsights('u1')).data.insights[0];
-    const coached = (await build({ trend: flat, meals: mealsFor(flatWeeks) }).getInsights('u1')).data.insights[0];
+    const manual = (
+      await build({
+        programType: 'MANUAL',
+        trend: flat,
+        meals: mealsFor(flatWeeks),
+      }).getInsights('u1')
+    ).data.insights[0];
+    const coached = (
+      await build({ trend: flat, meals: mealsFor(flatWeeks) }).getInsights('u1')
+    ).data.insights[0];
     expect(manual.message).toContain('phần Mục tiêu');
     expect(coached.message).toContain('Check-in');
   });
@@ -109,21 +153,38 @@ describe('P1 Insight Plateau', () => {
 
 describe('P1 Insight lệch mục tiêu', () => {
   // Mục tiêu giảm 0,5 kg/tuần nhưng cân tăng +0,3 kg mỗi tuần trong 2 tuần liền
-  const rising = trend(mondays.slice(0, 3).map((m, i) => [m, 80 + i * 0.3] as [string, number]));
+  const rising = trend(
+    mondays.slice(0, 3).map((m, i) => [m, 80 + i * 0.3] as [string, number]),
+  );
   const risingWeeks = mondays.slice(1, 3);
 
   it('2 tuần liền lệch > 50% và đủ dữ liệu → báo', async () => {
-    const res = (await build({ trend: rising, meals: mealsFor(risingWeeks) }).getInsights('u1')).data.insights;
+    const res = (
+      await build({ trend: rising, meals: mealsFor(risingWeeks) }).getInsights(
+        'u1',
+      )
+    ).data.insights;
     expect(res.map((i) => i.type)).toContain('GOAL_DEVIATION');
   });
 
   it('thiếu dữ liệu ghi bữa thì không báo', async () => {
-    const res = (await build({ trend: rising, meals: mealsFor(risingWeeks, 2) }).getInsights('u1')).data.insights;
+    const res = (
+      await build({
+        trend: rising,
+        meals: mealsFor(risingWeeks, 2),
+      }).getInsights('u1')
+    ).data.insights;
     expect(res).toEqual([]);
   });
 
   it('người đang Duy trì không bị báo lệch mục tiêu', async () => {
-    const res = (await build({ goal: 'MAINTAIN', trend: rising, meals: mealsFor(risingWeeks) }).getInsights('u1')).data.insights;
+    const res = (
+      await build({
+        goal: 'MAINTAIN',
+        trend: rising,
+        meals: mealsFor(risingWeeks),
+      }).getInsights('u1')
+    ).data.insights;
     expect(res).toEqual([]);
   });
 });
@@ -144,8 +205,15 @@ describe('Insight phân tầng Free / Premium', () => {
 
   it('đang bật khoá, Free chỉ có 1 insight: vẫn thấy đầy đủ, không bị khoá', async () => {
     process.env.BILLING_ENFORCE = 'true';
-    const rising = trend(mondays.slice(0, 3).map((m, i) => [m, 80 + i * 0.3] as [string, number]));
-    const insights = (await build({ trend: rising, meals: mealsFor(mondays.slice(1, 3)) }).getInsights('u1')).data.insights;
+    const rising = trend(
+      mondays.slice(0, 3).map((m, i) => [m, 80 + i * 0.3] as [string, number]),
+    );
+    const insights = (
+      await build({
+        trend: rising,
+        meals: mealsFor(mondays.slice(1, 3)),
+      }).getInsights('u1')
+    ).data.insights;
     expect(insights).toHaveLength(1);
     expect(insights[0].locked).toBe(false);
     expect(insights[0].message).not.toBe('');
@@ -153,7 +221,8 @@ describe('Insight phân tầng Free / Premium', () => {
 
   it('đang bật khoá, Premium: thấy tất cả đầy đủ', async () => {
     process.env.BILLING_ENFORCE = 'true';
-    const insights = (await build({ ...args, premium: true }).getInsights('u1')).data.insights;
+    const insights = (await build({ ...args, premium: true }).getInsights('u1'))
+      .data.insights;
     expect(insights.every((i) => !i.locked && i.message !== '')).toBe(true);
   });
 

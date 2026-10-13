@@ -27,16 +27,20 @@ export class PremiumGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<boolean>(REQUIRES_PREMIUM, [
-      ctx.getHandler(),
-      ctx.getClass(),
-    ]);
+    const required = this.reflector.getAllAndOverride<boolean>(
+      REQUIRES_PREMIUM,
+      [ctx.getHandler(), ctx.getClass()],
+    );
     if (!required || process.env.BILLING_ENFORCE !== 'true') return true;
 
     const userId = ctx.switchToHttp().getRequest().user?.id;
     if (userId && (await isPremiumNow(this.prisma, userId))) return true;
     throw new HttpException(
-      { statusCode: HttpStatus.PAYMENT_REQUIRED, code: 'PREMIUM_REQUIRED', message: 'Tính năng này dành cho gói Premium.' },
+      {
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
+        code: 'PREMIUM_REQUIRED',
+        message: 'Tính năng này dành cho gói Premium.',
+      },
       HttpStatus.PAYMENT_REQUIRED,
     );
   }

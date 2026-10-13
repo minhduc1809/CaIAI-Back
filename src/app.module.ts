@@ -6,6 +6,8 @@ import { UsersModule } from './users/users.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { MealsModule } from './meals/meals.module';
 import { WeightLogsModule } from './weight-logs/weight-logs.module';
+import { FoodSubmissionsModule } from './food-submissions/food-submissions.module';
+import { SystemConfigModule } from './system-config/system-config.module';
 import { WorkoutsModule } from './workouts/workouts.module';
 import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -36,6 +38,8 @@ import { AppService } from './app.service';
     RecommendationsModule,
     MealsModule,
     WeightLogsModule,
+    FoodSubmissionsModule,
+    SystemConfigModule,
     WorkoutsModule,
     AiModule,
     AnalyticsModule,
