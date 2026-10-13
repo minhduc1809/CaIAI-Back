@@ -1,5 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AdminLoginDto {
   @ApiProperty({
@@ -18,4 +18,9 @@ export class AdminLoginDto {
   @IsNotEmpty({ message: 'Mật khẩu không được để trống' })
   @MinLength(6, { message: 'Mật khẩu tối thiểu 6 ký tự' })
   password: string;
+
+  @ApiPropertyOptional({ example: '123456', description: 'Mã xác thực hai lớp (TOTP 6 số hoặc mã dự phòng), bắt buộc nếu tài khoản đã bật' })
+  @IsOptional()
+  @IsString()
+  totpCode?: string;
 }

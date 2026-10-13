@@ -1,4 +1,5 @@
 import {
+  Optional,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -7,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { AdminAuditService } from './admin-audit.service';
 import { QueryOrdersDto } from '../dto/query-orders.dto';
+import { AdminReauthService } from './admin-reauth.service';
+import { DEFAULT_TIMEZONE, dayBoundsForKey } from '../../common/utils/date-zone.util';
 
 @Injectable()
 export class AdminPaymentsService {
@@ -14,6 +17,7 @@ export class AdminPaymentsService {
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
     private readonly auditService: AdminAuditService,
+    @Optional() private readonly reauth?: AdminReauthService,
   ) {}
 
   /**
@@ -28,6 +32,20 @@ export class AdminPaymentsService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.from || query.to) {
+      where.createdAt = {
+        ...(query.from ? { gte: dayBoundsForKey(query.from, DEFAULT_TIMEZONE).start } : {}),
+        ...(query.to ? { lt: dayBoundsForKey(query.to, DEFAULT_TIMEZONE).end } : {}),
+      };
+    }
+    if (query.minAmount !== undefined || query.maxAmount !== undefined) {
+      where.amount = {
+        ...(query.minAmount !== undefined ? { gte: query.minAmount } : {}),
+        ...(query.maxAmount !== undefined ? { lte: query.maxAmount } : {}),
+      };
+    }
+    const sortKey = ['createdAt', 'amount', 'expiresAt'].includes(query.sort ?? '') ? (query.sort as string) : 'createdAt';
+    const sortOrder = query.order === 'asc' ? 'asc' : 'desc';
 
     if (query.search) {
       const term = query.search.trim();
@@ -50,7 +68,7 @@ export class AdminPaymentsService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortKey]: sortOrder },
         skip,
         take: limit,
       }),
@@ -77,7 +95,10 @@ export class AdminPaymentsService {
     adminId: string,
     adminEmail: string | undefined,
     orderId: string,
+    input?: { password?: string; note?: string },
   ) {
+    // Tiền: backend kiểm tra lại mật khẩu admin; ẩn nút ở frontend không phải cơ chế bảo mật
+    if (this.reauth) await this.reauth.verifyPassword(adminId, input?.password);
     const orderBefore = await this.prisma.paymentOrder.findUnique({
       where: { id: orderId },
     });
@@ -98,7 +119,7 @@ export class AdminPaymentsService {
       targetId: orderId,
       before: { status: orderBefore.status },
       after: { status: 'PAID' },
-      reason: `Duyệt đơn nạp tiền chuyển khoản mã ${orderBefore.code}`,
+      reason: input?.note?.trim() || `Duyệt đơn nạp tiền chuyển khoản mã ${orderBefore.code}`,
     });
 
     return {
@@ -115,7 +136,13 @@ export class AdminPaymentsService {
     adminEmail: string | undefined,
     orderId: string,
     reason?: string,
+    password?: string,
   ) {
+    // Huỷ đơn khác "thanh toán thất bại": bắt buộc lý do và xác thực lại khi chạy qua API quản trị
+    if (this.reauth) {
+      reason = this.reauth.requireReason(reason);
+      await this.reauth.verifyPassword(adminId, password);
+    }
     const order = await this.prisma.paymentOrder.findUnique({
       where: { id: orderId },
     });
@@ -153,5 +180,41 @@ export class AdminPaymentsService {
       message: 'Huỷ đơn thanh toán thành công',
       data: updated,
     };
+  }
+
+  /** Chi tiết một đơn: thông tin đơn, người dùng, cảnh báo duyệt muộn và lịch sử xử lý (từ nhật ký quản trị). */
+  async getOrderDetail(orderId: string, now: Date = new Date()) {
+    const order = await this.prisma.paymentOrder.findUnique({
+      where: { id: orderId },
+      include: { user: { select: { id: true, email: true, name: true } } },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng');
+    const history = await this.prisma.adminAuditLog.findMany({
+      where: { targetType: 'PaymentOrder', targetId: orderId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, action: true, adminEmail: true, reason: true, createdAt: true, before: true, after: true },
+    });
+    return {
+      message: 'Lấy chi tiết đơn thành công',
+      data: {
+        ...order,
+        // Quá hạn thanh toán nhưng vẫn còn duyệt được trong cửa sổ cho phép: admin phải đối chiếu kỹ sao kê
+        pastDue: ['PENDING', 'EXPIRED'].includes(order.status) && order.expiresAt.getTime() < now.getTime(),
+        history,
+      },
+    };
+  }
+
+  /** Ghi chú nội bộ cho đơn (đối soát). Không đổi trạng thái đơn. */
+  async setOrderNote(adminId: string, adminEmail: string | undefined, orderId: string, note: string) {
+    const order = await this.prisma.paymentOrder.findUnique({ where: { id: orderId }, select: { adminNote: true } });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng');
+    const clean = note.trim().slice(0, 500) || null;
+    const updated = await this.prisma.paymentOrder.update({ where: { id: orderId }, data: { adminNote: clean } });
+    await this.auditService.logAction({
+      adminId, adminEmail, action: 'NOTE_PAYMENT', targetType: 'PaymentOrder', targetId: orderId,
+      before: { adminNote: order.adminNote }, after: { adminNote: clean },
+    });
+    return { message: 'Đã lưu ghi chú', data: { id: updated.id, adminNote: updated.adminNote } };
   }
 }

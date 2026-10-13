@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Post,
-  Param,
-  Body,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Param, Body, UseGuards, HttpCode, HttpStatus, Get, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -27,6 +19,18 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('admin/billing')
 export class AdminBillingController {
   constructor(private readonly billingService: AdminBillingService) {}
+
+  @Get('grants')
+  @ApiOperation({ summary: 'Danh sách quyền Premium đã cấp (cấp tay và từ đơn QR): lọc trạng thái, nguồn, email' })
+  listGrants(
+    @Query('status') status?: string,
+    @Query('source') source?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.billingService.listGrants({ status, source, search, page: page ? Number(page) : undefined, limit: limit ? Number(limit) : undefined });
+  }
 
   @Post('grants')
   @HttpCode(HttpStatus.CREATED)

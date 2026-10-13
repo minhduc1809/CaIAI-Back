@@ -30,7 +30,11 @@ export class AdminAuditController {
     @Query('limit') limit?: number,
     @Query('action') action?: string,
     @Query('targetType') targetType?: string,
+    @Query('targetId') targetId?: string,
+    @Query('adminId') adminId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.auditService.getAuditLogs({ page, limit, action, targetType });
+    return this.auditService.getAuditLogs({ page, limit, action, targetType, targetId, adminId, from, to });
   }
 }

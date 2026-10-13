@@ -1,3 +1,4 @@
+import { AdminTotpService } from './admin-totp.service';
 import {
   Injectable,
   UnauthorizedException,
@@ -24,6 +25,7 @@ export class AdminAuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly auditService: AdminAuditService,
+    private readonly totp: AdminTotpService,
   ) {}
 
   async login(
@@ -67,6 +69,15 @@ export class AdminAuthService {
     if (!isPasswordValid) {
       this.recordFailedAttempt(emailKey);
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
+    }
+
+    // 4b. Xác thực hai lớp (BR-17.5): bật rồi thì bắt buộc có mã; mã sai tính như sai mật khẩu (khoá sau 5 lần)
+    if (await this.totp.isRequired(user.id)) {
+      if (!dto.totpCode) throw this.totp.requiredError();
+      if (!(await this.totp.verifyLogin(user.id, dto.totpCode))) {
+        this.recordFailedAttempt(emailKey);
+        throw new UnauthorizedException('Mã xác thực hai lớp không đúng hoặc đã hết hạn');
+      }
     }
 
     // Đăng nhập thành công -> Xoá đếm sai

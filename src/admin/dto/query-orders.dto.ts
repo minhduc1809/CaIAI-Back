@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max, IsEnum, IsString } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsEnum, IsString, IsIn, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentOrderStatus } from '@prisma/client';
@@ -34,6 +34,40 @@ export class QueryOrdersDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ example: '2026-10-01', description: 'Tạo từ ngày (giờ Việt Nam)' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Ngày phải có dạng YYYY-MM-DD' })
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-10-31', description: 'Tạo đến hết ngày (giờ Việt Nam)' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Ngày phải có dạng YYYY-MM-DD' })
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Số tiền tối thiểu (VND)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Số tiền tối đa (VND)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxAmount?: number;
+
+  @ApiPropertyOptional({ enum: ['createdAt', 'amount', 'expiresAt'] })
+  @IsOptional()
+  @IsIn(['createdAt', 'amount', 'expiresAt'])
+  sort?: string;
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: string;
 }
 
 export class RejectOrderDto {
@@ -44,4 +78,9 @@ export class RejectOrderDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({ description: 'Mật khẩu admin để xác thực lại' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }

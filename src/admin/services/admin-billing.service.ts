@@ -1,4 +1,6 @@
+import { cfg } from '../../system-config/config.holder';
 import {
+  Optional,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -6,6 +8,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../../billing/billing.service';
 import { AdminAuditService } from './admin-audit.service';
+import { AdminReauthService } from './admin-reauth.service';
 import {
   AdminGrantPremiumDto,
   AdminRevokeGrantDto,
@@ -17,6 +20,7 @@ export class AdminBillingService {
     private readonly prisma: PrismaService,
     private readonly billingService: BillingService,
     private readonly auditService: AdminAuditService,
+    @Optional() private readonly reauth?: AdminReauthService,
   ) {}
 
   /**
@@ -27,12 +31,17 @@ export class AdminBillingService {
     adminEmail: string | undefined,
     dto: AdminGrantPremiumDto,
   ) {
+    // Quyền Premium là quyền lợi có giá trị: backend kiểm tra lại mật khẩu admin
+    if (this.reauth) await this.reauth.verifyPassword(adminId, dto.password);
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
     });
 
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng');
+    }
+    if (dto.days > cfg('admin.maxGrantDays')) {
+      throw new BadRequestException(`Cấp thủ công tối đa ${cfg('admin.maxGrantDays')} ngày mỗi lần (admin.maxGrantDays)`);
     }
 
     const now = new Date();
@@ -108,6 +117,7 @@ export class AdminBillingService {
     grantId: string,
     dto: AdminRevokeGrantDto,
   ) {
+    if (this.reauth) await this.reauth.verifyPassword(adminId, dto.password);
     const grant = await this.prisma.manualGrant.findUnique({
       where: { id: grantId },
     });
@@ -162,5 +172,50 @@ export class AdminBillingService {
       message: 'Thu hồi quyền Premium thành công',
       data: updated,
     };
+  }
+
+  /**
+   * Danh sách quyền Premium cấp (cấp tay và từ đơn QR): lọc theo trạng thái, nguồn, tìm theo email người dùng.
+   * Trạng thái: ACTIVE (còn hiệu lực), EXPIRED (hết hạn), REVOKED (đã thu hồi).
+   */
+  async listGrants(query: { status?: string; source?: string; search?: string; page?: number; limit?: number }, now: Date = new Date()) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const where: any = {};
+    if (query.status === 'ACTIVE') Object.assign(where, { revokedAt: null, startsAt: { lte: now }, endsAt: { gt: now } });
+    if (query.status === 'EXPIRED') Object.assign(where, { revokedAt: null, endsAt: { lte: now } });
+    if (query.status === 'REVOKED') Object.assign(where, { revokedAt: { not: null } });
+    if (query.source === 'ADMIN' || query.source === 'QR_ORDER') where.source = query.source;
+    if (query.search?.trim()) where.user = { email: { contains: query.search.trim(), mode: 'insensitive' } };
+    const [total, rows] = await Promise.all([
+      this.prisma.manualGrant.count({ where }),
+      this.prisma.manualGrant.findMany({
+        where,
+        orderBy: { startsAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { user: { select: { id: true, email: true, name: true } } },
+      }),
+    ]);
+    const adminIds = [...new Set(rows.map((r) => r.adminId).filter((x): x is string => !!x))];
+    const admins = adminIds.length ? await this.prisma.user.findMany({ where: { id: { in: adminIds } }, select: { id: true, email: true } }) : [];
+    const adminEmail = new Map(admins.map((a) => [a.id, a.email]));
+    const items = rows.map((r) => {
+      const status = r.revokedAt ? 'REVOKED' : r.endsAt <= now ? 'EXPIRED' : 'ACTIVE';
+      return {
+        id: r.id,
+        user: r.user,
+        source: r.source,
+        orderCode: r.orderCode,
+        grantedBy: r.adminId ? adminEmail.get(r.adminId) ?? null : null,
+        reason: r.reason,
+        startsAt: r.startsAt,
+        endsAt: r.endsAt,
+        revokedAt: r.revokedAt,
+        status,
+        remainingDays: status === 'ACTIVE' ? Math.ceil((r.endsAt.getTime() - now.getTime()) / 86_400_000) : 0,
+      };
+    });
+    return { items, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 }
