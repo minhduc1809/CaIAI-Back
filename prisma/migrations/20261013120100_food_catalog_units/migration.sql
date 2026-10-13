@@ -1,0 +1,1 @@
+ALTER TABLE "FoodCatalog" ADD COLUMN IF NOT EXISTS "units" JSONB;
