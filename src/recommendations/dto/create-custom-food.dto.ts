@@ -8,6 +8,7 @@ import {
   ValidateNested,
   Min,
   Max,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -140,6 +141,12 @@ export class CreateCustomFoodDto {
   @ValidateNested({ each: true })
   @Type(() => RecipeIngredientDto)
   ingredients?: RecipeIngredientDto[];
+
+  @ApiPropertyOptional({ example: '8934563138164', description: 'Mã vạch (6–14 chữ số) gắn với món này' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6,14}$/, { message: 'Mã vạch phải gồm 6–14 chữ số' })
+  barcode?: string;
 }
 
 export class UpdateCustomFoodDto extends PartialType(CreateCustomFoodDto) {}

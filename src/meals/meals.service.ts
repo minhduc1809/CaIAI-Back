@@ -1,3 +1,4 @@
+import { cfg } from '../system-config/config.holder';
 import {
   Injectable,
   NotFoundException,
@@ -29,9 +30,9 @@ import { MealType } from '@prisma/client';
 import { detectTextViolations } from '../recommendations/food-safety';
 
 /** Giới hạn hợp lý chặn số liệu sai/nhập nhầm (kcal). */
-const MAX_ITEM_KCAL = 10000;
-const MAX_MEAL_KCAL = 15000;
-const DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+const maxItemKcal = () => cfg('meal.maxItemKcal');
+const maxMealKcal = () => cfg('meal.maxMealKcal');
+const dedupeWindowMs = () => cfg('meal.dedupeWindowSec') * 1000;
 
 export function resolveSourceType(
   sourceType?: string,
@@ -117,7 +118,7 @@ export class MealsService {
     for (const item of items) {
       const qty = item.quantity || 1;
       const itemKcal = (item.calories || 0) * qty;
-      if (itemKcal > MAX_ITEM_KCAL) {
+      if (itemKcal > maxItemKcal()) {
         throw new BadRequestException(
           'Calo của một món vượt mức hợp lý, vui lòng kiểm tra lại số lượng',
         );
@@ -127,7 +128,7 @@ export class MealsService {
       carb += (item.carb || 0) * qty;
       fat += (item.fat || 0) * qty;
     }
-    if (calories > MAX_MEAL_KCAL) {
+    if (calories > maxMealKcal()) {
       throw new BadRequestException(
         'Tổng calo của một bữa vượt mức hợp lý, vui lòng kiểm tra lại',
       );
@@ -146,7 +147,7 @@ export class MealsService {
    * (bấm đúp, thử lại sau lỗi mạng khi lần đầu thực ra đã lưu) không tạo bữa thứ hai.
    */
   private mealDedupeKey(payload: unknown, now: number = Date.now()): string {
-    const bucket = Math.floor(now / DEDUPE_WINDOW_MS);
+    const bucket = Math.floor(now / Math.max(1000, dedupeWindowMs()));
     return createHash('sha256')
       .update(JSON.stringify(payload))
       .update(String(bucket))
@@ -204,6 +205,21 @@ export class MealsService {
       'Bạn đã hoàn thành tốt ngày hôm qua!',
       `Bạn nạp ${Math.round(consumed)} kcal, sát mục tiêu ${Math.round(target)} kcal.`,
     );
+  }
+
+  /**
+   * Đánh giá ngày hôm qua theo múi giờ của người dùng. App gọi một lần khi mở app; gọi nhiều lần vẫn tối đa một
+   * thông báo mỗi ngày. Lỗi đánh giá không được làm hỏng việc mở app nên chỉ ghi nhận kết quả.
+   */
+  async evaluateYesterday(userId: string) {
+    const tz = await this.getUserTimezone(userId);
+    const yesterday = addDaysToKey(todayKey(tz), -1);
+    try {
+      await this.evaluateFinishedDay(userId, yesterday);
+      return { evaluated: true, date: yesterday };
+    } catch {
+      return { evaluated: false, date: yesterday };
+    }
   }
 
   /**
@@ -587,13 +603,8 @@ export class MealsService {
     }
 
     const dayKey = await this.resolveLogDateKey(userId, dateStr);
-    // Mở app vào ngày mới: lười đánh giá ngày hôm qua để gửi DAY_COMPLETED (không làm hỏng summary nếu lỗi)
-    const tzNow = await this.getUserTimezone(userId);
-    if (dayKey === todayKey(tzNow)) {
-      await this.evaluateFinishedDay(userId, addDaysToKey(dayKey, -1)).catch(
-        () => undefined,
-      );
-    }
+    // GET không có tác dụng phụ: việc đánh giá ngày hôm qua (DAY_COMPLETED) do app gọi riêng
+    // qua POST daily-status/evaluate khi mở app (BR-13.1).
     const dayFlags = await loadDayFlags(this.prisma, userId, dayKey, dayKey);
     const dayFlag = dayFlags.get(dayKey) ?? 'AUTO';
 
