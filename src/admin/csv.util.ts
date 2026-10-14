@@ -12,7 +12,3 @@ export function toCsv(headers: string[], rows: unknown[][]): string {
   return '﻿' + [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');
 }
 
-/** Tên file thể hiện loại dữ liệu và thời điểm xuất. */
-export function exportFileName(kind: string, now: Date = new Date()): string {
-  return `${kind}-${now.toISOString().slice(0, 16).replace(/[-:T]/g, '')}.csv`;
-}

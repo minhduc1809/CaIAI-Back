@@ -82,7 +82,7 @@ export class AdminExercisesService {
     const created = await this.prisma.exerciseCatalog.createMany({
       data: p.rows.map((r, i) => {
         const id = `ex-${randomUUID().slice(0, 8)}`;
-        const guide = { id, name: r.name, genderTarget: r.genderTarget, level: r.level, targetMuscle: r.targetMuscle, equipment: r.equipment, sets: r.sets, repsOrDuration: r.repsOrDuration, restSeconds: r.restSeconds, caloriesBurnedEstimate: r.caloriesBurnedEstimate, ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}), instructions: r.instructions };
+        const guide = { id, name: r.name, genderTarget: r.genderTarget, level: r.level, targetMuscle: r.targetMuscle, equipment: r.equipment, sets: r.sets, repsOrDuration: r.repsOrDuration, restSeconds: r.restSeconds, caloriesBurnedEstimate: r.caloriesBurnedEstimate, ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}), ...(r.videoUrl ? { videoUrl: r.videoUrl } : {}), instructions: r.instructions };
         return { id, name: r.name, nameNormalized: normalizeName(r.name), genderTarget: r.genderTarget, level: r.level, targetMuscle: r.targetMuscle, equipment: r.equipment, data: guide as any, source: 'ADMIN', createdAt: new Date(base + i) };
       }),
       skipDuplicates: true,
@@ -106,6 +106,7 @@ export class AdminExercisesService {
       restSeconds: dto.restSeconds,
       caloriesBurnedEstimate: dto.caloriesBurnedEstimate,
       ...(dto.imageUrl ? { imageUrl: dto.imageUrl } : {}),
+      ...(dto.videoUrl ? { videoUrl: dto.videoUrl } : {}),
       instructions: dto.instructions,
     };
     const created = await this.prisma.exerciseCatalog.create({
@@ -155,6 +156,10 @@ export class AdminExercisesService {
     }
     if (dto.repsOrDuration !== undefined) next.repsOrDuration = dto.repsOrDuration.trim();
     if (dto.imageUrl !== undefined) next.imageUrl = dto.imageUrl || undefined;
+    if (dto.videoUrl !== undefined) {
+      if (dto.videoUrl && !/^https:\/\/\S{3,290}$/i.test(dto.videoUrl)) throw new BadRequestException('videoUrl phải bắt đầu bằng https://');
+      next.videoUrl = dto.videoUrl || undefined;
+    }
     if (dto.instructions !== undefined) next.instructions = { ...(prev.instructions ?? {}), ...dto.instructions };
     if (Object.keys(columns).length === 0 && dto.isActive === undefined && Object.keys(next).every((k) => next[k] === prev[k])) {
       throw new BadRequestException('Không có thay đổi nào');

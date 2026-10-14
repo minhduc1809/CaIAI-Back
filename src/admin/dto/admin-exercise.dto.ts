@@ -24,6 +24,7 @@ export class AdminCreateExerciseDto {
   @ApiProperty({ example: 60 }) @IsInt() @Min(0) @Max(600) restSeconds: number;
   @ApiProperty({ example: 30, description: 'Ước tính calo đốt mỗi hiệp' }) @IsNumber() @Min(0) @Max(500) caloriesBurnedEstimate: number;
   @ApiPropertyOptional() @IsOptional() @IsUrl() imageUrl?: string;
+  @ApiPropertyOptional({ description: 'Link video hướng dẫn (https)' }) @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(300) videoUrl?: string;
   @ApiProperty({ type: ExerciseInstructionsDto }) @ValidateNested() @Type(() => ExerciseInstructionsDto) instructions: ExerciseInstructionsDto;
 }
 
@@ -45,6 +46,7 @@ export class AdminUpdateExerciseDto {
   @IsOptional() @IsInt() @Min(0) @Max(600) restSeconds?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(500) caloriesBurnedEstimate?: number;
   @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsString() @MaxLength(300) videoUrl?: string;
   @IsOptional() @ValidateNested() @Type(() => PartialInstructionsDto) instructions?: PartialInstructionsDto;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }

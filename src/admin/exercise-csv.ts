@@ -3,7 +3,7 @@ import { EQUIPMENT, GENDER_TARGETS, LEVELS } from './dto/admin-exercise.dto';
 
 /**
  * Nhập kho bài tập bằng CSV (J2). Cột bắt buộc: name, targetMuscle, level, equipment, genderTarget, sets, repsOrDuration,
- * restSeconds, caloriesBurnedEstimate, preparation, execution, commonMistakes, breathing. Cột tuỳ chọn: imageUrl.
+ * restSeconds, caloriesBurnedEstimate, preparation, execution, commonMistakes, breathing. Cột tuỳ chọn: imageUrl, videoUrl.
  */
 export const EXERCISE_CSV_REQUIRED = [
   'name', 'targetMuscle', 'level', 'equipment', 'genderTarget', 'sets', 'repsOrDuration', 'restSeconds', 'caloriesBurnedEstimate',
@@ -16,6 +16,7 @@ export interface CsvExerciseRow {
   name: string; targetMuscle: string; level: string; equipment: string; genderTarget: string;
   sets: number; repsOrDuration: string; restSeconds: number; caloriesBurnedEstimate: number;
   imageUrl?: string;
+  videoUrl?: string;
   instructions: { preparation: string; execution: string; commonMistakes: string; breathing: string };
 }
 
@@ -61,6 +62,8 @@ export function validateCsvExercises(text: string): { rows: CsvExerciseRow[]; er
     if (!get('repsOrDuration')) errs.push('Thiếu repsOrDuration');
     for (const k of ['preparation', 'execution', 'commonMistakes', 'breathing'] as const) if (!get(k)) errs.push(`Thiếu ${k}`);
     const image = idx('imageUrl') >= 0 ? get('imageUrl') : '';
+    const video = idx('videoUrl') >= 0 ? get('videoUrl') : '';
+    if (video && !/^https:\/\/\S{3,290}$/i.test(video)) errs.push('videoUrl phải bắt đầu bằng https://');
     if (image && !/^https?:\/\//i.test(image)) errs.push('imageUrl phải bắt đầu bằng http:// hoặc https://');
 
     if (errs.length > 0) {
@@ -69,7 +72,7 @@ export function validateCsvExercises(text: string): { rows: CsvExerciseRow[]; er
     }
     rows.push({
       name, targetMuscle: get('targetMuscle'), level, equipment, genderTarget: gender, sets, repsOrDuration: get('repsOrDuration'),
-      restSeconds: rest, caloriesBurnedEstimate: cal, ...(image ? { imageUrl: image } : {}),
+      restSeconds: rest, caloriesBurnedEstimate: cal, ...(image ? { imageUrl: image } : {}), ...(video ? { videoUrl: video } : {}),
       instructions: { preparation: get('preparation'), execution: get('execution'), commonMistakes: get('commonMistakes'), breathing: get('breathing') },
     });
   });

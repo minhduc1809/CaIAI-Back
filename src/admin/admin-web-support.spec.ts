@@ -101,3 +101,19 @@ describe('Xác thực lại và thao tác nhạy cảm', () => {
     expect(payments.adminApprove).toHaveBeenCalled();
   });
 });
+
+describe('Nhập CSV bài tập: videoUrl', () => {
+  const head = 'name,targetMuscle,level,equipment,genderTarget,sets,repsOrDuration,restSeconds,caloriesBurnedEstimate,preparation,execution,commonMistakes,breathing';
+  const row = (v: string) => `${head},videoUrl\nPlank,Core,BEGINNER,NO_EQUIPMENT,ALL,3,30s,45,12,a,b,c,d,${v}`;
+  it('nhận link https và bỏ qua khi trống', () => {
+    const { validateCsvExercises } = require('./exercise-csv');
+    expect(validateCsvExercises(row('https://www.youtube.com/watch?v=abc')).rows[0].videoUrl).toBe('https://www.youtube.com/watch?v=abc');
+    expect(validateCsvExercises(row('')).rows[0].videoUrl).toBeUndefined();
+  });
+  it('từ chối link không phải https', () => {
+    const { validateCsvExercises } = require('./exercise-csv');
+    const r = validateCsvExercises(row('http://example.com/v'));
+    expect(r.rows).toHaveLength(0);
+    expect(r.errors[0].message).toContain('videoUrl');
+  });
+});

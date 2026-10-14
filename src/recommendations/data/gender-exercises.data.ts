@@ -12,6 +12,8 @@ export interface ExerciseGuide {
   restSeconds: number;
   caloriesBurnedEstimate: number; // Ước tính calo đốt / hiệp
   imageUrl?: string;
+  /** Video hướng dẫn (YouTube...). Trống thì app mở trang tìm kiếm YouTube theo tên bài. */
+  videoUrl?: string;
   instructions: {
     preparation: string; // Chuẩn bị
     execution: string; // Thực hiện
