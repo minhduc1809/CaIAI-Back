@@ -1,3 +1,4 @@
+import { ATTEMPT_TIMEOUT_MS, modelChain, parseFallbackModels, withModelFallback } from './gemini-resilience';
 import { buildPremiumContext } from './chat-context';
 import { isPremiumNow } from '../billing/entitlement.util';
 import { ProfileIncompleteException } from '../common/errors/profile-incomplete.exception';
@@ -103,16 +104,27 @@ export class AiService {
   private readonly modelName: string;
   private readonly chatModelName: string;
   private readonly visionModelName: string;
+  private readonly fallbackModels: string[];
   private aiHealth?: AiHealthMonitor;
 
   /** Model Gemini đã bọc để ghi số token thật, độ trễ và kết quả của từng lời gọi (BR-15.5). */
   private model(config: { model: string; generationConfig?: any }) {
-    return trackModel(
-      this.prisma as any,
-      this.genAI!.getGenerativeModel(config),
-      config.model,
-      (m) => this.logger.debug(m),
-    );
+    const chain = modelChain(config.model, this.fallbackModels);
+    return {
+      generateContent: (content: any) =>
+        withModelFallback(
+          chain,
+          (name) =>
+            trackModel(
+              this.prisma as any,
+              this.genAI!.getGenerativeModel({ ...config, model: name }, { timeout: ATTEMPT_TIMEOUT_MS }),
+              name,
+              (m) => this.logger.debug(m),
+            ).generateContent(content),
+          (from, err) =>
+            this.logger.warn(`Gemini ${from} tạm thời lỗi (${(err as Error).message?.slice(0, 80)}), chuyển mô hình dự phòng`),
+        ),
+    } as { generateContent: (content: any) => Promise<any> };
   }
   private readonly staticMatcher = new FoodMatcher();
 
@@ -148,6 +160,8 @@ export class AiService {
       this.configService.get<string>('GEMINI_VISION_MODEL') ||
       this.configService.get<string>('GEMINI_MODEL') ||
       'gemini-3.6-flash';
+
+    this.fallbackModels = parseFallbackModels(this.configService.get<string>('GEMINI_FALLBACK_MODELS'));
 
     if (
       apiKey &&

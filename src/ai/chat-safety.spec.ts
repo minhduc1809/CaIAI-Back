@@ -16,6 +16,7 @@ describe('Phát hiện chủ đề rủi ro (BR-11.6)', () => {
     ['tiêm giảm cân Ozempic giá bao nhiêu', 'WEIGHT_LOSS_DRUGS'],
     ['mình muốn ăn 800 calo mỗi ngày', 'BELOW_CALORIE_FLOOR'],
     ['Chỉ ăn 600 kcal thôi được không', 'BELOW_CALORIE_FLOOR'],
+    ['bữa tối chỉ ăn 400 kcal mỗi ngày được không', 'BELOW_CALORIE_FLOOR'],
     ['làm sao giảm 5kg trong 1 tuần', 'EXTREME_WEIGHT_LOSS'],
     ['giảm 4 kg trong 3 ngày', 'EXTREME_WEIGHT_LOSS'],
   ])('"%s" → %s', (message, flag) => {
@@ -29,6 +30,9 @@ describe('Phát hiện chủ đề rủi ro (BR-11.6)', () => {
     'Giảm 2kg trong 1 tháng có hợp lý không',
     'Giảm 1 kg trong 1 tuần có được không',
     'Phở bò bao nhiêu calo',
+    'Gợi ý bữa tối dưới 500 kcal giàu đạm',
+    'Bữa sáng nhẹ khoảng 300 calo ăn gì',
+    'Món ăn vặt dưới 150 kcal',
     'Mình ăn xong thấy buồn nôn là sao?',
     'Uống nước ép táo có tốt không',
     'Ăn trứng luộc mỗi sáng có sao không',

@@ -65,8 +65,11 @@ export function detectRiskTopic(message: string): SafetyFlag | null {
   }
 
   // Mục tiêu calo dưới sàn an toàn (ví dụ "ăn 800 calo mỗi ngày")
+  // Sàn 1200 kcal áp dụng cho tổng calo CẢ NGÀY. Câu hỏi về MỘT bữa/món/phần ("bữa tối dưới 500 kcal") là hợp lệ,
+  // trừ khi nói rõ phạm vi ngày/tuần/tháng.
   const cal = t.match(/\b(?:an|nap|muc tieu|chi an|duoi)\D{0,18}?(\d{3,4})\s*(?:kcal|calo|cal)\b/);
-  if (cal && Number(cal[1]) < CALORIE_FLOOR && Number(cal[1]) >= 100) return 'BELOW_CALORIE_FLOOR';
+  const singleMealScope = /\b(bua|mon|phan an|khau phan|an vat|an nhe|snack)\b/.test(t) && !/\b(ngay|tuan|thang)\b/.test(t);
+  if (cal && !singleMealScope && Number(cal[1]) < CALORIE_FLOOR && Number(cal[1]) >= 100) return 'BELOW_CALORIE_FLOOR';
 
   // Giảm cân quá nhanh (ví dụ "giảm 5kg trong 1 tuần")
   const fast = t.match(/\bgiam (\d+(?:[.,]\d+)?) ?kg trong (\d+|mot|hai|ba|bon|nam|sau|bay) (ngay|tuan)\b/);

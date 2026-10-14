@@ -11,7 +11,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { AVATAR_MAX_BYTES } from './avatar.util';
 import {
   ApiTags,
   ApiOperation,
@@ -55,6 +60,21 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(userId, updateProfileDto);
+  }
+
+  @Post('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES, files: 1 } }))
+  @ApiOperation({ summary: 'Đặt ảnh đại diện (JPG/PNG/WEBP, tối đa 2 MB)' })
+  async setAvatar(@CurrentUser('id') userId: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.usersService.setAvatar(userId, file);
+  }
+
+  @Delete('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xoá ảnh đại diện, quay về chữ cái đầu' })
+  async removeAvatar(@CurrentUser('id') userId: string) {
+    return this.usersService.removeAvatar(userId);
   }
 
   @Get('me/settings')

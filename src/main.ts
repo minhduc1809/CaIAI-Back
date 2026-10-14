@@ -2,6 +2,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { MetricsInterceptor } from './common/interceptors/metrics.interceptor';
@@ -16,7 +17,9 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '2mb' });
 
   // 1. Security Headers với Helmet
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  // Ảnh đại diện do người dùng tải lên (đường dẫn chứa mã người dùng + thời điểm, tên file không đoán được)
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/', index: false, maxAge: '7d' });
 
   // 2. Enable CORS
   // Phát hành: chỉ cho các tên miền trong CORS_ORIGINS (ví dụ tên miền web quản trị, phân cách bằng dấu phẩy). App di

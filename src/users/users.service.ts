@@ -1,3 +1,5 @@
+import { AVATAR_CONTENT_TYPE, avatarKey, validateAvatarFile } from './avatar.util';
+import { LocalStorageDriver, StorageDriver, StorageService } from '../storage/storage.service';
 import { UserSettings, validateSettingsPatch } from './user-settings';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { isFreeTierLimited } from '../billing/entitlement.util';
@@ -6,6 +8,8 @@ import { startGoal } from './goal.util';
 import {
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
+  Optional,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
@@ -32,11 +36,42 @@ import { SaveOnboardingDraftDto } from './dto/onboarding-draft.dto';
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
+  /** Lưu ảnh đại diện (đã kiểm tra chữ ký file) lên kho lưu trữ và xoá ảnh cũ của chính người dùng. */
+  async setAvatar(userId: string, file: { buffer?: Buffer; size?: number } | undefined) {
+    const ext = validateAvatarFile(file);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatar: true } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    let avatar: string;
+    try {
+      avatar = await this.storage.put(avatarKey(userId, ext), file!.buffer!, AVATAR_CONTENT_TYPE[ext]);
+    } catch (err) {
+      // Chi tiết lỗi của kho lưu trữ chỉ ghi log, không trả cho ứng dụng
+      this.logger.error(`Không lưu được ảnh đại diện của ${userId}: ${(err as Error).message}`);
+      throw new ServiceUnavailableException('Chưa thể lưu ảnh đại diện lúc này, vui lòng thử lại sau');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { avatar } });
+    await this.storage.remove(user.avatar);
+    return { avatar };
+  }
+
+  async removeAvatar(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatar: true } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    await this.prisma.user.update({ where: { id: userId }, data: { avatar: null } });
+    await this.storage.remove(user.avatar);
+    return { avatar: null };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly healthCalculator: HealthCalculatorService,
     private readonly adaptiveExpenditure: AdaptiveExpenditureService,
-  ) {}
+    @Optional() storage?: StorageService,
+  ) {
+    this.storage = storage ?? new LocalStorageDriver();
+  }
+
+  private readonly storage: StorageDriver;
 
   /** Cài đặt cá nhân đồng bộ trên server (BR-19.4). */
   async getSettings(userId: string) {
