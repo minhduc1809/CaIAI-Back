@@ -567,3 +567,64 @@ describe('Lịch sử, thống kê, mẫu buổi tập (F3, F5)', () => {
     await expect(pipe.transform({ name: '', primaryMuscle: 'Vai' }, { type: 'body', metatype: CreateCustomExerciseDto })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('Nhắc "Bạn vừa tập?" khi quên ghi buổi tập', () => {
+  const NOW = new Date('2026-10-15T03:00:00Z'); // 10:00 sáng 15/10 giờ Việt Nam
+  let prismaMock: any;
+  const build = (dates: string[], opts: { recentNotification?: boolean; prefs?: any } = {}) => {
+    prismaMock = {
+      user: { findUnique: jest.fn().mockResolvedValue({ timezone: 'Asia/Ho_Chi_Minh', notificationPrefs: opts.prefs ?? {} }) },
+      workoutLog: {
+        findMany: jest.fn().mockResolvedValue(
+          [...dates].sort().reverse().map((d, i) => ({ id: `w${i}`, name: `Buổi ${d}`, date: day(d) })),
+        ),
+      },
+      notification: {
+        findFirst: jest.fn().mockResolvedValue(opts.recentNotification ? { id: 'n0' } : null),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+    return new WorkoutsInsightsService(prismaMock);
+  };
+  const DATES = ['2026-10-01', '2026-10-03', '2026-10-05', '2026-10-07', '2026-10-09', '2026-10-11', '2026-10-12'];
+
+  it('đẩy 1 thông báo WORKOUT_REMINDER vào hộp thư khi nhắc', async () => {
+    const svc = build(DATES);
+    const r: any = await svc.logNudge('u1', NOW);
+    expect(r.notified).toBe(true);
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ userId: 'u1', type: 'WORKOUT_REMINDER' }) }),
+    );
+  });
+
+  it('đã có thông báo nhắc trong ngày hoặc người dùng tắt loại này → không tạo thêm', async () => {
+    const a: any = await build(DATES, { recentNotification: true }).logNudge('u1', NOW);
+    expect(a).toMatchObject({ show: true, notified: false });
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+    const b: any = await build(DATES, { prefs: { WORKOUT_REMINDER: false } }).logNudge('u1', NOW);
+    expect(b).toMatchObject({ show: true, notified: false });
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('tập đều cách ngày nhưng đã 3 ngày chưa ghi → nhắc', async () => {
+    const svc = build(['2026-10-01', '2026-10-03', '2026-10-05', '2026-10-07', '2026-10-09', '2026-10-11', '2026-10-12']);
+    const r: any = await svc.logNudge('u1', NOW);
+    expect(r).toMatchObject({ show: true, daysSinceLast: 3, lastWorkout: { date: '2026-10-12' } });
+    expect(r.message).toContain('Bạn vừa tập xong?');
+  });
+
+  it('hôm nay đã ghi buổi tập → không nhắc', async () => {
+    const svc = build(['2026-10-11', '2026-10-13', '2026-10-15']);
+    expect(await svc.logNudge('u1', NOW)).toEqual({ show: false, reason: 'LOGGED_TODAY' });
+  });
+
+  it('ít hơn 3 ngày tập trong 14 ngày → không nhắc (chưa tập đều)', async () => {
+    const svc = build(['2026-10-05', '2026-10-09']);
+    expect(await svc.logNudge('u1', NOW)).toEqual({ show: false, reason: 'NOT_ENOUGH_HISTORY' });
+  });
+
+  it('mới nghỉ 1 ngày, chưa quá nhịp tập thường lệ → không nhắc', async () => {
+    const svc = build(['2026-10-10', '2026-10-12', '2026-10-14']);
+    expect(await svc.logNudge('u1', NOW)).toEqual({ show: false, reason: 'NOT_OVERDUE' });
+  });
+});

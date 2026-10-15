@@ -15,6 +15,7 @@ describe('Bộ loại thông báo (BR-13.1)', () => {
         'GOAL_REACHED',
         'PAYMENT_SUCCESS',
         'WEEKLY_SUMMARY_READY',
+        'WORKOUT_REMINDER',
       ].sort(),
     );
     for (const removed of ['GOAL_EXCEEDED', 'GOAL_ACHIEVED', 'AI_MESSAGE', 'MEAL_REMINDER', 'WATER_REMINDER']) {

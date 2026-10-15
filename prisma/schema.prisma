@@ -803,6 +803,7 @@ enum NotificationType {
   FOOD_SUBMISSION_RESULT // admin duyệt hoặc từ chối món người dùng gửi (E9)
   GOAL_REACHED // cân nặng chạm cân đích của Goal, kèm gợi ý chuyển sang Duy trì
   PAYMENT_SUCCESS // đơn QR đã được duyệt, Premium đã kích hoạt (luôn gửi)
+  WORKOUT_REMINDER // nhắc ghi buổi tập khi người tập đều có dấu hiệu quên ghi (tối đa 1 lần/ngày)
   // Đã bỏ GOAL_EXCEEDED, GOAL_ACHIEVED, AI_MESSAGE (trái nguyên tắc không phán xét / đã có loại thay thế)
   // và MEAL_REMINDER, WATER_REMINDER (là thông báo cục bộ trên máy, không lưu server).
 }

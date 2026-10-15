@@ -7,6 +7,7 @@ import {
   resolveTimezone,
   todayKey,
 } from '../common/utils/date-zone.util';
+import { isNotificationDisabled } from '../users/user-settings';
 import { exerciseKey, setVolume } from './workout-records';
 import { activityBucket, mondayKeyOf } from './workout-rules';
 
@@ -298,6 +299,57 @@ export class WorkoutsInsightsService {
         user.expenditureStatus === 'STABLE'
           ? 'Mục tiêu của bạn đã được điều chỉnh theo dữ liệu thật; thay đổi này chủ yếu ảnh hưởng ước tính ban đầu.'
           : null,
+    };
+  }
+
+  /**
+   * Nhắc "Bạn vừa tập?" khi có dấu hiệu quên ghi buổi tập. Chỉ nhắc người đang tập đều: trong 14 ngày qua có ít nhất
+   * 3 ngày có buổi tập, hôm nay chưa ghi buổi nào và đã im lặng lâu hơn khoảng cách trung bình giữa các buổi
+   * (tối thiểu 2 ngày). Chỉ gợi ý, không tự ghi gì.
+   */
+  async logNudge(userId: string, now: Date = new Date()) {
+    const tz = await this.tz(userId);
+    const today = todayKey(tz, now);
+    const rows = await this.prisma.workoutLog.findMany({
+      where: { userId, date: { gte: keyToDate(addDaysToKey(today, -14)), lte: keyToDate(today) } },
+      orderBy: { date: 'desc' },
+      select: { id: true, name: true, date: true },
+    });
+    const keys = [...new Set(rows.map((r) => dateToKey(r.date)))].sort();
+    if (keys.includes(today)) return { show: false, reason: 'LOGGED_TODAY' as const };
+    if (keys.length < 3) return { show: false, reason: 'NOT_ENOUGH_HISTORY' as const };
+
+    const dayDiff = (a: string, b: string) => Math.round((keyToDate(b).getTime() - keyToDate(a).getTime()) / 86_400_000);
+    const lastKey = keys[keys.length - 1];
+    const averageGapDays = Math.round((dayDiff(keys[0], lastKey) / (keys.length - 1)) * 10) / 10;
+    const daysSinceLast = dayDiff(lastKey, today);
+    if (daysSinceLast < Math.max(2, Math.ceil(averageGapDays))) return { show: false, reason: 'NOT_OVERDUE' as const };
+
+    const last = rows.find((r) => dateToKey(r.date) === lastKey)!;
+    const message = `Bạn thường tập khoảng ${averageGapDays} ngày một buổi nhưng đã ${daysSinceLast} ngày chưa ghi buổi nào (gần nhất: ${last.name}). Bạn vừa tập xong? Ghi nhanh kẻo quên!`;
+
+    // Đẩy vào hộp thông báo (không hiện thẻ trên Trang chủ): tối đa 1 lần mỗi ngày, tôn trọng cài đặt tắt loại này
+    let notified = false;
+    const prefs = await this.prisma.user.findUnique({ where: { id: userId }, select: { notificationPrefs: true } });
+    if (!isNotificationDisabled(prefs?.notificationPrefs, 'WORKOUT_REMINDER')) {
+      const recent = await this.prisma.notification.findFirst({
+        where: { userId, type: 'WORKOUT_REMINDER', createdAt: { gte: new Date(now.getTime() - 20 * 3_600_000) } },
+        select: { id: true },
+      });
+      if (!recent) {
+        await this.prisma.notification.create({
+          data: { userId, type: 'WORKOUT_REMINDER', title: 'Bạn vừa tập xong?', message },
+        });
+        notified = true;
+      }
+    }
+    return {
+      show: true,
+      notified,
+      daysSinceLast,
+      averageGapDays,
+      lastWorkout: { id: last.id, name: last.name, date: lastKey },
+      message,
     };
   }
 

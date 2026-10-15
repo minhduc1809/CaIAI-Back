@@ -1,3 +1,4 @@
+import { sniffImageMime } from './image-mime';
 import { ATTEMPT_TIMEOUT_MS, modelChain, parseFallbackModels, withModelFallback } from './gemini-resilience';
 import { buildPremiumContext } from './chat-context';
 import { isPremiumNow } from '../billing/entitlement.util';
@@ -1374,7 +1375,7 @@ Nhiệm vụ: chỉ ĐỌC thực đơn. TUYỆT ĐỐI KHÔNG tính calo hay ch
   ]
 }
 `;
-    const imagePart = { inlineData: { data: base64Data, mimeType: mimeType || 'image/jpeg' } };
+    const imagePart = { inlineData: { data: base64Data, mimeType: sniffImageMime(base64Data, mimeType) } };
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       let response;
@@ -1696,7 +1697,7 @@ Quy tắc khẩu phần: "unit" là một trong g, ml, tô, chén, bát, đĩa, 
 `;
 
     const imagePart = {
-      inlineData: { data: base64Data, mimeType: mimeType || 'image/jpeg' },
+      inlineData: { data: base64Data, mimeType: sniffImageMime(base64Data, mimeType) },
     };
 
     for (let attempt = 1; attempt <= 2; attempt++) {

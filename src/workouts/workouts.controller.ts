@@ -140,6 +140,14 @@ export class WorkoutsController {
     return this.insights.activityCheck(userId);
   }
 
+  @Get('log-nudge')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Nhắc "Bạn vừa tập?" khi người tập đều có dấu hiệu quên ghi buổi tập' })
+  logNudge(@CurrentUser('id') userId: string) {
+    return this.insights.logNudge(userId);
+  }
+
   @Post('activity-check/handled')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
