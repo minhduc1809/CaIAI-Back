@@ -1,3 +1,6 @@
+import { ExerciseCatalogService } from '../exercise-catalog/exercise-catalog.service';
+import { cfg } from '../system-config/config.holder';
+import { parseServing, per100g, unitsOf } from '../food-catalog/food-units';
 import { getPlanLimits } from '../billing/entitlement.util';
 import { PLAN_LIMITS } from '../billing/billing.constants';
 import { refundDaily, reserveDaily } from '../billing/daily-counter';
@@ -10,6 +13,7 @@ import {
 import {
   BadRequestException,
   Injectable,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -18,6 +22,10 @@ import {
 } from './dto/create-custom-food.dto';
 import { Gender, GoalType, WorkoutLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_FOOD_CATEGORIES,
+  FoodCatalogService,
+} from '../food-catalog/food-catalog.service';
 import {
   VIETNAMESE_WORKOUT_PLANS,
   WorkoutTemplatePlan,
@@ -30,25 +38,52 @@ import {
 
 @Injectable()
 export class RecommendationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly catalog?: FoodCatalogService,
+    @Optional() private readonly exerciseCatalog?: ExerciseCatalogService,
+  ) {}
 
   /**
    * Tra cứu danh sách các món ăn Việt Nam chuẩn Viện Dinh Dưỡng (hỗ trợ search và filter theo category)
    */
   async searchFoodItems(query?: string, category?: string) {
-    let results = VIETNAMESE_FOODS_DATA;
-
-    if (query) {
-      const q = query.toLowerCase().trim();
-      results = results.filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          (f.note && f.note.toLowerCase().includes(q)),
+    // Tìm trong kho ở cơ sở dữ liệu (BR-08.1): không phân biệt dấu, có tên gọi khác, chịu gõ sai nhẹ. Hình dạng mỗi
+    // món giữ như cũ để app không phải đổi.
+    let results: SeedFoodItem[];
+    if (this.catalog) {
+      results = (await this.catalog.search(query, category)).map(
+        ({ name, category: cat, servingSize, calories, protein, carb, fat, note, units }) => {
+          const servingGrams = parseServing(servingSize).grams;
+          return {
+            name,
+            category: cat,
+            servingSize,
+            calories,
+            protein,
+            carb,
+            fat,
+            ...(note ? { note } : {}),
+            // BR-08.2: số gram của khẩu phần, các đơn vị chọn được và số liệu trên 100 g (thêm trường, không đổi trường cũ)
+            servingGrams,
+            units: unitsOf(servingSize, units),
+            per100g: per100g(servingGrams, { calories, protein, carb, fat }),
+          };
+        },
       );
-    }
-
-    if (category) {
-      results = results.filter((f) => f.category === category);
+    } else {
+      results = VIETNAMESE_FOODS_DATA;
+      if (query) {
+        const q = query.toLowerCase().trim();
+        results = results.filter(
+          (f) =>
+            f.name.toLowerCase().includes(q) ||
+            (f.note && f.note.toLowerCase().includes(q)),
+        );
+      }
+      if (category) {
+        results = results.filter((f) => f.category === category);
+      }
     }
 
     return {
@@ -64,14 +99,9 @@ export class RecommendationsService {
    * Lấy danh mục các nhóm thực phẩm
    */
   async getFoodCategories() {
-    const categories = [
-      'Cơm - Tinh bột',
-      'Bún - Phở - Mì',
-      'Thịt - Gia cầm',
-      'Hải sản - Cá',
-      'Rau củ - Canh',
-      'Trái cây - Đồ uống',
-    ];
+    const categories = this.catalog
+      ? await this.catalog.categories()
+      : DEFAULT_FOOD_CATEGORIES;
 
     return {
       message: 'Lấy danh mục nhóm thực phẩm thành công',
@@ -177,8 +207,13 @@ export class RecommendationsService {
       targetGender = Gender.FEMALE;
     }
 
-    const exercisePool =
-      targetGender === Gender.FEMALE ? FEMALE_EXERCISES : MALE_EXERCISES;
+    // Kho bài tập trong DB (admin sửa/ẩn được); không có thì dùng kho trong code
+    const allExercises = this.exerciseCatalog
+      ? await this.exerciseCatalog.getAll()
+      : [...MALE_EXERCISES, ...FEMALE_EXERCISES];
+    const exercisePool = allExercises.filter(
+      (e) => e.genderTarget === targetGender || e.genderTarget === 'ALL',
+    );
 
     // Lọc theo level nếu có query
     let filteredList = exercisePool;
@@ -219,8 +254,9 @@ export class RecommendationsService {
    * Xem chi tiết hướng dẫn thực hiện 1 bài tập cụ thể
    */
   async getExerciseDetail(exerciseId: string) {
-    const allExercises = [...MALE_EXERCISES, ...FEMALE_EXERCISES];
-    const exercise = allExercises.find((ex) => ex.id === exerciseId);
+    const exercise = this.exerciseCatalog
+      ? await this.exerciseCatalog.getById(exerciseId)
+      : [...MALE_EXERCISES, ...FEMALE_EXERCISES].find((ex) => ex.id === exerciseId);
 
     if (!exercise) {
       return {
@@ -248,9 +284,10 @@ export class RecommendationsService {
     const expected = 4 * protein + 4 * carb + 9 * fat;
     if (calories > 0 && expected > 0) {
       const diffPct = Math.abs(calories - expected) / calories;
-      if (diffPct > 0.15) {
+      const warnPct = cfg('food.atwaterWarnPct');
+      if (diffPct > warnPct / 100) {
         warnings.push(
-          `Số liệu calo (${Math.round(calories)} kcal) lệch hơn 15% so với tổng macro (${Math.round(expected)} kcal: 4·P + 4·C + 9·F). Vui lòng kiểm tra lại.`,
+          `Số liệu calo (${Math.round(calories)} kcal) lệch hơn ${warnPct}% so với tổng macro (${Math.round(expected)} kcal: 4·P + 4·C + 9·F). Vui lòng kiểm tra lại.`,
         );
       }
     }
@@ -318,6 +355,7 @@ export class RecommendationsService {
         carb: totals.carb,
         fat: totals.fat,
         ingredients: hasIngredients ? (dto.ingredients as any) : undefined,
+        barcode: dto.barcode ?? null,
       },
     });
 
@@ -393,6 +431,7 @@ export class RecommendationsService {
           dto.servingUnit !== undefined
             ? dto.servingUnit
             : existing.servingUnit,
+        barcode: dto.barcode !== undefined ? dto.barcode : existing.barcode,
         calories: totals.calories,
         protein: totals.protein,
         carb: totals.carb,
@@ -451,6 +490,32 @@ export class RecommendationsService {
    * Nutriments của OpenFoodFacts tính theo 100g/100ml — quy đổi sẵn về "1 khẩu phần chuẩn" (100g) để app dùng trực tiếp.
    */
   async lookupBarcode(userId: string, barcode: string) {
+    // Món tự tạo của chính người dùng có mã vạch này thì ưu tiên, không tốn hạn mức (BR-08.6)
+    const own = await this.prisma.customFood.findFirst({
+      where: { userId, barcode },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (own) {
+      return {
+        message: 'Tra cứu mã vạch thành công',
+        data: {
+          barcode,
+          name: own.name,
+          brand: null,
+          imageUrl: null,
+          servingSize: own.servingSize || '1 phần',
+          servingAmount: own.servingAmount ?? 1,
+          servingUnit: own.servingUnit ?? 'PORTION',
+          calories: own.calories,
+          protein: own.protein,
+          carb: own.carb,
+          fat: own.fat,
+          source: 'CUSTOM',
+          customFoodId: own.id,
+        },
+      };
+    }
+
     // Hạn mức theo gói (Free giới hạn số lượt/ngày); lượt không dùng được vì lỗi mạng sẽ được hoàn lại
     const limits = await getPlanLimits(this.prisma, userId);
     const user = await this.prisma.user.findUnique({
@@ -485,9 +550,12 @@ export class RecommendationsService {
       const json = await response.json();
 
       if (json.status !== 1 || !json.product) {
+        // Không tìm thấy thì không tính hạn mức (BR-08.6)
+        await refundDaily(this.prisma, userId, date, 'barcodeLookups');
         return {
           message: 'Không tìm thấy sản phẩm với mã vạch này',
           data: null,
+          notFound: true,
         };
       }
 
@@ -525,7 +593,13 @@ export class RecommendationsService {
   /**
    * Thêm món ăn vào danh sách yêu thích
    */
-  async addFavoriteFood(userId: string, foodName: string) {
+  async addFavoriteFood(
+    userId: string,
+    foodName: string,
+    sourceType?: 'CATALOG' | 'CUSTOM',
+    sourceId?: string,
+  ) {
+    const identity = await this.resolveFavoriteIdentity(userId, foodName, sourceType, sourceId);
     const fav = await this.prisma.favoriteFood.upsert({
       where: {
         userId_foodName: {
@@ -533,10 +607,12 @@ export class RecommendationsService {
           foodName,
         },
       },
-      update: {},
+      // Yêu thích cũ chưa có định danh thì bổ sung khi người dùng thêm lại
+      update: identity,
       create: {
         userId,
         foodName,
+        ...identity,
       },
     });
 
@@ -547,17 +623,61 @@ export class RecommendationsService {
   }
 
   /**
-   * Lấy danh sách món ăn yêu thích
+   * Xác định món yêu thích là món nào (BR-08.3): theo mã app gửi, không có thì tra theo tên trong kho rồi món tự tạo
+   * của chính người dùng. Không tra được thì giữ yêu thích theo tên như trước.
+   */
+  private async resolveFavoriteIdentity(
+    userId: string,
+    foodName: string,
+    sourceType?: 'CATALOG' | 'CUSTOM',
+    sourceId?: string,
+  ): Promise<{ sourceType?: string; sourceId?: string }> {
+    try {
+      if (sourceType === 'CUSTOM' && sourceId) {
+        const own = await this.prisma.customFood.findFirst({ where: { id: sourceId, userId }, select: { id: true } });
+        if (own) return { sourceType: 'CUSTOM', sourceId: own.id };
+      }
+      if (this.catalog && (sourceType === 'CATALOG' || !sourceType)) {
+        const hit = await this.catalog.findByIdOrName({ id: sourceType === 'CATALOG' ? sourceId : undefined, name: foodName });
+        if (hit) return { sourceType: 'CATALOG', sourceId: hit.id };
+      }
+      const custom = await this.prisma.customFood.findFirst({ where: { userId, name: foodName }, select: { id: true } });
+      if (custom) return { sourceType: 'CUSTOM', sourceId: custom.id };
+    } catch {
+      // Tra định danh là phần thêm; lỗi thì vẫn lưu yêu thích theo tên
+    }
+    return {};
+  }
+
+  /**
+   * Lấy danh sách món ăn yêu thích. Tên trả về là tên HIỆN TẠI của món (đổi tên trong kho/món tự tạo không làm mất
+   * yêu thích); món cũ chưa có định danh giữ nguyên tên đã lưu.
    */
   async getFavoriteFoods(userId: string) {
     const favorites = await this.prisma.favoriteFood.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+    const customIds = favorites.filter((f) => f.sourceType === 'CUSTOM' && f.sourceId).map((f) => f.sourceId!);
+    const customNames = new Map<string, string>();
+    if (customIds.length > 0) {
+      const rows = await this.prisma.customFood.findMany({ where: { userId, id: { in: customIds } }, select: { id: true, name: true } });
+      rows.forEach((r) => customNames.set(r.id, r.name));
+    }
+    const names: string[] = [];
+    for (const f of favorites) {
+      let name = f.foodName;
+      if (f.sourceType === 'CATALOG' && f.sourceId && this.catalog) {
+        name = (await this.catalog.findByIdOrName({ id: f.sourceId }))?.name ?? name;
+      } else if (f.sourceType === 'CUSTOM' && f.sourceId) {
+        name = customNames.get(f.sourceId) ?? name;
+      }
+      if (!names.includes(name)) names.push(name);
+    }
 
     return {
       message: 'Lấy danh sách món yêu thích thành công',
-      data: favorites.map((f) => f.foodName),
+      data: names,
     };
   }
 
@@ -565,10 +685,17 @@ export class RecommendationsService {
    * Bỏ món ăn khỏi danh sách yêu thích
    */
   async removeFavoriteFood(userId: string, foodName: string) {
+    // Bỏ theo tên đang hiển thị: gồm cả yêu thích lưu tên cũ nhưng cùng một món (cùng định danh)
+    const identity = await this.resolveFavoriteIdentity(userId, foodName);
     await this.prisma.favoriteFood.deleteMany({
       where: {
         userId,
-        foodName,
+        OR: [
+          { foodName },
+          ...(identity.sourceType && identity.sourceId
+            ? [{ sourceType: identity.sourceType, sourceId: identity.sourceId }]
+            : []),
+        ],
       },
     });
 

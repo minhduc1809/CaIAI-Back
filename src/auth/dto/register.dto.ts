@@ -1,4 +1,5 @@
 import {
+  Equals,
   IsNotEmpty,
   IsString,
   MinLength,
@@ -49,4 +50,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiProperty({ example: true, description: 'Xác nhận đã đọc và đồng ý Chính sách quyền riêng tư (bắt buộc)' })
+  @Equals(true, { message: 'Bạn cần đồng ý Chính sách quyền riêng tư để tạo tài khoản' })
+  acceptPrivacy: boolean;
 }

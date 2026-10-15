@@ -13,7 +13,9 @@ export class WaterLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** [00:00 hôm nay, 00:00 ngày mai) theo múi giờ của user (BR-07.2, BR-14). */
-  private async todayBounds(userId: string): Promise<{ start: Date; end: Date }> {
+  private async todayBounds(
+    userId: string,
+  ): Promise<{ start: Date; end: Date }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { timezone: true },

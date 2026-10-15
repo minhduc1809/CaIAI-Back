@@ -47,7 +47,11 @@ import {
   mondayOnOrBefore,
   normalizeDayKey,
 } from './common/utils/date-zone.util';
-import { detectTextViolations, getAllowedFoods, isFoodAllowed } from './recommendations/food-safety';
+import {
+  detectTextViolations,
+  getAllowedFoods,
+  isFoodAllowed,
+} from './recommendations/food-safety';
 import { FOOD_SAFETY_TAGS } from './recommendations/data/food-safety-tags.data';
 import { VIETNAMESE_FOODS_DATA } from './recommendations/data/vietnamese-food-database.data';
 
@@ -71,7 +75,12 @@ describe('NEN-03 Không còn endpoint tự cộng lượt AI', () => {
   const controller: any = new AiController({} as any);
 
   it('đã gỡ hẳn các route mua lượt và gói mua lẻ cũ', () => {
-    for (const name of ['purchaseCredits', 'purchaseChatQuota', 'getPackages', 'getChatPackages']) {
+    for (const name of [
+      'purchaseCredits',
+      'purchaseChatQuota',
+      'getPackages',
+      'getChatPackages',
+    ]) {
       expect(controller[name]).toBeUndefined();
     }
   });
@@ -108,7 +117,9 @@ describe('BR-02.1 Lựa chọn phong cách ăn App gửi lên phải được ba
         return body
           .split('listOf(')
           .slice(1)
-          .map((chunk) => [...chunk.matchAll(/"([A-Za-z_]+)"\s+to\s+\(/g)].map((m) => m[1]));
+          .map((chunk) =>
+            [...chunk.matchAll(/"([A-Za-z_]+)"\s+to\s+\(/g)].map((m) => m[1]),
+          );
       })()
     : [];
   const dietTypes = lists[0] ?? [];
@@ -121,18 +132,28 @@ describe('BR-02.1 Lựa chọn phong cách ăn App gửi lên phải được ba
   });
 
   it.each(dietTypes)('dietType "%s" qua được ValidationPipe', async (key) => {
-    await expect(validate({ dietType: key }, UpdateProfileDto)).resolves.toBeDefined();
+    await expect(
+      validate({ dietType: key }, UpdateProfileDto),
+    ).resolves.toBeDefined();
   });
 
-  it.each(macroStyles)('macroStyle "%s" qua được ValidationPipe', async (key) => {
-    await expect(validate({ macroStyle: key }, UpdateProfileDto)).resolves.toBeDefined();
-  });
+  it.each(macroStyles)(
+    'macroStyle "%s" qua được ValidationPipe',
+    async (key) => {
+      await expect(
+        validate({ macroStyle: key }, UpdateProfileDto),
+      ).resolves.toBeDefined();
+    },
+  );
 
   it('mọi tổ hợp chế độ ăn × cách chia macro đều gửi hồ sơ thành công (AC1)', async () => {
     for (const dietType of dietTypes) {
       for (const macroStyle of macroStyles) {
         await expect(
-          validate({ dietType, macroStyle, applyTarget: true }, UpdateProfileDto),
+          validate(
+            { dietType, macroStyle, applyTarget: true },
+            UpdateProfileDto,
+          ),
         ).resolves.toBeDefined();
       }
     }
@@ -140,11 +161,13 @@ describe('BR-02.1 Lựa chọn phong cách ăn App gửi lên phải được ba
 
   it('không còn giá trị cũ chữ thường hoặc giá trị không có trong enum backend', async () => {
     for (const bad of ['any', 'balanced', 'high_protein', 'mediterranean']) {
-      await expect(validate({ macroStyle: bad }, UpdateProfileDto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        validate({ macroStyle: bad }, UpdateProfileDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
     }
-    expect([...dietTypes, ...macroStyles].some((k) => k !== k.toUpperCase())).toBe(false);
+    expect(
+      [...dietTypes, ...macroStyles].some((k) => k !== k.toUpperCase()),
+    ).toBe(false);
   });
 });
 
@@ -152,7 +175,11 @@ describe('BR-02.1 Lựa chọn phong cách ăn App gửi lên phải được ba
 // BR-01.2 — liên kết Google SSO
 // ---------------------------------------------------------------------------
 describe('BR-01.2 Liên kết Google vào tài khoản chưa xác thực email', () => {
-  function build(emailVerified: boolean, localVerified = false, localGoogleId: string | null = null) {
+  function build(
+    emailVerified: boolean,
+    localVerified = false,
+    localGoogleId: string | null = null,
+  ) {
     const updates: any[] = [];
     const localUser = {
       id: 'u1',
@@ -169,7 +196,11 @@ describe('BR-01.2 Liên kết Google vào tài khoản chưa xác thực email',
     const prisma: any = {
       user: {
         findUnique: jest.fn(async ({ where }: any) =>
-          where.googleId ? null : where.email === localUser.email ? localUser : null,
+          where.googleId
+            ? null
+            : where.email === localUser.email
+              ? localUser
+              : null,
         ),
         update: jest.fn(async ({ data }: any) => {
           updates.push(data);
@@ -179,8 +210,14 @@ describe('BR-01.2 Liên kết Google vào tài khoản chưa xác thực email',
       },
     };
     const jwt: any = { signAsync: jest.fn(async () => 'token') };
-    const config: any = { get: jest.fn((k: string) => (k === 'GOOGLE_CLIENT_ID' ? 'cid' : undefined)) };
-    const mail: any = { sendGoogleLinkedNotice: jest.fn(async () => undefined) };
+    const config: any = {
+      get: jest.fn((k: string) =>
+        k === 'GOOGLE_CLIENT_ID' ? 'cid' : undefined,
+      ),
+    };
+    const mail: any = {
+      sendGoogleLinkedNotice: jest.fn(async () => undefined),
+    };
     const service: any = new AuthService(prisma, jwt, config, mail);
     service.googleClient = {
       verifyIdToken: async () => ({
@@ -202,7 +239,9 @@ describe('BR-01.2 Liên kết Google vào tài khoản chưa xác thực email',
     expect(link).toBeDefined();
     expect(link.password).toBeNull();
     expect(link.refreshTokenHash).toBeNull();
-    expect(mail.sendGoogleLinkedNotice).toHaveBeenCalledWith('victim@example.com');
+    expect(mail.sendGoogleLinkedNotice).toHaveBeenCalledWith(
+      'victim@example.com',
+    );
   });
 
   it('tài khoản ĐÃ xác thực email: liên kết nhưng giữ nguyên mật khẩu', async () => {
@@ -254,10 +293,10 @@ describe('BR-04 / BR-09.2 Ghi cân không được ghi đè mục tiêu', () => 
     const prisma: any = {
       weightLog: {
         create: jest.fn(async ({ data }: any) => {
-          (prisma as any)._last = data;
+          prisma._last = data;
           return data;
         }),
-        findFirst: jest.fn(async () => (prisma as any)._last ?? null),
+        findFirst: jest.fn(async () => prisma._last ?? null),
         findMany: jest.fn(async () => []),
       },
       user: {
@@ -277,7 +316,11 @@ describe('BR-04 / BR-09.2 Ghi cân không được ghi đè mục tiêu', () => 
       })),
       recordSnapshot: jest.fn(),
     };
-    const service = new WeightLogsService(prisma, new HealthCalculatorService(), adaptive);
+    const service = new WeightLogsService(
+      prisma,
+      new HealthCalculatorService(),
+      adaptive,
+    );
     return { service, userUpdates };
   }
 
@@ -285,7 +328,7 @@ describe('BR-04 / BR-09.2 Ghi cân không được ghi đè mục tiêu', () => 
     'user %s: POST weight-logs không được thay đổi targetCalories',
     async (programType) => {
       const { service, userUpdates } = build(programType);
-      await service.createLog('u1', { weightKg: 69.5 } as any);
+      await service.createLog('u1', { weightKg: 69.5 });
       for (const data of userUpdates) {
         expect(data.targetCalories).toBeUndefined();
       }
@@ -294,7 +337,10 @@ describe('BR-04 / BR-09.2 Ghi cân không được ghi đè mục tiêu', () => 
 });
 
 describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
-  function build(opts: { targetCalories: number | null; programType?: string }) {
+  function build(opts: {
+    targetCalories: number | null;
+    programType?: string;
+  }) {
     const userUpdates: any[] = [];
     const changes: any[] = [];
     const current: any = {
@@ -325,7 +371,10 @@ describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
         }),
       },
       weightLog: { create: jest.fn() },
-      goal: { updateMany: jest.fn(async () => ({ count: 1 })), create: jest.fn(async ({ data }: any) => data) },
+      goal: {
+        updateMany: jest.fn(async () => ({ count: 1 })),
+        create: jest.fn(async ({ data }: any) => data),
+      },
       targetChange: {
         create: jest.fn(async ({ data }: any) => {
           changes.push(data);
@@ -344,30 +393,42 @@ describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
       })),
       recordSnapshot: jest.fn(),
     };
-    const service = new UsersService(prisma, new HealthCalculatorService(), adaptive);
+    const service = new UsersService(
+      prisma,
+      new HealthCalculatorService(),
+      adaptive,
+    );
     return { service, userUpdates, changes, current, prisma };
   }
 
   it('đổi cân nặng/chiều cao khi đã có mục tiêu: KHÔNG ghi đè, trả proposedTarget', async () => {
     const { service, userUpdates, changes } = build({ targetCalories: 1800 });
-    const res: any = await service.updateProfile('u1', { weightKg: 80, heightCm: 180 } as any);
+    const res: any = await service.updateProfile('u1', {
+      weightKg: 80,
+      heightCm: 180,
+    });
     expect(userUpdates).toHaveLength(1);
     expect(userUpdates[0].targetCalories).toBeUndefined();
     expect(res.data.targetApplied).toBe(false);
     expect(res.data.proposedTarget).not.toBeNull();
-    expect(res.data.proposedTarget.diff.calories).toBe(res.data.proposedTarget.calories - 1800);
+    expect(res.data.proposedTarget.diff.calories).toBe(
+      res.data.proposedTarget.calories - 1800,
+    );
     expect(changes).toHaveLength(0);
   });
 
   it('user MANUAL cũng không bị ghi đè khi sửa hồ sơ', async () => {
-    const { service, userUpdates } = build({ targetCalories: 1800, programType: 'MANUAL' });
-    await service.updateProfile('u1', { weightKg: 90 } as any);
+    const { service, userUpdates } = build({
+      targetCalories: 1800,
+      programType: 'MANUAL',
+    });
+    await service.updateProfile('u1', { weightKg: 90 });
     expect(userUpdates[0].targetCalories).toBeUndefined();
   });
 
   it('chưa có mục tiêu (hoàn tất Onboarding, E1): tự áp dụng và ghi TargetChange ONBOARDING', async () => {
     const { service, userUpdates, changes } = build({ targetCalories: null });
-    const res: any = await service.updateProfile('u1', { weightKg: 70 } as any);
+    const res: any = await service.updateProfile('u1', { weightKg: 70 });
     expect(userUpdates[0].targetCalories).toBeGreaterThan(0);
     expect(res.data.targetApplied).toBe(true);
     expect(res.data.proposedTarget).toBeNull();
@@ -378,7 +439,10 @@ describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
 
   it('applyTarget = true khi đổi mục tiêu (E2): áp dụng và ghi TargetChange GOAL_CHANGE', async () => {
     const { service, userUpdates, changes } = build({ targetCalories: 1800 });
-    await service.updateProfile('u1', { goal: 'GAIN_WEIGHT', applyTarget: true } as any);
+    await service.updateProfile('u1', {
+      goal: 'GAIN_WEIGHT',
+      applyTarget: true,
+    } as any);
     expect(userUpdates[0].targetCalories).toBeGreaterThan(1800);
     expect(changes).toHaveLength(1);
     expect(changes[0].source).toBe('GOAL_CHANGE');
@@ -387,7 +451,10 @@ describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
 
   it('applyTarget = true khi chỉ đổi cân nặng: nguồn PROFILE_RECALC', async () => {
     const { service, changes } = build({ targetCalories: 1800 });
-    await service.updateProfile('u1', { weightKg: 85, applyTarget: true } as any);
+    await service.updateProfile('u1', {
+      weightKg: 85,
+      applyTarget: true,
+    });
     expect(changes).toHaveLength(1);
     expect(changes[0].source).toBe('PROFILE_RECALC');
   });
@@ -410,17 +477,19 @@ describe('BR-04 PATCH users/me và các sự kiện đổi mục tiêu', () => {
       targetWeightKg: 65,
       weightRateKgPerWeek: 0.5,
       dateOfBirth: current.dateOfBirth,
-      gender: 'MALE' as any,
-      activityLevel: 'MODERATELY_ACTIVE' as any,
-      goal: 'LOSE_WEIGHT' as any,
-      macroStyle: 'BALANCED' as any,
+      gender: 'MALE',
+      activityLevel: 'MODERATELY_ACTIVE',
+      goal: 'LOSE_WEIGHT',
+      macroStyle: 'BALANCED',
       expenditureOverride: null,
     });
     current.targetCalories = calc.targetCalories;
     current.targetProtein = calc.targetProtein;
     current.targetCarb = calc.targetCarb;
     current.targetFat = calc.targetFat;
-    const res: any = await service.updateProfile('u1', { name: 'Tên mới' } as any);
+    const res: any = await service.updateProfile('u1', {
+      name: 'Tên mới',
+    });
     expect(res.data.proposedTarget).toBeNull();
   });
 });
@@ -449,12 +518,23 @@ describe('BR-04.4 Check-in được chấp nhận ghi TargetChange (E3)', () => 
       },
       user: {
         findUnique: jest.fn(async () => ({ targetCalories: 2000 })),
-        update: jest.fn(async () => ({ tdee: 2500, expenditureStatus: 'STABLE' })),
+        update: jest.fn(async () => ({
+          tdee: 2500,
+          expenditureStatus: 'STABLE',
+        })),
       },
-      targetChange: { create: jest.fn(async ({ data }: any) => created.push(data)) },
+      targetChange: {
+        create: jest.fn(async ({ data }: any) => created.push(data)),
+      },
     };
     const expenditure: any = { recordSnapshot: jest.fn() };
-    const service = new CheckinsService(prisma, expenditure, new HealthCalculatorService(), {} as any, { create: jest.fn() } as any);
+    const service = new CheckinsService(
+      prisma,
+      expenditure,
+      new HealthCalculatorService(),
+      {} as any,
+      { create: jest.fn() } as any,
+    );
     await service.respondToCheckin('u1', 'c1', { action: 'ACCEPT' } as any);
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({
@@ -485,12 +565,16 @@ describe('BR-03.6 Số buổi tập/tuần dạng số nguyên, có giá trị 0
   });
 
   it('DTO chấp nhận 0–7 và từ chối ngoài khoảng hoặc số lẻ', async () => {
-    await expect(validate({ trainingDaysPerWeek: 0 }, UpdateProfileDto)).resolves.toBeDefined();
-    await expect(validate({ trainingDaysPerWeek: 7 }, UpdateProfileDto)).resolves.toBeDefined();
+    await expect(
+      validate({ trainingDaysPerWeek: 0 }, UpdateProfileDto),
+    ).resolves.toBeDefined();
+    await expect(
+      validate({ trainingDaysPerWeek: 7 }, UpdateProfileDto),
+    ).resolves.toBeDefined();
     for (const bad of [-1, 8, 2.5]) {
-      await expect(validate({ trainingDaysPerWeek: bad }, UpdateProfileDto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        validate({ trainingDaysPerWeek: bad }, UpdateProfileDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
     }
   });
 
@@ -524,7 +608,10 @@ describe('BR-03.6 Số buổi tập/tuần dạng số nguyên, có giá trị 0
         }),
       },
       weightLog: { create: jest.fn() },
-      goal: { updateMany: jest.fn(async () => ({ count: 1 })), create: jest.fn(async ({ data }: any) => data) },
+      goal: {
+        updateMany: jest.fn(async () => ({ count: 1 })),
+        create: jest.fn(async ({ data }: any) => data),
+      },
       targetChange: { create: jest.fn() },
     };
     const adaptive: any = {
@@ -537,7 +624,11 @@ describe('BR-03.6 Số buổi tập/tuần dạng số nguyên, có giá trị 0
       })),
       recordSnapshot: jest.fn(),
     };
-    const service = new UsersService(prisma, new HealthCalculatorService(), adaptive);
+    const service = new UsersService(
+      prisma,
+      new HealthCalculatorService(),
+      adaptive,
+    );
     await service.updateProfile('u1', dto);
     return updates[0];
   }
@@ -553,7 +644,10 @@ describe('BR-03.6 Số buổi tập/tuần dạng số nguyên, có giá trị 0
   });
 
   it('gửi kèm activityLevel cũ: số buổi tập vẫn là nguồn duy nhất', async () => {
-    const data = await patch({ trainingDaysPerWeek: 6, activityLevel: 'SEDENTARY' });
+    const data = await patch({
+      trainingDaysPerWeek: 6,
+      activityLevel: 'SEDENTARY',
+    });
     expect(data.activityLevel).toBe('VERY_ACTIVE');
     expect(data.sessionsPerWeek).toBe('FIVE_TO_SIX');
   });
@@ -585,7 +679,9 @@ describe('BR-06.4 Check-in không được trừ thâm hụt hai lần', () => {
       weightRateKgPerWeek: opts.rate ?? 0.5, // 0.5 × 7700 / 7 = 550 kcal/ngày
       targetWeightKg: opts.targetWeight ?? null,
     };
-    const weightLogs = opts.weight ? [{ weightKg: opts.weight, date: new Date() }] : [];
+    const weightLogs = opts.weight
+      ? [{ weightKg: opts.weight, date: new Date() }]
+      : [];
     const prisma: any = {
       user: { findUnique: jest.fn(async () => user) },
       meal: { findMany: jest.fn(async () => []) },
@@ -594,6 +690,7 @@ describe('BR-06.4 Check-in không được trừ thâm hụt hai lần', () => {
       checkIn: {
         updateMany: jest.fn(async () => ({ count: 0 })),
         findUnique: jest.fn(async () => null),
+        findFirst: jest.fn(async () => null),
         create: jest.fn(async (args: any) => ({ ...args.data })),
       },
     };
@@ -605,41 +702,69 @@ describe('BR-06.4 Check-in không được trừ thâm hụt hai lần', () => {
       })),
     };
     const weights: any = {
-      getWeightProgress: jest.fn(async () => ({ data: { progressPercent: 10 } })),
+      getWeightProgress: jest.fn(async () => ({
+        data: { progressPercent: 10 },
+      })),
     };
-    const service = new CheckinsService(prisma, expenditure, new HealthCalculatorService(), weights, { create: jest.fn() } as any);
-    await service.generateCheckin('u1', {} as any);
+    const service = new CheckinsService(
+      prisma,
+      expenditure,
+      new HealthCalculatorService(),
+      weights,
+      { create: jest.fn() } as any,
+    );
+    await service.generateCheckin('u1', {});
     return prisma.checkIn.create.mock.calls[0][0].data;
   }
 
   it('mục tiêu 2000, thâm hụt 550, Expenditure 2550 → đề xuất giữ 2000 (không phải 1650)', async () => {
-    const created = await propose({ goal: 'LOSE_WEIGHT', target: 2000, expenditure: 2550 });
+    const created = await propose({
+      goal: 'LOSE_WEIGHT',
+      target: 2000,
+      expenditure: 2550,
+    });
     expect(created.proposedCalorieTarget).toBe(2000);
     expect(created.adjustmentReason).toBe('NO_CHANGE');
   });
 
   it('Expenditure tăng mạnh: đề xuất bị chặn ở +10% và ghi lý do SMOOTHING', async () => {
-    const created = await propose({ goal: 'LOSE_WEIGHT', target: 2000, expenditure: 3200 });
+    const created = await propose({
+      goal: 'LOSE_WEIGHT',
+      target: 2000,
+      expenditure: 3200,
+    });
     expect(created.proposedCalorieTarget).toBe(2200);
     expect(created.adjustmentReason).toBe('SMOOTHING');
   });
 
   it('Expenditure giảm mạnh: đề xuất bị chặn ở −10%', async () => {
-    const created = await propose({ goal: 'LOSE_WEIGHT', target: 2000, expenditure: 2000 });
+    const created = await propose({
+      goal: 'LOSE_WEIGHT',
+      target: 2000,
+      expenditure: 2000,
+    });
     // E − D = 1450 → bị chặn ở 1800 (−10%)
     expect(created.proposedCalorieTarget).toBe(1800);
     expect(created.adjustmentReason).toBe('SMOOTHING');
   });
 
   it('thay đổi vừa phải trong giới hạn: đề xuất đúng E − D, ghi lý do EXPENDITURE_CHANGE', async () => {
-    const created = await propose({ goal: 'LOSE_WEIGHT', target: 2000, expenditure: 2700 });
+    const created = await propose({
+      goal: 'LOSE_WEIGHT',
+      target: 2000,
+      expenditure: 2700,
+    });
     expect(created.proposedCalorieTarget).toBe(2150); // 2700 − 550, trong ±10%
     expect(created.adjustmentReason).toBe('EXPENDITURE_CHANGE');
   });
 
   it('tăng cân: đề xuất E + D (bị trần thặng dư 15% mức nền), không cộng thặng dư hai lần', async () => {
     // E 2450, D 550 vượt trần 15% E (367) → ideal = 2450 + 367 = 2818, nằm trong ±10% của 3000
-    const created = await propose({ goal: 'GAIN_WEIGHT', target: 3000, expenditure: 2450 });
+    const created = await propose({
+      goal: 'GAIN_WEIGHT',
+      target: 3000,
+      expenditure: 2450,
+    });
     expect(created.proposedCalorieTarget).toBe(2818);
   });
 
@@ -675,17 +800,38 @@ describe('BR-06.4 Check-in không được trừ thâm hụt hai lần', () => {
 describe('BR-06.6 Vòng đời Check-in', () => {
   afterEach(() => jest.useRealTimers());
 
-  function build(opts: { method?: string; existing?: any; rows?: any[]; userTarget?: number; createError?: any } = {}) {
+  function build(
+    opts: {
+      method?: string;
+      existing?: any;
+      rows?: any[];
+      userTarget?: number;
+      createError?: any;
+    } = {},
+  ) {
     const user: any = {
-      id: 'u1', programType: 'COACHED', goal: 'LOSE_WEIGHT', macroStyle: 'BALANCED',
-      targetCalories: 2000, targetProtein: 150, targetCarb: 200, targetFat: 67, tdee: 2550,
-      weightRateKgPerWeek: 0.5, timezone: 'Asia/Ho_Chi_Minh',
+      id: 'u1',
+      programType: 'COACHED',
+      goal: 'LOSE_WEIGHT',
+      macroStyle: 'BALANCED',
+      targetCalories: 2000,
+      targetProtein: 150,
+      targetCarb: 200,
+      targetFat: 67,
+      tdee: 2550,
+      weightRateKgPerWeek: 0.5,
+      timezone: 'Asia/Ho_Chi_Minh',
     };
     const store: any[] = opts.rows ?? [];
     const prisma: any = {
       user: {
-        findUnique: jest.fn(async (a: any) => (a.select ? { targetCalories: opts.userTarget ?? 2000 } : user)),
-        update: jest.fn(async () => ({ tdee: 2500, expenditureStatus: 'STABLE' })),
+        findUnique: jest.fn(async (a: any) =>
+          a.select ? { targetCalories: opts.userTarget ?? 2000 } : user,
+        ),
+        update: jest.fn(async () => ({
+          tdee: 2500,
+          expenditureStatus: 'STABLE',
+        })),
       },
       meal: { findMany: jest.fn(async () => []) },
       weightLog: { findMany: jest.fn(async () => []) },
@@ -695,9 +841,16 @@ describe('BR-06.6 Vòng đời Check-in', () => {
         updateMany: jest.fn(async ({ where, data }: any) => {
           let count = 0;
           for (const c of store) {
-            const okStatus = !where.status || (where.status.in ? where.status.in.includes(c.status) : where.status === c.status);
-            const okWeek = !where.weekStartDate || c.weekStartDate < where.weekStartDate.lt;
-            const okSnooze = !where.processedAt || (c.processedAt && c.processedAt <= where.processedAt.lte);
+            const okStatus =
+              !where.status ||
+              (where.status.in
+                ? where.status.in.includes(c.status)
+                : where.status === c.status);
+            const okWeek =
+              !where.weekStartDate || c.weekStartDate < where.weekStartDate.lt;
+            const okSnooze =
+              !where.processedAt ||
+              (c.processedAt && c.processedAt <= where.processedAt.lte);
             if (okStatus && okWeek && okSnooze) {
               Object.assign(c, data);
               count++;
@@ -706,28 +859,53 @@ describe('BR-06.6 Vòng đời Check-in', () => {
           return { count };
         }),
         findUnique: jest.fn(async () => opts.existing ?? null),
-        findFirst: jest.fn(async ({ where }: any) => store.find((c) => where.status.in.includes(c.status)) ?? null),
+        findFirst: jest.fn(async ({ where }: any) =>
+          where.status
+            ? (store.find((c) => where.status.in.includes(c.status)) ?? null)
+            : null,
+        ),
         create: jest.fn(async ({ data }: any) => {
           if (opts.createError) throw opts.createError;
           const row = { id: 'new', ...data };
           store.push(row);
           return row;
         }),
-        update: jest.fn(async ({ where, data }: any) => ({ id: where.id, ...data })),
+        update: jest.fn(async ({ where, data }: any) => ({
+          id: where.id,
+          ...data,
+        })),
       },
     };
     const expenditure: any = {
-      recalculate: jest.fn(async () => ({ estimatedExpenditure: 2550, method: opts.method ?? 'ADAPTIVE', status: 'STABLE' })),
+      recalculate: jest.fn(async () => ({
+        estimatedExpenditure: 2550,
+        method: opts.method ?? 'ADAPTIVE',
+        status: 'STABLE',
+      })),
       recordSnapshot: jest.fn(),
     };
-    const weights: any = { getWeightProgress: jest.fn(async () => ({ data: { progressPercent: 0 } })) };
-    return { prisma, store, service: new CheckinsService(prisma, expenditure, new HealthCalculatorService(), weights, { create: jest.fn() } as any) };
+    const weights: any = {
+      getWeightProgress: jest.fn(async () => ({
+        data: { progressPercent: 0 },
+      })),
+    };
+    return {
+      prisma,
+      store,
+      service: new CheckinsService(
+        prisma,
+        expenditure,
+        new HealthCalculatorService(),
+        weights,
+        { create: jest.fn() } as any,
+      ),
+    };
   }
 
   it('Engine chưa đủ dữ liệu → INSUFFICIENT_DATA, không có đề xuất (giữ nguyên mục tiêu)', async () => {
     freezeNow('2026-10-07T03:00:00Z');
     const { service, prisma } = build({ method: 'STATIC_FALLBACK' });
-    await service.generateCheckin('u1', {} as any);
+    await service.generateCheckin('u1', {});
     const data = prisma.checkIn.create.mock.calls[0][0].data;
     expect(data.status).toBe('INSUFFICIENT_DATA');
     expect(data.proposedCalorieTarget).toBe(data.currentCalorieTarget);
@@ -735,49 +913,108 @@ describe('BR-06.6 Vòng đời Check-in', () => {
 
   it('kỳ đã có Check-in thì trả lại nguyên trạng, không tạo mới và không mở lại Check-in đã xử lý', async () => {
     freezeNow('2026-10-07T03:00:00Z');
-    const existing = { id: 'c0', status: 'ACCEPTED', adjustmentReason: 'NO_CHANGE', currentCalorieTarget: 2000, proposedCalorieTarget: 2000, newExpenditure: 2000, compliancePct: 50 };
+    const existing = {
+      id: 'c0',
+      status: 'ACCEPTED',
+      adjustmentReason: 'NO_CHANGE',
+      currentCalorieTarget: 2000,
+      proposedCalorieTarget: 2000,
+      newExpenditure: 2000,
+      compliancePct: 50,
+    };
     const { service, prisma } = build({ existing });
-    const res: any = await service.generateCheckin('u1', {} as any);
+    const res: any = await service.generateCheckin('u1', {});
     expect(prisma.checkIn.create).not.toHaveBeenCalled();
     expect(res.data.checkIn.status).toBe('ACCEPTED');
   });
 
   it('hai request tạo cùng lúc: request thua (P2002) nhận lại bản đã có, không lỗi', async () => {
     freezeNow('2026-10-07T03:00:00Z');
-    const winner = { id: 'w', status: 'PENDING', adjustmentReason: 'NO_CHANGE', currentCalorieTarget: 2000, proposedCalorieTarget: 2000, newExpenditure: 2000, compliancePct: null };
+    const winner = {
+      id: 'w',
+      status: 'PENDING',
+      adjustmentReason: 'NO_CHANGE',
+      currentCalorieTarget: 2000,
+      proposedCalorieTarget: 2000,
+      newExpenditure: 2000,
+      compliancePct: null,
+    };
     const { service, prisma } = build({ createError: { code: 'P2002' } });
-    prisma.checkIn.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
-    const res: any = await service.generateCheckin('u1', {} as any);
+    prisma.checkIn.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(winner);
+    const res: any = await service.generateCheckin('u1', {});
     expect(res.data.checkIn.id).toBe('w');
   });
 
   it('tạo Check-in kỳ mới thì Check-in PENDING/SNOOZED của kỳ trước chuyển EXPIRED (chỉ còn một cái chờ)', async () => {
     freezeNow('2026-10-07T03:00:00Z');
-    const old = { id: 'old', status: 'SNOOZED', weekStartDate: keyToDate('2026-09-21'), processedAt: new Date() };
-    const done = { id: 'done', status: 'ACCEPTED', weekStartDate: keyToDate('2026-09-14') };
+    const old = {
+      id: 'old',
+      status: 'SNOOZED',
+      weekStartDate: keyToDate('2026-09-21'),
+      processedAt: new Date(),
+    };
+    const done = {
+      id: 'done',
+      status: 'ACCEPTED',
+      weekStartDate: keyToDate('2026-09-14'),
+    };
     const { service, store } = build({ rows: [old, done] });
-    await service.generateCheckin('u1', {} as any);
+    await service.generateCheckin('u1', {});
     expect(old.status).toBe('EXPIRED');
     expect(done.status).toBe('ACCEPTED');
-    expect(store.filter((c) => ['PENDING', 'SNOOZED'].includes(c.status))).toHaveLength(1);
+    expect(
+      store.filter((c) => ['PENDING', 'SNOOZED'].includes(c.status)),
+    ).toHaveLength(1);
   });
 
   it('"Để sau" quay lại PENDING sau 24 giờ, chưa đủ 24 giờ thì chưa', async () => {
     freezeNow('2026-10-07T03:00:00Z');
-    const base = { status: 'SNOOZED', adjustmentReason: 'NO_CHANGE', currentCalorieTarget: 2000, proposedCalorieTarget: 2000, newExpenditure: 2000, compliancePct: null };
-    const a = build({ rows: [{ ...base, id: 'a', processedAt: new Date('2026-10-07T01:00:00Z') }] });
-    expect(((await a.service.getPendingCheckin('u1')) as any).data).toBeNull();
-    const b = build({ rows: [{ ...base, id: 'b', processedAt: new Date('2026-10-06T02:00:00Z') }] });
+    const base = {
+      status: 'SNOOZED',
+      adjustmentReason: 'NO_CHANGE',
+      currentCalorieTarget: 2000,
+      proposedCalorieTarget: 2000,
+      newExpenditure: 2000,
+      compliancePct: null,
+    };
+    const a = build({
+      rows: [
+        { ...base, id: 'a', processedAt: new Date('2026-10-07T01:00:00Z') },
+      ],
+    });
+    expect(((await a.service.getPendingCheckin('u1')) as any).data.checkIn).toBeNull();
+    const b = build({
+      rows: [
+        { ...base, id: 'b', processedAt: new Date('2026-10-06T02:00:00Z') },
+      ],
+    });
     const res: any = await b.service.getPendingCheckin('u1');
     expect(res.data.checkIn.status).toBe('PENDING');
   });
 
-  const pending = { id: 'c1', userId: 'u1', status: 'PENDING', currentCalorieTarget: 2000, proposedCalorieTarget: 2150, currentProteinTarget: 150, proposedProteinTarget: 161, currentCarbTarget: 200, proposedCarbTarget: 215, currentFatTarget: 67, proposedFatTarget: 72, newExpenditure: 2700 };
+  const pending = {
+    id: 'c1',
+    userId: 'u1',
+    status: 'PENDING',
+    currentCalorieTarget: 2000,
+    proposedCalorieTarget: 2150,
+    currentProteinTarget: 150,
+    proposedProteinTarget: 161,
+    currentCarbTarget: 200,
+    proposedCarbTarget: 215,
+    currentFatTarget: 67,
+    proposedFatTarget: 72,
+    newExpenditure: 2700,
+  };
 
   it('chấp nhận khi mục tiêu đã đổi → 409 và Check-in chuyển EXPIRED, mục tiêu không bị ghi đè', async () => {
     const { service, prisma } = build({ userTarget: 1900 });
     prisma.checkIn.findFirst.mockResolvedValue(pending);
-    await expect(service.respondToCheckin('u1', 'c1', { action: 'ACCEPT' } as any)).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.respondToCheckin('u1', 'c1', { action: 'ACCEPT' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.checkIn.update.mock.calls[0][0].data.status).toBe('EXPIRED');
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -786,16 +1023,27 @@ describe('BR-06.6 Vòng đời Check-in', () => {
     for (const status of ['EXPIRED', 'ACKNOWLEDGED', 'ACCEPTED', 'DECLINED']) {
       const { service, prisma } = build();
       prisma.checkIn.findFirst.mockResolvedValue({ ...pending, status });
-      await expect(service.respondToCheckin('u1', 'c1', { action: 'DECLINE' } as any)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.respondToCheckin('u1', 'c1', { action: 'DECLINE' } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
     }
   });
 
   it('INSUFFICIENT_DATA chỉ nhận "Đã hiểu"; các hành động khác bị từ chối', async () => {
     const { service, prisma } = build();
-    prisma.checkIn.findFirst.mockResolvedValue({ ...pending, status: 'INSUFFICIENT_DATA' });
-    await expect(service.respondToCheckin('u1', 'c1', { action: 'ACCEPT' } as any)).rejects.toBeInstanceOf(BadRequestException);
-    await service.respondToCheckin('u1', 'c1', { action: 'ACKNOWLEDGE' } as any);
-    expect(prisma.checkIn.update.mock.calls[0][0].data.status).toBe('ACKNOWLEDGED');
+    prisma.checkIn.findFirst.mockResolvedValue({
+      ...pending,
+      status: 'INSUFFICIENT_DATA',
+    });
+    await expect(
+      service.respondToCheckin('u1', 'c1', { action: 'ACCEPT' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await service.respondToCheckin('u1', 'c1', {
+      action: 'ACKNOWLEDGE',
+    } as any);
+    expect(prisma.checkIn.update.mock.calls[0][0].data.status).toBe(
+      'ACKNOWLEDGED',
+    );
   });
 
   it('SNOOZE và tên cũ DISMISS đều đặt trạng thái SNOOZED kèm mốc thời gian', async () => {
@@ -810,10 +1058,20 @@ describe('BR-06.6 Vòng đời Check-in', () => {
   });
 
   it('DTO nhận SNOOZE/DISMISS/ACKNOWLEDGE và từ chối giá trị lạ', async () => {
-    for (const action of ['ACCEPT', 'DECLINE', 'SNOOZE', 'DISMISS', 'ACKNOWLEDGE']) {
-      await expect(validate({ action }, RespondCheckinDto)).resolves.toBeDefined();
+    for (const action of [
+      'ACCEPT',
+      'DECLINE',
+      'SNOOZE',
+      'DISMISS',
+      'ACKNOWLEDGE',
+    ]) {
+      await expect(
+        validate({ action }, RespondCheckinDto),
+      ).resolves.toBeDefined();
     }
-    await expect(validate({ action: 'DELETE' }, RespondCheckinDto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      validate({ action: 'DELETE' }, RespondCheckinDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -833,11 +1091,19 @@ describe('BR-03.2 "Còn lại" không cộng calo tập luyện', () => {
       },
       meal: {
         findMany: jest.fn(async () => [
-          { totalCalories: 1500, totalProtein: 100, totalCarb: 150, totalFat: 50, items: [] },
+          {
+            totalCalories: 1500,
+            totalProtein: 100,
+            totalCarb: 150,
+            totalFat: 50,
+            items: [],
+          },
         ]),
       },
       workoutLog: {
-        findMany: jest.fn(async () => [{ caloriesBurned: 400, durationMinutes: 60 }]),
+        findMany: jest.fn(async () => [
+          { caloriesBurned: 400, durationMinutes: 60 },
+        ]),
       },
       dailyLogStatus: { findMany: jest.fn(async () => []) },
     };
@@ -864,7 +1130,7 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
   it('nam giảm cân nhanh: calo mục tiêu không thấp hơn sàn 1500', () => {
     const r = calc.calculateAllMetrics({
       ...base,
-      goal: 'LOSE_WEIGHT' as any,
+      goal: 'LOSE_WEIGHT',
       weightRateKgPerWeek: 1.0,
     });
     expect(r.targetCalories).toBeGreaterThanOrEqual(1500);
@@ -873,9 +1139,9 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
   it('nữ giảm cân nhanh: sàn 1200 nhưng không thấp hơn BMR', () => {
     const r = calc.calculateAllMetrics({
       ...base,
-      gender: 'FEMALE' as any,
+      gender: 'FEMALE',
       weightKg: 48,
-      goal: 'LOSE_WEIGHT' as any,
+      goal: 'LOSE_WEIGHT',
       weightRateKgPerWeek: 1.0,
     });
     expect(r.targetCalories!).toBeGreaterThanOrEqual(Math.max(1200, r.bmr!));
@@ -886,11 +1152,13 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
       ...base,
       weightKg: 100,
       heightCm: 180,
-      activityLevel: 'MODERATELY_ACTIVE' as any,
-      goal: 'LOSE_WEIGHT' as any,
+      activityLevel: 'MODERATELY_ACTIVE',
+      goal: 'LOSE_WEIGHT',
       weightRateKgPerWeek: 1.5,
     });
-    expect(r.targetCalories!).toBeGreaterThanOrEqual(Math.round(r.tdee! * 0.75));
+    expect(r.targetCalories!).toBeGreaterThanOrEqual(
+      Math.round(r.tdee! * 0.75),
+    );
     expect(r.targetLimitedBy).toBe('DEFICIT_CAP');
   });
 
@@ -899,8 +1167,8 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
       ...base,
       weightKg: 80,
       heightCm: 178,
-      activityLevel: 'MODERATELY_ACTIVE' as any,
-      goal: 'LOSE_WEIGHT' as any,
+      activityLevel: 'MODERATELY_ACTIVE',
+      goal: 'LOSE_WEIGHT',
       weightRateKgPerWeek: 0.25,
     });
     expect(r.targetLimitedBy).toBeNull();
@@ -909,7 +1177,7 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
   it('tăng cân nhanh: có cờ SURPLUS_CAP', () => {
     const r = calc.calculateAllMetrics({
       ...base,
-      goal: 'GAIN_WEIGHT' as any,
+      goal: 'GAIN_WEIGHT',
       weightRateKgPerWeek: 1.0,
     });
     expect(r.targetLimitedBy).toBe('SURPLUS_CAP');
@@ -918,7 +1186,7 @@ describe('BR-03.3 Sàn calo theo giới và trần chênh lệch', () => {
   it('tăng cân nhanh: thặng dư không quá 15% mức nền', () => {
     const r = calc.calculateAllMetrics({
       ...base,
-      goal: 'GAIN_WEIGHT' as any,
+      goal: 'GAIN_WEIGHT',
       weightRateKgPerWeek: 1.0,
     });
     expect(r.targetCalories!).toBeLessThanOrEqual(Math.round(r.tdee! * 1.15));
@@ -935,18 +1203,33 @@ describe('BR-05.9 Tính lại nhiều lần trong ngày cho cùng kết quả', 
     date: new Date(now - (12 - i * 3) * DAY),
   }));
   const dayDate = (d: number) =>
-    new Date(new Date(now - d * DAY).toISOString().split('T')[0] + 'T00:00:00Z');
+    new Date(
+      new Date(now - d * DAY).toISOString().split('T')[0] + 'T00:00:00Z',
+    );
   // mỗi ngày 2 bữa x 1000 kcal = 2000 kcal → ngày đầy đủ theo quy tắc tự động (BR-05.2)
   const meals = [12, 10, 8, 6, 4, 2].flatMap((d) => [
     { logDate: dayDate(d), totalCalories: 1000 },
     { logDate: dayDate(d), totalCalories: 1000 },
   ]);
-  let dayFlags: { logDate: Date; completeness: string }[] = [];
+  const dayFlags: { logDate: Date; completeness: string }[] = [];
 
-  function build(snapshots: { adaptiveExpenditure: number; recordedAt: Date }[]) {
-    const store = [...snapshots].map((x, i) => ({ id: `s${i}`, userId: 'u1', staticTdee: 2500, status: 'UPDATING', ...x }));
+  function build(
+    snapshots: { adaptiveExpenditure: number; recordedAt: Date }[],
+  ) {
+    const store = [...snapshots].map((x, i) => ({
+      id: `s${i}`,
+      userId: 'u1',
+      staticTdee: 2500,
+      status: 'UPDATING',
+      ...x,
+    }));
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', targetCalories: 2000 })) },
+      user: {
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          targetCalories: 2000,
+        })),
+      },
       weightLog: { findMany: jest.fn(async () => weights) },
       meal: { findMany: jest.fn(async () => meals) },
       dailyLogStatus: { findMany: jest.fn(async () => dayFlags) },
@@ -956,8 +1239,14 @@ describe('BR-05.9 Tính lại nhiều lần trong ngày cho cùng kết quả', 
           const gte = where.recordedAt?.gte;
           return (
             store
-              .filter((s) => (lt ? s.recordedAt < lt : true) && (gte ? s.recordedAt >= gte : true))
-              .sort((a, b) => b.recordedAt.getTime() - a.recordedAt.getTime())[0] ?? null
+              .filter(
+                (s) =>
+                  (lt ? s.recordedAt < lt : true) &&
+                  (gte ? s.recordedAt >= gte : true),
+              )
+              .sort(
+                (a, b) => b.recordedAt.getTime() - a.recordedAt.getTime(),
+              )[0] ?? null
           );
         }),
         create: jest.fn(async ({ data }: any) => {
@@ -965,7 +1254,25 @@ describe('BR-05.9 Tính lại nhiều lần trong ngày cho cùng kết quả', 
           return data;
         }),
         update: jest.fn(async ({ where, data }: any) => {
-          Object.assign(store.find((s) => s.id === where.id)!, data);
+          Object.assign(
+            store.find((s) => s.id === where.id)!,
+            data,
+          );
+        }),
+        // BR-05.7: mỗi ngày log tối đa một snapshot, khoá duy nhất (userId, snapshotDate)
+        upsert: jest.fn(async ({ where, update, create }: any) => {
+          const key = where.userId_snapshotDate;
+          const existing = store.find(
+            (s: any) =>
+              s.userId === key.userId &&
+              s.snapshotDate?.getTime() === key.snapshotDate.getTime(),
+          );
+          if (existing) {
+            Object.assign(existing, update);
+            return existing;
+          }
+          store.push({ id: `n${store.length}`, ...create });
+          return create;
         }),
       },
     };
@@ -973,7 +1280,9 @@ describe('BR-05.9 Tính lại nhiều lần trong ngày cho cùng kết quả', 
   }
 
   it('tính lại 5 lần trong cùng ngày với cùng dữ liệu cho cùng một kết quả', async () => {
-    const { engine, store } = build([{ adaptiveExpenditure: 2400, recordedAt: new Date(now - 2 * DAY) }]);
+    const { engine, store } = build([
+      { adaptiveExpenditure: 2400, recordedAt: new Date(now - 2 * DAY) },
+    ]);
     const first = await engine.recalculate('u1', 2500);
     expect(first.method).toBe('ADAPTIVE');
     for (let i = 0; i < 4; i++) {
@@ -986,11 +1295,15 @@ describe('BR-05.9 Tính lại nhiều lần trong ngày cho cùng kết quả', 
   });
 
   it('trộn từ giá trị của ngày trước: raw hội tụ dần theo ngày, không nhảy', async () => {
-    const { engine } = build([{ adaptiveExpenditure: 2000, recordedAt: new Date(now - 1 * DAY) }]);
+    const { engine } = build([
+      { adaptiveExpenditure: 2000, recordedAt: new Date(now - 1 * DAY) },
+    ]);
     const r = await engine.recalculate('u1', 2500);
     // kết quả = 2000 + 0.25 × (raw − 2000): nằm giữa mốc cũ và raw, cách mốc cũ không quá 25% khoảng cách tối đa
     expect(r.estimatedExpenditure).toBeGreaterThan(2000);
-    expect(r.estimatedExpenditure).toBeLessThan(2000 + 0.25 * (2500 * 1.5 - 2000) + 1);
+    expect(r.estimatedExpenditure).toBeLessThan(
+      2000 + 0.25 * (2500 * 1.5 - 2000) + 1,
+    );
   });
 });
 
@@ -1021,15 +1334,26 @@ describe('BR-05.2 API đánh dấu ngày', () => {
   function build() {
     const store = new Map<string, string>();
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh' })) },
+      user: {
+        findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh' })),
+      },
       dailyLogStatus: {
         upsert: jest.fn(async ({ where, create, update }: any) => {
           const k = dateToKey(where.userId_logDate.logDate);
-          store.set(k, store.has(k) ? update.completeness : create.completeness);
-          return { logDate: where.userId_logDate.logDate, completeness: store.get(k) };
+          store.set(
+            k,
+            store.has(k) ? update.completeness : create.completeness,
+          );
+          return {
+            logDate: where.userId_logDate.logDate,
+            completeness: store.get(k),
+          };
         }),
         findMany: jest.fn(async () =>
-          [...store.entries()].map(([k, c]) => ({ logDate: keyToDate(k), completeness: c })),
+          [...store.entries()].map(([k, c]) => ({
+            logDate: keyToDate(k),
+            completeness: c,
+          })),
         ),
       },
     };
@@ -1039,9 +1363,13 @@ describe('BR-05.2 API đánh dấu ngày', () => {
   it('đánh dấu hôm nay và quá khứ thành công; đọc lại đúng trạng thái, ngày chưa đánh dấu là AUTO', async () => {
     freezeNow('2026-10-06T03:00:00Z');
     const { service } = build();
-    await service.setStatus('u1', '2026-10-06', 'COMPLETE' as any);
-    await service.setStatus('u1', '2026-10-04', 'INCOMPLETE' as any);
-    const res: any = await service.listStatuses('u1', '2026-10-04', '2026-10-06');
+    await service.setStatus('u1', '2026-10-06', 'COMPLETE');
+    await service.setStatus('u1', '2026-10-04', 'INCOMPLETE');
+    const res: any = await service.listStatuses(
+      'u1',
+      '2026-10-04',
+      '2026-10-06',
+    );
     expect(res.data).toEqual([
       { date: '2026-10-04', completeness: 'INCOMPLETE' },
       { date: '2026-10-05', completeness: 'AUTO' },
@@ -1052,8 +1380,8 @@ describe('BR-05.2 API đánh dấu ngày', () => {
   it('đánh dấu lại cùng một ngày thì ghi đè (một dòng mỗi ngày)', async () => {
     freezeNow('2026-10-06T03:00:00Z');
     const { service, store } = build();
-    await service.setStatus('u1', '2026-10-05', 'COMPLETE' as any);
-    await service.setStatus('u1', '2026-10-05', 'INCOMPLETE' as any);
+    await service.setStatus('u1', '2026-10-05', 'COMPLETE');
+    await service.setStatus('u1', '2026-10-05', 'INCOMPLETE');
     expect(store.size).toBe(1);
     expect(store.get('2026-10-05')).toBe('INCOMPLETE');
   });
@@ -1061,25 +1389,50 @@ describe('BR-05.2 API đánh dấu ngày', () => {
   it('từ chối ngày tương lai, ngày sai định dạng và khoảng quá dài', async () => {
     freezeNow('2026-10-06T03:00:00Z');
     const { service } = build();
-    await expect(service.setStatus('u1', '2026-10-07', 'COMPLETE' as any)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.setStatus('u1', 'hôm qua', 'COMPLETE' as any)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.listStatuses('u1', '2025-01-01', '2026-10-06')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setStatus('u1', '2026-10-07', 'COMPLETE' as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setStatus('u1', 'hôm qua', 'COMPLETE' as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.listStatuses('u1', '2025-01-01', '2026-10-06'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('DTO chỉ nhận AUTO/COMPLETE/INCOMPLETE', async () => {
-    await expect(validate({ completeness: 'COMPLETE' }, SetDailyStatusDto)).resolves.toBeDefined();
-    await expect(validate({ completeness: 'DONE' }, SetDailyStatusDto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      validate({ completeness: 'COMPLETE' }, SetDailyStatusDto),
+    ).resolves.toBeDefined();
+    await expect(
+      validate({ completeness: 'DONE' }, SetDailyStatusDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('Home: summary trả trạng thái ngày và cờ isComplete; Week Strip trả từng ngày', async () => {
     freezeNow('2026-10-06T03:00:00Z');
     const rows = [
-      { logDate: keyToDate('2026-10-06'), totalCalories: 900, totalProtein: 1, totalCarb: 1, totalFat: 1, items: [] },
+      {
+        logDate: keyToDate('2026-10-06'),
+        totalCalories: 900,
+        totalProtein: 1,
+        totalCarb: 1,
+        totalFat: 1,
+        items: [],
+      },
     ];
-    const flagsRows = [{ logDate: keyToDate('2026-10-06'), completeness: 'COMPLETE' }];
+    const flagsRows = [
+      { logDate: keyToDate('2026-10-06'), completeness: 'COMPLETE' },
+    ];
     const prisma: any = {
       user: {
-        findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', targetCalories: 2000, targetProtein: 150, targetCarb: 200, targetFat: 60 })),
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          targetCalories: 2000,
+          targetProtein: 150,
+          targetCarb: 200,
+          targetFat: 60,
+        })),
       },
       meal: { findMany: jest.fn(async () => rows) },
       workoutLog: { findMany: jest.fn(async () => []) },
@@ -1087,17 +1440,29 @@ describe('BR-05.2 API đánh dấu ngày', () => {
     };
     const service = new MealsService(prisma, {} as any);
     const sum: any = await service.getDailyNutritionSummary('u1', '2026-10-06');
-    expect(sum.data.logStatus).toEqual({ completeness: 'COMPLETE', isComplete: true });
+    expect(sum.data.logStatus).toEqual({
+      completeness: 'COMPLETE',
+      isComplete: true,
+    });
     const week: any = await service.getWeekSummary('u1', '2026-10-05');
-    expect(week.data[1]).toMatchObject({ date: '2026-10-06', completeness: 'COMPLETE', isComplete: true });
-    expect(week.data[0]).toMatchObject({ completeness: 'AUTO', isComplete: false });
+    expect(week.data[1]).toMatchObject({
+      date: '2026-10-06',
+      completeness: 'COMPLETE',
+      isComplete: true,
+    });
+    expect(week.data[0]).toMatchObject({
+      completeness: 'AUTO',
+      isComplete: false,
+    });
   });
 });
 
 describe('BR-05.2 Adaptive Engine chỉ học từ ngày đầy đủ', () => {
   const now = Date.now();
   const dayDate = (d: number) =>
-    new Date(new Date(now - d * DAY).toISOString().split('T')[0] + 'T00:00:00Z');
+    new Date(
+      new Date(now - d * DAY).toISOString().split('T')[0] + 'T00:00:00Z',
+    );
   const weights = [80, 79.8, 79.6, 79.5, 79.2].map((w, i) => ({
     weightKg: w,
     date: new Date(now - (12 - i * 3) * DAY),
@@ -1105,7 +1470,12 @@ describe('BR-05.2 Adaptive Engine chỉ học từ ngày đầy đủ', () => {
 
   function engine(meals: any[], flags: any[] = []) {
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', targetCalories: 2000 })) },
+      user: {
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          targetCalories: 2000,
+        })),
+      },
       weightLog: { findMany: jest.fn(async () => weights) },
       meal: { findMany: jest.fn(async () => meals) },
       dailyLogStatus: { findMany: jest.fn(async () => flags) },
@@ -1115,7 +1485,10 @@ describe('BR-05.2 Adaptive Engine chỉ học từ ngày đầy đủ', () => {
   }
 
   it('ngày chỉ có 1 bữa nhỏ không được tính: không đủ ngày đầy đủ thì dùng TDEE tĩnh', async () => {
-    const sparse = [12, 10, 8, 6, 4, 2].map((d) => ({ logDate: dayDate(d), totalCalories: 600 }));
+    const sparse = [12, 10, 8, 6, 4, 2].map((d) => ({
+      logDate: dayDate(d),
+      totalCalories: 600,
+    }));
     const r = await engine(sparse).recalculate('u1', 2500);
     expect(r.method).toBe('STATIC_FALLBACK');
   });
@@ -1127,10 +1500,15 @@ describe('BR-05.2 Adaptive Engine chỉ học từ ngày đầy đủ', () => {
     ]);
     // thêm 1 ngày chỉ ghi 1 bữa 300 kcal (quên các bữa còn lại)
     const forgotten = { logDate: dayDate(2), totalCalories: 300 };
-    const withForgotten = await engine([...full, forgotten]).recalculate('u1', 2500);
+    const withForgotten = await engine([...full, forgotten]).recalculate(
+      'u1',
+      2500,
+    );
     const baseline = await engine(full).recalculate('u1', 2500);
     // ngày thiếu bữa bị loại tự động nên kết quả giống hệt khi không có ngày đó
-    expect(withForgotten.estimatedExpenditure).toBe(baseline.estimatedExpenditure);
+    expect(withForgotten.estimatedExpenditure).toBe(
+      baseline.estimatedExpenditure,
+    );
     expect(withForgotten.avgDailyCaloriesConsumed).toBe(2500);
     expect(withForgotten.loggedDaysCount).toBe(5);
   });
@@ -1140,12 +1518,20 @@ describe('BR-05.2 Adaptive Engine chỉ học từ ngày đầy đủ', () => {
       { logDate: dayDate(d), totalCalories: 1250 },
       { logDate: dayDate(d), totalCalories: 1250 },
     ]);
-    const excluded = await engine(days, [{ logDate: dayDate(12), completeness: 'INCOMPLETE' }]).recalculate('u1', 2500);
+    const excluded = await engine(days, [
+      { logDate: dayDate(12), completeness: 'INCOMPLETE' },
+    ]).recalculate('u1', 2500);
     expect(excluded.loggedDaysCount).toBe(5);
     expect(excluded.avgDailyCaloriesConsumed).toBe(2500);
 
-    const oneMealDays = [12, 10, 8, 6, 4].map((d) => ({ logDate: dayDate(d), totalCalories: 2500 }));
-    const flags = [12, 10, 8, 6, 4].map((d) => ({ logDate: dayDate(d), completeness: 'COMPLETE' }));
+    const oneMealDays = [12, 10, 8, 6, 4].map((d) => ({
+      logDate: dayDate(d),
+      totalCalories: 2500,
+    }));
+    const flags = [12, 10, 8, 6, 4].map((d) => ({
+      logDate: dayDate(d),
+      completeness: 'COMPLETE',
+    }));
     const included = await engine(oneMealDays, flags).recalculate('u1', 2500);
     expect(included.loggedDaysCount).toBe(5);
   });
@@ -1189,13 +1575,25 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
           if (!counters.has(k)) counters.set(k, { aiPhoto: freeUsed });
           return { ...create };
         }),
-        findUnique: jest.fn(async ({ where }: any) => counters.get(key(where.userId_date)) ?? null),
+        findUnique: jest.fn(
+          async ({ where }: any) =>
+            counters.get(key(where.userId_date)) ?? null,
+        ),
         updateMany: jest.fn(async ({ where, data }: any) => {
           const row = counters.get(key(where));
           if (!row) return { count: 0 };
-          if (where.aiPhoto.lt !== undefined && !(row.aiPhoto < where.aiPhoto.lt)) return { count: 0 };
-          if (where.aiPhoto.gt !== undefined && !(row.aiPhoto > where.aiPhoto.gt)) return { count: 0 };
-          row.aiPhoto += data.aiPhoto.increment ?? -(data.aiPhoto.decrement ?? 0);
+          if (
+            where.aiPhoto.lt !== undefined &&
+            !(row.aiPhoto < where.aiPhoto.lt)
+          )
+            return { count: 0 };
+          if (
+            where.aiPhoto.gt !== undefined &&
+            !(row.aiPhoto > where.aiPhoto.gt)
+          )
+            return { count: 0 };
+          row.aiPhoto +=
+            data.aiPhoto.increment ?? -(data.aiPhoto.decrement ?? 0);
           return { count: 1 };
         }),
       },
@@ -1222,9 +1620,9 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
 
   it('BR-11.2: không có API key → 503, hoàn lượt, không trả số calo', async () => {
     const { service, logs, used } = build(0, false);
-    await expect(service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1')).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(used()).toBe(0);
     expect(logs).toHaveLength(0);
   });
@@ -1234,9 +1632,9 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
     service.callGeminiVision = jest.fn(async () => {
       throw new Error('503 upstream timeout');
     });
-    await expect(service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1')).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(used()).toBe(2);
   });
 
@@ -1245,20 +1643,20 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
     service.callGeminiVision = jest.fn(async () => {
       throw new BadRequestException('Không phải đồ ăn');
     });
-    await expect(service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(used()).toBe(2);
   });
 
-  it('thành công: trừ đúng 1 lượt miễn phí và ghi log chi phí', async () => {
+  it('thành công: trừ đúng 1 lượt miễn phí; không còn bịa log chi phí hằng số (log thật ở ai-usage.spec.ts)', async () => {
     const { service, used, logs } = build(2, true);
     const res = await service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1');
     expect(res.isFallback).toBe(false);
     expect(res.usedQuotaType).toBe('FREE');
     expect(res.freeRemaining).toBe(2);
     expect(used()).toBe(3);
-    expect(logs).toHaveLength(1);
+    expect(logs).toHaveLength(0); // vision bị mock nên không có lời gọi Gemini thật để ghi
   });
 
   it('BR-11.4: hai request đồng thời khi còn 1 lượt → đúng 1 thành công, 1 bị 429', async () => {
@@ -1268,7 +1666,7 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
       service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1'),
     ]);
     const ok = results.filter((r) => r.status === 'fulfilled').length;
-    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    const rejected = results.filter((r) => r.status === 'rejected');
     expect(ok).toBe(1);
     expect(rejected).toHaveLength(1);
     expect(rejected[0].reason.getStatus()).toBe(429);
@@ -1280,7 +1678,9 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
     const first = await service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1');
     expect(first.usedQuotaType).toBe('PURCHASED');
     expect(state.purchased).toBe(0);
-    await expect(service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1')).rejects.toMatchObject({
+    await expect(
+      service.analyzeFoodImageBase64(img, 'image/jpeg', 'u1'),
+    ).rejects.toMatchObject({
       status: 429,
     });
     expect(state.purchased).toBe(0);
@@ -1291,11 +1691,26 @@ describe('BR-11.2 / BR-11.4 AI nhận diện ảnh', () => {
 // BR-07.2 — múi giờ của user (hạn mức AI)
 // ---------------------------------------------------------------------------
 describe('BR-07.2 Ranh giới ngày theo múi giờ của user', () => {
-  const service: any = new AiService({ get: () => undefined } as any, {} as any, {} as any);
+  const service: any = new AiService(
+    { get: () => undefined } as any,
+    {} as any,
+    {} as any,
+  );
   const hourIn = (d: Date, tz: string) =>
-    d.toLocaleString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    d.toLocaleString('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
 
-  it.each(['America/New_York', 'Asia/Ho_Chi_Minh', 'Europe/London', 'Asia/Kolkata', 'Pacific/Auckland'])(
+  it.each([
+    'America/New_York',
+    'Asia/Ho_Chi_Minh',
+    'Europe/London',
+    'Asia/Kolkata',
+    'Pacific/Auckland',
+  ])(
     'user ở %s: đầu ngày là 00:00 giờ địa phương và cách ngày kế tiếp 24 giờ (hoặc 23/25 giờ khi đổi giờ)',
     (tz) => {
       const { startOfDay, resetsAt } = service.getTimezoneDayBounds(tz);
@@ -1318,7 +1733,17 @@ describe('BR-07.2 Ranh giới ngày theo múi giờ của user', () => {
 // BR-08.1a và BR-11.5 — lọc cứng dị ứng và chế độ ăn ở backend
 // ---------------------------------------------------------------------------
 describe('BR-08.1a Thẻ an toàn cho từng món trong kho', () => {
-  const ALLERGENS = ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'PEANUT', 'SESAME', 'SHELLFISH', 'SOY', 'TREE_NUT'];
+  const ALLERGENS = [
+    'DAIRY',
+    'EGG',
+    'FISH',
+    'GLUTEN',
+    'PEANUT',
+    'SESAME',
+    'SHELLFISH',
+    'SOY',
+    'TREE_NUT',
+  ];
 
   it('mọi món trong kho đều có thẻ an toàn, và không có thẻ thừa', () => {
     expect(VIETNAMESE_FOODS_DATA.length).toBeGreaterThan(0);
@@ -1338,12 +1763,21 @@ describe('BR-08.1a Thẻ an toàn cho từng món trong kho', () => {
     for (const food of VIETNAMESE_FOODS_DATA) {
       const t = FOOD_SAFETY_TAGS[food.name];
       const n = food.name.toLowerCase();
-      if (/trứng/.test(n) && !t.containsEgg) problems.push(`${food.name}: thiếu containsEgg`);
-      if (/heo|sườn|chả lụa|mọc|thịt kho/.test(n) && !t.containsPork) problems.push(`${food.name}: thiếu containsPork`);
-      if (/(?<!trứng )gà|bò |bò$|heo|sườn|chả(?!o)|thịt/.test(n) && !t.containsMeat) problems.push(`${food.name}: thiếu containsMeat`);
-      if (/cá |tôm|mực|ngao|nghêu|cua/.test(n) && !t.containsFish) problems.push(`${food.name}: thiếu containsFish`);
-      if (/đậu phụ|đậu nành/.test(n) && !t.allergens.includes('SOY')) problems.push(`${food.name}: thiếu SOY`);
-      if (/sữa chua|sữa tươi/.test(n) && !t.containsDairy) problems.push(`${food.name}: thiếu containsDairy`);
+      if (/trứng/.test(n) && !t.containsEgg)
+        problems.push(`${food.name}: thiếu containsEgg`);
+      if (/heo|sườn|chả lụa|mọc|thịt kho/.test(n) && !t.containsPork)
+        problems.push(`${food.name}: thiếu containsPork`);
+      if (
+        /(?<!trứng )gà|bò |bò$|heo|sườn|chả(?!o)|thịt/.test(n) &&
+        !t.containsMeat
+      )
+        problems.push(`${food.name}: thiếu containsMeat`);
+      if (/cá |tôm|mực|ngao|nghêu|cua/.test(n) && !t.containsFish)
+        problems.push(`${food.name}: thiếu containsFish`);
+      if (/đậu phụ|đậu nành/.test(n) && !t.allergens.includes('SOY'))
+        problems.push(`${food.name}: thiếu SOY`);
+      if (/sữa chua|sữa tươi/.test(n) && !t.containsDairy)
+        problems.push(`${food.name}: thiếu containsDairy`);
     }
     expect(problems).toEqual([]);
   });
@@ -1392,23 +1826,33 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
     (allergen) => {
       const allowed = getAllowedFoods({ allergies: [allergen] });
       expect(allowed.length).toBeGreaterThan(0);
-      for (const f of allowed) expect(f.safety.allergens).not.toContain(allergen);
+      for (const f of allowed)
+        expect(f.safety.allergens).not.toContain(allergen);
     },
   );
 
   it('"NONE" và giá trị lạ không loại món nào; dietType lạ coi như ăn tạp', () => {
-    expect(getAllowedFoods({ allergies: ['NONE', ''], dietType: 'BALANCED' })).toHaveLength(
-      VIETNAMESE_FOODS_DATA.length,
-    );
+    expect(
+      getAllowedFoods({ allergies: ['NONE', ''], dietType: 'BALANCED' }),
+    ).toHaveLength(VIETNAMESE_FOODS_DATA.length);
   });
 
   // ---- luồng gợi ý đầy đủ, có Gemini giả hành xử xấu
-  const gap = { remainingCalories: 600, remainingProtein: 40, remainingCarbs: 60, remainingFat: 15 };
+  const gap = {
+    remainingCalories: 600,
+    remainingProtein: 40,
+    remainingCarbs: 60,
+    remainingFat: 15,
+  };
   const dietTypes = ['OMNIVORE', 'PESCATARIAN', 'VEGETARIAN', 'VEGAN', 'HALAL'];
   const allergyKeys = ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'SHELLFISH', 'SOY'];
 
   function service(adversarial: boolean) {
-    const svc: any = new AiService({ get: () => undefined } as any, {} as any, {} as any);
+    const svc: any = new AiService(
+      { get: () => undefined } as any,
+      {} as any,
+      {} as any,
+    );
     if (adversarial) {
       svc.genAI = {
         getGenerativeModel: () => ({
@@ -1418,9 +1862,16 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
                 JSON.stringify({
                   advice: 'Ăn đủ đạm nhé',
                   picks: [
-                    { name: 'Phở bò tái nạc', reason: 'Giàu đạm', calories: 99999 }, // vi phạm chế độ ăn
+                    {
+                      name: 'Phở bò tái nạc',
+                      reason: 'Giàu đạm',
+                      calories: 99999,
+                    }, // vi phạm chế độ ăn
                     { name: 'Món bịa không có trong kho', reason: 'bịa' },
-                    { name: 'Cá hồi áp chảo sốt chanh leo', reason: 'Giàu omega-3' },
+                    {
+                      name: 'Cá hồi áp chảo sốt chanh leo',
+                      reason: 'Giàu omega-3',
+                    },
                     { name: 'Trứng gà luộc', reason: 'Tiện' },
                   ],
                 }),
@@ -1432,16 +1883,23 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
     return svc;
   }
 
-  function violations(suggestions: any[], rules: { dietType: string; allergies: string[] }) {
+  function violations(
+    suggestions: any[],
+    rules: { dietType: string; allergies: string[] },
+  ) {
     const bad: string[] = [];
     for (const s of suggestions) {
-      const food = VIETNAMESE_FOODS_DATA.find((f) => `${f.name} (${f.servingSize})` === s.name);
+      const food = VIETNAMESE_FOODS_DATA.find(
+        (f) => `${f.name} (${f.servingSize})` === s.name,
+      );
       if (!food) {
         bad.push(`món ngoài kho: ${s.name}`);
         continue;
       }
-      if (!isFoodAllowed(FOOD_SAFETY_TAGS[food.name], rules)) bad.push(food.name);
-      if (s.calories !== Math.round(food.calories)) bad.push(`số liệu không lấy từ kho: ${food.name}`);
+      if (!isFoodAllowed(FOOD_SAFETY_TAGS[food.name], rules))
+        bad.push(food.name);
+      if (s.calories !== Math.round(food.calories))
+        bad.push(`số liệu không lấy từ kho: ${food.name}`);
     }
     return bad;
   }
@@ -1452,13 +1910,19 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
       const svc = service(adversarial);
       const users: { dietType: string; allergies: string[] }[] = [];
       for (const dietType of dietTypes) {
-        for (const a of allergyKeys.slice(0, 4)) users.push({ dietType, allergies: [a] });
+        for (const a of allergyKeys.slice(0, 4))
+          users.push({ dietType, allergies: [a] });
       }
       expect(users).toHaveLength(20);
       let total = 0;
       for (const u of users) {
         for (let i = 0; i < 10; i++) {
-          const res = await svc.suggestMealForGap('LOSE_WEIGHT', gap, u.allergies, u.dietType);
+          const res = await svc.suggestMealForGap(
+            'LOSE_WEIGHT',
+            gap,
+            u.allergies,
+            u.dietType,
+          );
           total += res.suggestions.length;
           expect(violations(res.suggestions, u)).toEqual([]);
         }
@@ -1469,21 +1933,40 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
 
   it('Gemini chọn món hợp lệ thì dùng lý do của Gemini nhưng số liệu vẫn lấy từ kho', async () => {
     const svc = service(true);
-    const res = await svc.suggestMealForGap('LOSE_WEIGHT', gap, [], 'PESCATARIAN');
+    const res = await svc.suggestMealForGap(
+      'LOSE_WEIGHT',
+      gap,
+      [],
+      'PESCATARIAN',
+    );
     const hoi = res.suggestions.find((s: any) => s.name.startsWith('Cá hồi'));
     expect(hoi).toBeDefined();
     expect(hoi.reason).toBe('Giàu omega-3');
     expect(hoi.calories).toBeLessThan(1000);
-    expect(res.suggestions.some((s: any) => s.name.startsWith('Phở bò'))).toBe(false);
+    expect(res.suggestions.some((s: any) => s.name.startsWith('Phở bò'))).toBe(
+      false,
+    );
   });
 
   it('không còn món nào phù hợp → danh sách rỗng kèm lời giải thích, không bịa món', async () => {
     const svc = service(false);
-    const res = await svc.suggestMealForGap('LOSE_WEIGHT', gap, ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'SHELLFISH', 'SOY', 'PEANUT'], 'VEGAN');
+    const res = await svc.suggestMealForGap(
+      'LOSE_WEIGHT',
+      gap,
+      ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'SHELLFISH', 'SOY', 'PEANUT'],
+      'VEGAN',
+    );
     // thuần chay + dị ứng đậu nành/gluten vẫn còn trái cây, rau, cơm: kiểm tra chỉ rằng không có vi phạm
     for (const sug of res.suggestions) {
-      const food = VIETNAMESE_FOODS_DATA.find((f) => `${f.name} (${f.servingSize})` === sug.name)!;
-      expect(isFoodAllowed(FOOD_SAFETY_TAGS[food.name], { dietType: 'VEGAN', allergies: ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'SHELLFISH', 'SOY'] })).toBe(true);
+      const food = VIETNAMESE_FOODS_DATA.find(
+        (f) => `${f.name} (${f.servingSize})` === sug.name,
+      )!;
+      expect(
+        isFoodAllowed(FOOD_SAFETY_TAGS[food.name], {
+          dietType: 'VEGAN',
+          allergies: ['DAIRY', 'EGG', 'FISH', 'GLUTEN', 'SHELLFISH', 'SOY'],
+        }),
+      ).toBe(true);
     }
     const none = await svc.suggestMealForGap('LOSE_WEIGHT', gap, [], 'VEGAN');
     expect(Array.isArray(none.suggestions)).toBe(true);
@@ -1493,14 +1976,27 @@ describe('BR-11.5 Lọc cứng chế độ ăn và dị ứng', () => {
 // ---------------------------------------------------------------------------
 // BR-07.2 — Meal.logDate và ngày theo múi giờ của user
 // ---------------------------------------------------------------------------
-const FAKE_DATE_ONLY = ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask', 'performance', 'hrtime'] as const;
+const FAKE_DATE_ONLY = [
+  'setTimeout',
+  'setInterval',
+  'setImmediate',
+  'clearTimeout',
+  'clearInterval',
+  'clearImmediate',
+  'nextTick',
+  'queueMicrotask',
+  'performance',
+  'hrtime',
+] as const;
 function freezeNow(iso: string) {
   jest.useFakeTimers({ now: new Date(iso), doNotFake: [...FAKE_DATE_ONLY] });
 }
 
 describe('BR-07.2 Tiện ích ngày theo múi giờ', () => {
   it('keyToDate/dateToKey/addDaysToKey khớp nhau và không phụ thuộc múi giờ máy chủ', () => {
-    expect(keyToDate('2026-10-06').toISOString()).toBe('2026-10-06T00:00:00.000Z');
+    expect(keyToDate('2026-10-06').toISOString()).toBe(
+      '2026-10-06T00:00:00.000Z',
+    );
     expect(dateToKey(keyToDate('2026-10-06'))).toBe('2026-10-06');
     expect(addDaysToKey('2026-10-31', 1)).toBe('2026-11-01');
     expect(addDaysToKey('2026-03-01', -1)).toBe('2026-02-28');
@@ -1513,10 +2009,16 @@ describe('BR-07.2 Tiện ích ngày theo múi giờ', () => {
   });
 
   it('normalizeDayKey: ngày user chọn giữ nguyên; mốc thời gian đổi theo múi giờ', () => {
-    expect(normalizeDayKey('2026-10-06', 'America/New_York')).toBe('2026-10-06');
+    expect(normalizeDayKey('2026-10-06', 'America/New_York')).toBe(
+      '2026-10-06',
+    );
     // 00:30 giờ Việt Nam ngày 06/10 = 17:30 UTC ngày 05/10
-    expect(normalizeDayKey('2026-10-05T17:30:00Z', 'Asia/Ho_Chi_Minh')).toBe('2026-10-06');
-    expect(normalizeDayKey('2026-10-05T17:30:00Z', 'America/New_York')).toBe('2026-10-05');
+    expect(normalizeDayKey('2026-10-05T17:30:00Z', 'Asia/Ho_Chi_Minh')).toBe(
+      '2026-10-06',
+    );
+    expect(normalizeDayKey('2026-10-05T17:30:00Z', 'America/New_York')).toBe(
+      '2026-10-05',
+    );
     expect(normalizeDayKey('không phải ngày', 'Asia/Ho_Chi_Minh')).toBeNull();
   });
 
@@ -1535,7 +2037,13 @@ describe('BR-07.2 Meal.logDate', () => {
     const queries: any[] = [];
     const prisma: any = {
       user: {
-        findUnique: jest.fn(async () => ({ timezone, targetCalories: 2000, targetProtein: 150, targetCarb: 200, targetFat: 60 })),
+        findUnique: jest.fn(async () => ({
+          timezone,
+          targetCalories: 2000,
+          targetProtein: 150,
+          targetCarb: 200,
+          targetFat: 60,
+        })),
       },
       meal: {
         create: jest.fn(async ({ data }: any) => {
@@ -1558,29 +2066,49 @@ describe('BR-07.2 Meal.logDate', () => {
 
   it('ngày dạng YYYY-MM-DD được giữ nguyên làm logDate, không dịch theo múi giờ', async () => {
     const { service, created } = build('America/New_York');
-    await service.createMeal('u1', { mealType: 'LUNCH', date: '2026-10-06', items: [item] } as any);
+    await service.createMeal('u1', {
+      mealType: 'LUNCH',
+      date: '2026-10-06',
+      items: [item],
+    } as any);
     expect(created[0].logDate.toISOString()).toBe('2026-10-06T00:00:00.000Z');
   });
 
   it('bữa ghi lúc 00:30 giờ Việt Nam (mốc thời gian) thuộc ĐÚNG ngày hôm đó, không về hôm trước', async () => {
     const { service, created } = build('Asia/Ho_Chi_Minh');
-    await service.createMeal('u1', { mealType: 'BREAKFAST', date: '2026-10-05T17:30:00Z', items: [item] } as any);
+    await service.createMeal('u1', {
+      mealType: 'BREAKFAST',
+      date: '2026-10-05T17:30:00Z',
+      items: [item],
+    } as any);
     expect(dateToKey(created[0].logDate)).toBe('2026-10-06');
   });
 
   it('cùng mốc thời gian nhưng user ở New York thì thuộc ngày 05/10', async () => {
     const { service, created } = build('America/New_York');
-    await service.createMeal('u1', { mealType: 'DINNER', date: '2026-10-05T17:30:00Z', items: [item] } as any);
+    await service.createMeal('u1', {
+      mealType: 'DINNER',
+      date: '2026-10-05T17:30:00Z',
+      items: [item],
+    } as any);
     expect(dateToKey(created[0].logDate)).toBe('2026-10-05');
   });
 
   it('không truyền ngày: "hôm nay" theo múi giờ user, không theo giờ máy chủ', async () => {
     freezeNow('2026-10-05T17:30:00Z'); // 00:30 ngày 06/10 ở Việt Nam, 13:30 ngày 05/10 ở New York
     const vn = build('Asia/Ho_Chi_Minh');
-    await vn.service.quickAddMeal('u1', { mealType: 'SNACK', name: 'x', calories: 100 } as any);
+    await vn.service.quickAddMeal('u1', {
+      mealType: 'SNACK',
+      name: 'x',
+      calories: 100,
+    } as any);
     expect(dateToKey(vn.created[0].logDate)).toBe('2026-10-06');
     const ny = build('America/New_York');
-    await ny.service.quickAddMeal('u1', { mealType: 'SNACK', name: 'x', calories: 100 } as any);
+    await ny.service.quickAddMeal('u1', {
+      mealType: 'SNACK',
+      name: 'x',
+      calories: 100,
+    } as any);
     expect(dateToKey(ny.created[0].logDate)).toBe('2026-10-05');
   });
 
@@ -1588,33 +2116,80 @@ describe('BR-07.2 Meal.logDate', () => {
     freezeNow('2026-10-05T17:30:00Z');
     const { service, queries } = build('Asia/Ho_Chi_Minh');
     await service.getMealsByDate('u1');
-    expect(queries[0].where.logDate.toISOString()).toBe('2026-10-06T00:00:00.000Z');
+    expect(queries[0].where.logDate.toISOString()).toBe(
+      '2026-10-06T00:00:00.000Z',
+    );
     await service.getDailyNutritionSummary('u1', '2026-10-01');
-    expect(queries[1].where.logDate.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+    expect(queries[1].where.logDate.toISOString()).toBe(
+      '2026-10-01T00:00:00.000Z',
+    );
   });
 
   it('thống kê và tóm tắt tuần gom theo logDate', async () => {
     const meals = [
-      { logDate: keyToDate('2026-10-05'), totalCalories: 1900, totalProtein: 100, totalCarb: 200, totalFat: 60 },
-      { logDate: keyToDate('2026-10-05'), totalCalories: 100, totalProtein: 5, totalCarb: 10, totalFat: 3 },
-      { logDate: keyToDate('2026-10-07'), totalCalories: 900, totalProtein: 50, totalCarb: 90, totalFat: 30 },
+      {
+        logDate: keyToDate('2026-10-05'),
+        totalCalories: 1900,
+        totalProtein: 100,
+        totalCarb: 200,
+        totalFat: 60,
+      },
+      {
+        logDate: keyToDate('2026-10-05'),
+        totalCalories: 100,
+        totalProtein: 5,
+        totalCarb: 10,
+        totalFat: 3,
+      },
+      {
+        logDate: keyToDate('2026-10-07'),
+        totalCalories: 900,
+        totalProtein: 50,
+        totalCarb: 90,
+        totalFat: 30,
+      },
     ];
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'America/New_York', targetCalories: 2000 })) },
+      user: {
+        findUnique: jest.fn(async () => ({
+          timezone: 'America/New_York',
+          targetCalories: 2000,
+        })),
+      },
       meal: { findMany: jest.fn(async () => meals), findFirst: jest.fn() },
       dailyLogStatus: { findMany: jest.fn(async () => []) },
     };
     const service = new MealsService(prisma, {} as any);
-    const stats: any = await service.getNutritionStatistics('u1', '2026-10-05', '2026-10-11');
-    expect(stats.data.period).toEqual({ start: '2026-10-05', end: '2026-10-11' });
-    expect(stats.data.dailyStats.map((d: any) => d.date)).toEqual(['2026-10-05', '2026-10-07']);
+    const stats: any = await service.getNutritionStatistics(
+      'u1',
+      '2026-10-05',
+      '2026-10-11',
+    );
+    expect(stats.data.period).toEqual({
+      start: '2026-10-05',
+      end: '2026-10-11',
+    });
+    expect(stats.data.dailyStats.map((d: any) => d.date)).toEqual([
+      '2026-10-05',
+      '2026-10-07',
+    ]);
     expect(stats.data.dailyStats[0].calories).toBe(2000);
 
     const week: any = await service.getWeekSummary('u1', '2026-10-05');
     expect(week.data.map((d: any) => d.date)).toEqual([
-      '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11',
+      '2026-10-05',
+      '2026-10-06',
+      '2026-10-07',
+      '2026-10-08',
+      '2026-10-09',
+      '2026-10-10',
+      '2026-10-11',
     ]);
-    expect(week.data[0]).toMatchObject({ hasData: true, metGoal: true, consumedCalories: 2000 });
+    expect(week.data[0]).toMatchObject({
+      hasData: true,
+      metGoal: true,
+      consumedCalories: 2000,
+    });
     expect(week.data[1].hasData).toBe(false);
     expect(week.data[2].metGoal).toBe(false);
   });
@@ -1627,7 +2202,12 @@ describe('BR-07.2 Nước uống và buổi tập theo ngày của user', () => 
     freezeNow('2026-10-05T17:30:00Z'); // 00:30 ngày 06/10 ở Việt Nam
     let where: any;
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', weightKg: 70 })) },
+      user: {
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          weightKg: 70,
+        })),
+      },
       waterLog: {
         aggregate: jest.fn(async (args: any) => {
           where = args.where;
@@ -1646,11 +2226,15 @@ describe('BR-07.2 Nước uống và buổi tập theo ngày của user', () => 
     freezeNow('2026-10-05T17:30:00Z');
     let where: any;
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh' })) },
+      user: {
+        findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh' })),
+      },
       workoutLog: {
         findMany: jest.fn(async (args: any) => {
           where = args.where;
-          return [{ durationMinutes: 30, caloriesBurned: 200, category: 'CARDIO' }];
+          return [
+            { durationMinutes: 30, caloriesBurned: 200, category: 'CARDIO' },
+          ];
         }),
       },
     };
@@ -1665,12 +2249,22 @@ describe('BR-07.2 Nước uống và buổi tập theo ngày của user', () => 
 describe('BR-06.2 / BR-06.5 Kỳ dữ liệu và mức tuân thủ của Check-in', () => {
   afterEach(() => jest.useRealTimers());
 
-  async function run(nowIso: string, dayRows: { key: string; cals: number[] }[], target = 2000) {
+  async function run(
+    nowIso: string,
+    dayRows: { key: string; cals: number[] }[],
+    target = 2000,
+  ) {
     freezeNow(nowIso);
     const rows: any[] = [];
     for (const d of dayRows) {
       for (const c of d.cals) {
-        rows.push({ logDate: keyToDate(d.key), totalCalories: c, totalProtein: c / 20, totalCarb: c / 10, totalFat: c / 30 });
+        rows.push({
+          logDate: keyToDate(d.key),
+          totalCalories: c,
+          totalProtein: c / 20,
+          totalCarb: c / 10,
+          totalFat: c / 30,
+        });
       }
     }
     const user = {
@@ -1700,15 +2294,30 @@ describe('BR-06.2 / BR-06.5 Kỳ dữ liệu và mức tuân thủ của Check-i
       checkIn: {
         updateMany: jest.fn(async () => ({ count: 0 })),
         findUnique: jest.fn(async () => null),
+        findFirst: jest.fn(async () => null),
         create: jest.fn(async (args: any) => ({ ...args.data })),
       },
     };
     const expenditure: any = {
-      recalculate: jest.fn(async () => ({ estimatedExpenditure: 2000, method: 'ADAPTIVE', status: 'STABLE' })),
+      recalculate: jest.fn(async () => ({
+        estimatedExpenditure: 2000,
+        method: 'ADAPTIVE',
+        status: 'STABLE',
+      })),
     };
-    const weights: any = { getWeightProgress: jest.fn(async () => ({ data: { progressPercent: 0 } })) };
-    const service = new CheckinsService(prisma, expenditure, new HealthCalculatorService(), weights, { create: jest.fn() } as any);
-    await service.generateCheckin('u1', {} as any);
+    const weights: any = {
+      getWeightProgress: jest.fn(async () => ({
+        data: { progressPercent: 0 },
+      })),
+    };
+    const service = new CheckinsService(
+      prisma,
+      expenditure,
+      new HealthCalculatorService(),
+      weights,
+      { create: jest.fn() } as any,
+    );
+    await service.generateCheckin('u1', {});
     return { created: prisma.checkIn.create.mock.calls[0][0].data, queries };
   }
 
@@ -1751,7 +2360,9 @@ describe('BR-06.2 / BR-06.5 Kỳ dữ liệu và mức tuân thủ của Check-i
   });
 
   it('không có ngày đầy đủ nào → không có trung bình và tuân thủ (không phạt)', async () => {
-    const { created } = await run('2026-10-07T03:00:00Z', [{ key: '2026-09-28', cals: [200] }]);
+    const { created } = await run('2026-10-07T03:00:00Z', [
+      { key: '2026-09-28', cals: [200] },
+    ]);
     expect(created.avgDailyCalories).toBeNull();
     expect(created.compliancePct).toBeNull();
   });
@@ -1762,16 +2373,23 @@ describe('BR-06.2 / BR-06.5 Kỳ dữ liệu và mức tuân thủ của Check-i
 // ---------------------------------------------------------------------------
 describe('BR-09.3 Kiểm tra giá trị khi ghi cân', () => {
   it('cân nặng 25 kg và 300 kg là biên hợp lệ', async () => {
-    await expect(validate({ weightKg: 25 }, CreateWeightLogDto)).resolves.toBeDefined();
-    await expect(validate({ weightKg: 300 }, CreateWeightLogDto)).resolves.toBeDefined();
-    await expect(validate({ weightKg: 301 }, CreateWeightLogDto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      validate({ weightKg: 25 }, CreateWeightLogDto),
+    ).resolves.toBeDefined();
+    await expect(
+      validate({ weightKg: 300 }, CreateWeightLogDto),
+    ).resolves.toBeDefined();
+    await expect(
+      validate({ weightKg: 301 }, CreateWeightLogDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('ngày hôm nay và quá khứ hợp lệ; chuỗi không phải ngày bị từ chối', async () => {
     await expect(
-      validate({ weightKg: 70, date: new Date().toISOString() }, CreateWeightLogDto),
+      validate(
+        { weightKg: 70, date: new Date().toISOString() },
+        CreateWeightLogDto,
+      ),
     ).resolves.toBeDefined();
     await expect(
       validate({ weightKg: 70, date: '2026-01-15' }, CreateWeightLogDto),
@@ -1782,7 +2400,10 @@ describe('BR-09.3 Kiểm tra giá trị khi ghi cân', () => {
   });
 
   it('nhập 150 khi xu hướng đang 65 kg → cờ suspicious = true; nhập 65.5 → false', async () => {
-    const logs = [65, 65.2, 64.8, 65.1].map((w, i) => ({ weightKg: w, date: new Date(Date.now() - (5 - i) * DAY) }));
+    const logs = [65, 65.2, 64.8, 65.1].map((w, i) => ({
+      weightKg: w,
+      date: new Date(Date.now() - (5 - i) * DAY),
+    }));
     const prisma: any = {
       weightLog: {
         create: jest.fn(async ({ data }: any) => data),
@@ -1791,17 +2412,21 @@ describe('BR-09.3 Kiểm tra giá trị khi ghi cân', () => {
       },
       user: { findUnique: jest.fn(async () => null), update: jest.fn() },
     };
-    const service = new WeightLogsService(prisma, new HealthCalculatorService(), {} as any);
-    const bad: any = await service.createLog('u1', { weightKg: 150 } as any);
+    const service = new WeightLogsService(
+      prisma,
+      new HealthCalculatorService(),
+      {} as any,
+    );
+    const bad: any = await service.createLog('u1', { weightKg: 150 });
     expect(bad.data.suspicious).toBe(true);
-    const ok: any = await service.createLog('u1', { weightKg: 65.5 } as any);
+    const ok: any = await service.createLog('u1', { weightKg: 65.5 });
     expect(ok.data.suspicious).toBe(false);
   });
 
   it('cân nặng 24 kg (dưới mức tối thiểu 25) bị từ chối', async () => {
-    await expect(validate({ weightKg: 24 }, CreateWeightLogDto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      validate({ weightKg: 24 }, CreateWeightLogDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('ngày trong tương lai bị từ chối', async () => {
@@ -1821,41 +2446,84 @@ describe('BR-09.3 Kiểm tra giá trị khi ghi cân', () => {
 describe('BR-13.1 Thông báo DAY_COMPLETED', () => {
   afterEach(() => jest.useRealTimers());
 
-  function build(meals: { totalCalories: number }[], flag?: string, already = false) {
+  function build(
+    meals: { totalCalories: number }[],
+    flag?: string,
+    already = false,
+  ) {
     const created: any[] = [];
     const prisma: any = {
-      user: { findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', targetCalories: 2000 })) },
+      user: {
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          targetCalories: 2000,
+        })),
+      },
       meal: { findMany: jest.fn(async () => meals) },
-      dailyLogStatus: { findMany: jest.fn(async () => (flag ? [{ logDate: keyToDate('2026-10-05'), completeness: flag }] : [])) },
-      notification: { findFirst: jest.fn(async () => (already ? { id: 'n' } : null)) },
+      dailyLogStatus: {
+        findMany: jest.fn(async () =>
+          flag
+            ? [{ logDate: keyToDate('2026-10-05'), completeness: flag }]
+            : [],
+        ),
+      },
+      notification: {
+        findFirst: jest.fn(async () => (already ? { id: 'n' } : null)),
+      },
     };
-    const notifications: any = { create: jest.fn(async (...a: any[]) => created.push(a)) };
+    const notifications: any = {
+      create: jest.fn(async (...a: any[]) => created.push(a)),
+    };
     return { service: new MealsService(prisma, notifications), created };
   }
 
   it('hôm qua đầy đủ và 85–115% mục tiêu → chúc mừng một lần', async () => {
     freezeNow('2026-10-06T03:00:00Z');
-    const { service, created } = build([{ totalCalories: 1000 }, { totalCalories: 900 }]);
+    const { service, created } = build([
+      { totalCalories: 1000 },
+      { totalCalories: 900 },
+    ]);
     await service.evaluateFinishedDay('u1', '2026-10-05');
     expect(created).toHaveLength(1);
     expect(created[0][1]).toBe('DAY_COMPLETED');
   });
 
   it.each([
-    ['ăn 140% (không phán xét: không gửi gì)', [{ totalCalories: 1400 }, { totalCalories: 1400 }], undefined, false],
+    [
+      'ăn 140% (không phán xét: không gửi gì)',
+      [{ totalCalories: 1400 }, { totalCalories: 1400 }],
+      undefined,
+      false,
+    ],
     ['ngày thiếu bữa (1 bữa)', [{ totalCalories: 1900 }], undefined, false],
-    ['người dùng đánh dấu chưa đủ', [{ totalCalories: 1000 }, { totalCalories: 1000 }], 'INCOMPLETE', false],
-    ['đã gửi hôm nay rồi', [{ totalCalories: 1000 }, { totalCalories: 1000 }], undefined, true],
-  ])('không gửi khi %s', async (_n, meals: any, flag: any, already: boolean) => {
-    freezeNow('2026-10-06T03:00:00Z');
-    const { service, created } = build(meals, flag, already);
-    await service.evaluateFinishedDay('u1', '2026-10-05');
-    expect(created).toHaveLength(0);
-  });
+    [
+      'người dùng đánh dấu chưa đủ',
+      [{ totalCalories: 1000 }, { totalCalories: 1000 }],
+      'INCOMPLETE',
+      false,
+    ],
+    [
+      'đã gửi hôm nay rồi',
+      [{ totalCalories: 1000 }, { totalCalories: 1000 }],
+      undefined,
+      true,
+    ],
+  ])(
+    'không gửi khi %s',
+    async (_n, meals: any, flag: any, already: boolean) => {
+      freezeNow('2026-10-06T03:00:00Z');
+      const { service, created } = build(meals, flag, already);
+      await service.evaluateFinishedDay('u1', '2026-10-05');
+      expect(created).toHaveLength(0);
+    },
+  );
 
   it('ngày chưa kết thúc (hôm nay) không bao giờ được đánh giá', async () => {
     freezeNow('2026-10-06T03:00:00Z');
-    const { service, created } = build([{ totalCalories: 1000 }, { totalCalories: 1000 }]);
+    const { service, created } = build([
+      { totalCalories: 1000 },
+      { totalCalories: 1000 },
+    ]);
     await service.evaluateFinishedDay('u1', '2026-10-06');
     expect(created).toHaveLength(0);
   });
@@ -1866,21 +2534,50 @@ describe('BR-13.1 Thông báo DAY_COMPLETED', () => {
 // ---------------------------------------------------------------------------
 describe('BR-11.3 Quét thực đơn lọc theo dị ứng và chế độ ăn', () => {
   it('detectTextViolations bắt đúng thịt/cá/trứng/sữa/heo/dị ứng, không báo nhầm bơ thành bò', () => {
-    expect(detectTextViolations('Bún chả Hà Nội', { dietType: 'VEGETARIAN' })).toContain('có thịt');
-    expect(detectTextViolations('Gỏi cuốn tôm', { dietType: 'VEGETARIAN' })).toContain('có cá/hải sản');
-    expect(detectTextViolations('Bánh flan trứng sữa', { dietType: 'VEGAN' })).toEqual(expect.arrayContaining(['có trứng', 'có sữa']));
-    expect(detectTextViolations('Sườn nướng', { dietType: 'HALAL' })).toContain('có thịt heo');
+    expect(
+      detectTextViolations('Bún chả Hà Nội', { dietType: 'VEGETARIAN' }),
+    ).toContain('có thịt');
+    expect(
+      detectTextViolations('Gỏi cuốn tôm', { dietType: 'VEGETARIAN' }),
+    ).toContain('có cá/hải sản');
+    expect(
+      detectTextViolations('Bánh flan trứng sữa', { dietType: 'VEGAN' }),
+    ).toEqual(expect.arrayContaining(['có trứng', 'có sữa']));
+    expect(detectTextViolations('Sườn nướng', { dietType: 'HALAL' })).toContain(
+      'có thịt heo',
+    );
     expect(detectTextViolations('Phở bò', { dietType: 'HALAL' })).toEqual([]);
-    expect(detectTextViolations('Kem bơ', { dietType: 'VEGAN' })).toEqual(expect.arrayContaining(['có sữa']));
-    expect(detectTextViolations('Sinh tố bơ', { dietType: 'VEGETARIAN' })).toEqual([]);
-    expect(detectTextViolations('Chè đậu phộng', { allergies: ['PEANUT'] })[0]).toMatch(/đậu phộng/);
-    expect(detectTextViolations('Cơm trắng', { dietType: 'VEGAN', allergies: ['NONE'] })).toEqual([]);
+    expect(detectTextViolations('Kem bơ', { dietType: 'VEGAN' })).toEqual(
+      expect.arrayContaining(['có sữa']),
+    );
+    expect(
+      detectTextViolations('Sinh tố bơ', { dietType: 'VEGETARIAN' }),
+    ).toEqual([]);
+    expect(
+      detectTextViolations('Chè đậu phộng', { allergies: ['PEANUT'] })[0],
+    ).toMatch(/đậu phộng/);
+    expect(
+      detectTextViolations('Cơm trắng', {
+        dietType: 'VEGAN',
+        allergies: ['NONE'],
+      }),
+    ).toEqual([]);
   });
 
-  async function scan(rules: { dietType: string; allergies: string[] }, items: any[]) {
+  async function scan(
+    rules: { dietType: string; allergies: string[] },
+    items: any[],
+  ) {
     const prisma: any = {
       user: {
-        findUnique: jest.fn(async () => ({ timezone: 'Asia/Ho_Chi_Minh', purchasedAiQuota: 0, ...rules, goal: 'LOSE_WEIGHT', targetCalories: 2000, targetProtein: 140 })),
+        findUnique: jest.fn(async () => ({
+          timezone: 'Asia/Ho_Chi_Minh',
+          purchasedAiQuota: 0,
+          ...rules,
+          goal: 'LOSE_WEIGHT',
+          targetCalories: 2000,
+          targetProtein: 140,
+        })),
         updateMany: jest.fn(async () => ({ count: 0 })),
       },
       subscriptionState: { findUnique: jest.fn(async () => null) },
@@ -1893,33 +2590,76 @@ describe('BR-11.3 Quét thực đơn lọc theo dị ứng và chế độ ăn',
       meal: { findMany: jest.fn(async () => []) },
       apiUsageLog: { create: jest.fn(async () => ({})) },
     };
-    const svc: any = new AiService({ get: () => undefined } as any, prisma, {} as any);
+    const svc: any = new AiService(
+      { get: () => undefined } as any,
+      prisma,
+      {} as any,
+    );
     svc.genAI = {
       getGenerativeModel: () => ({
-        generateContent: async () => ({ response: { text: () => JSON.stringify({ restaurantName: 'Quán A', items }) } }),
+        generateContent: async () => ({
+          response: {
+            text: () =>
+              JSON.stringify({ isMenu: true, restaurantName: 'Quán A', items }),
+          },
+        }),
       }),
     };
     return svc.scanMenuBase64('aGVsbG8=', 'image/jpeg', 'u1');
   }
   const menu = [
-    { name: 'Phở bò', description: 'Bánh phở, thịt bò', estimatedCalories: 450, protein: 30, carbs: 50, fat: 10, isRecommended: true },
-    { name: 'Đậu phụ sốt cà', description: 'Đậu phụ, cà chua', estimatedCalories: 300, protein: 18, carbs: 20, fat: 12, isRecommended: true },
-    { name: 'Cơm chiên trứng', description: 'Cơm, trứng', estimatedCalories: 500, protein: 15, carbs: 70, fat: 15, isRecommended: false },
+    {
+      name: 'Phở bò',
+      description: 'Bánh phở, thịt bò',
+      estimatedCalories: 450,
+      protein: 30,
+      carbs: 50,
+      fat: 10,
+      isRecommended: true,
+    },
+    {
+      name: 'Đậu phụ sốt cà',
+      description: 'Đậu phụ, cà chua',
+      estimatedCalories: 300,
+      protein: 18,
+      carbs: 20,
+      fat: 12,
+      isRecommended: true,
+    },
+    {
+      name: 'Cơm chiên trứng',
+      description: 'Cơm, trứng',
+      estimatedCalories: 500,
+      protein: 15,
+      carbs: 70,
+      fat: 15,
+      isRecommended: false,
+    },
   ];
 
   it('người ăn chay: món thịt/trứng có cảnh báo và không bao giờ nằm trong đề xuất', async () => {
-    const res: any = await scan({ dietType: 'VEGAN', allergies: [] }, menu.map((m) => ({ ...m })));
+    const res: any = await scan(
+      { dietType: 'VEGAN', allergies: [] },
+      menu.map((m) => ({ ...m })),
+    );
     const byName = Object.fromEntries(res.items.map((i: any) => [i.name, i]));
     expect(byName['Phở bò'].warning).toBeDefined();
     expect(byName['Phở bò'].isRecommended).toBe(false);
     expect(byName['Cơm chiên trứng'].warning).toBeDefined();
     expect(byName['Đậu phụ sốt cà'].warning).toBeUndefined();
-    expect(res.recommendedItems.map((i: any) => i.name)).toEqual(['Đậu phụ sốt cà']);
+    expect(res.recommendedItems.map((i: any) => i.name)).toEqual([
+      'Đậu phụ sốt cà',
+    ]);
   });
 
   it('dị ứng đậu nành: món đậu phụ bị cảnh báo; không còn món an toàn được đề xuất thì danh sách đề xuất rỗng', async () => {
-    const res: any = await scan({ dietType: 'VEGAN', allergies: ['SOY'] }, menu.map((m) => ({ ...m })));
-    expect(res.items.find((i: any) => i.name === 'Đậu phụ sốt cà').warning).toMatch(/đậu nành/);
+    const res: any = await scan(
+      { dietType: 'VEGAN', allergies: ['SOY'] },
+      menu.map((m) => ({ ...m })),
+    );
+    expect(
+      res.items.find((i: any) => i.name === 'Đậu phụ sốt cà').warning,
+    ).toMatch(/đậu nành/);
     expect(res.recommendedItems).toEqual([]);
   });
 });

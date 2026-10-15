@@ -62,9 +62,13 @@ export function parseSubscriptionV2(body: any): PlaySubscription {
     status,
     autoRenewing: line.autoRenewingPlan?.autoRenewEnabled === true,
     // ⚠️ Cần xác minh trên bản thử thật: pha dùng thử nằm ở offerPhase.freeTrial
-    isTrial: !!line.offerDetails?.offerTags?.includes?.('trial') || !!line.offerPhase?.freeTrial,
-    acknowledged: body.acknowledgementState === 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
-    obfuscatedAccountId: body.externalAccountIdentifiers?.obfuscatedExternalAccountId,
+    isTrial:
+      !!line.offerDetails?.offerTags?.includes?.('trial') ||
+      !!line.offerPhase?.freeTrial,
+    acknowledged:
+      body.acknowledgementState === 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+    obfuscatedAccountId:
+      body.externalAccountIdentifiers?.obfuscatedExternalAccountId,
     linkedPurchaseToken: body.linkedPurchaseToken,
     raw: body,
   };
@@ -95,14 +99,19 @@ export class HttpGooglePlayClient extends GooglePlayClient {
       });
     }
     if (!this.auth) {
-      const credentials = JSON.parse(raw.trim().startsWith('{') ? raw : require('fs').readFileSync(raw, 'utf-8'));
+      const credentials = JSON.parse(
+        raw.trim().startsWith('{')
+          ? raw
+          : require('fs').readFileSync(raw, 'utf-8'),
+      );
       this.auth = new GoogleAuth({
         credentials,
         scopes: ['https://www.googleapis.com/auth/androidpublisher'],
       });
     }
     const t = await this.auth.getAccessToken();
-    if (!t) throw new ServiceUnavailableException({ code: 'BILLING_UNAVAILABLE' });
+    if (!t)
+      throw new ServiceUnavailableException({ code: 'BILLING_UNAVAILABLE' });
     return t;
   }
 
@@ -133,7 +142,10 @@ export class HttpGooglePlayClient extends GooglePlayClient {
     const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/purchases/subscriptions/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}:acknowledge`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${await this.token()}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${await this.token()}`,
+        'Content-Type': 'application/json',
+      },
       body: '{}',
       signal: AbortSignal.timeout(10_000),
     });
@@ -144,11 +156,16 @@ export class HttpGooglePlayClient extends GooglePlayClient {
     const idToken = authorizationHeader?.replace(/^Bearer\s+/i, '');
     const audience = process.env.PUBSUB_PUSH_AUDIENCE;
     const expectedEmail = process.env.PUBSUB_PUSH_SERVICE_ACCOUNT;
-    if (!idToken || !audience || !expectedEmail) throw new UnauthorizedException();
+    if (!idToken || !audience || !expectedEmail)
+      throw new UnauthorizedException();
     try {
-      const ticket = await new OAuth2Client().verifyIdToken({ idToken, audience });
+      const ticket = await new OAuth2Client().verifyIdToken({
+        idToken,
+        audience,
+      });
       const payload = ticket.getPayload();
-      if (!payload?.email_verified || payload.email !== expectedEmail) throw new Error('sai tài khoản');
+      if (!payload?.email_verified || payload.email !== expectedEmail)
+        throw new Error('sai tài khoản');
     } catch {
       throw new UnauthorizedException();
     }

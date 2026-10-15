@@ -250,12 +250,28 @@ model User {
   refreshTokenHash   String?
   timezone           String    @default("Asia/Ho_Chi_Minh")
   lastExportAt       DateTime? // lần xuất dữ liệu gần nhất (BR-18: tối đa 1 lần/ngày)
+  checkinDay         Int       @default(1) // ngày Check-in hằng tuần (BR-06.1): 1 = Thứ Hai … 7 = Chủ Nhật
+  activityCheckAt    DateTime? // lần gần nhất người dùng xử lý đề xuất đối chiếu số buổi tập (BR-10.7)
+
+  // Cài đặt cá nhân đồng bộ giữa các thiết bị (BR-19.4)
+  weightUnit              String  @default("kg") // kg | lb
+  heightUnit              String  @default("cm") // cm | ft
+  energyUnit              String  @default("kcal") // kcal | kJ
+  dailyCompletionReminder String? @default("21:00") // HH:mm, null = tắt nhắc "ghi đủ hôm nay"
+  defaultRestSec          Int     @default(90) // nghỉ mặc định giữa set (giây)
+  notificationPrefs       Json? // chỉ liệt kê loại đã tắt: { "WEEKLY_SUMMARY_READY": false }
+  settingsInitialized     Boolean @default(false) // app đã đẩy cài đặt cũ trên máy lên server chưa
+
+  // Đồng ý chính sách quyền riêng tư lúc đăng ký (BR-18): phiên bản và thời điểm
+  privacyAcceptedVersion  String?
+  privacyAcceptedAt       DateTime?
 
   meals                Meal[]
   weightLogs           WeightLog[]
   workoutLogs          WorkoutLog[]
   customFoods          CustomFood[]
   favoriteFoods        FavoriteFood[]
+  foodSubmissions      FoodSubmission[]
   aiMessages           AiMessage[]
   apiUsageLogs         ApiUsageLog[]
   checkIns             CheckIn[]
@@ -272,6 +288,9 @@ model User {
   manualGrants         ManualGrant[]
   paymentOrders        PaymentOrder[]
   goals                Goal[]
+  customExercises      CustomExercise[]
+  workoutRoutines      WorkoutRoutine[]
+  personalRecords      PersonalRecord[]
   refreshSessions      RefreshSession[]
 
   createdAt DateTime @default(now())
@@ -390,10 +409,13 @@ model CustomFood {
   // Công thức nhiều nguyên liệu (Recipe) — mảng [{name, servingSize?, calories, protein, carb, fat}].
   // null/rỗng = món đơn giản nhập tổng calo/macro trực tiếp như trước (không phá dữ liệu cũ).
   ingredients   Json?
+  // Mã vạch do người dùng gắn khi OpenFoodFacts không có sản phẩm (BR-08.6)
+  barcode       String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
   @@index([userId])
+  @@index([userId, barcode])
 }
 
 model FavoriteFood {
@@ -401,10 +423,14 @@ model FavoriteFood {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodName  String
+  // Định danh món (BR-08.3): đổi tên món trong kho không làm mất yêu thích. Null với dữ liệu cũ chưa tra được.
+  sourceType String? // CATALOG | CUSTOM
+  sourceId   String?
   createdAt DateTime @default(now())
 
   @@unique([userId, foodName])
   @@index([userId])
+  @@index([userId, sourceType, sourceId])
 }
 
 model DietPlanTemplate {
@@ -433,9 +459,49 @@ model AiMessage {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      String
   content   String
+  safetyFlag String? // chủ đề rủi ro đã kích hoạt chế độ an toàn (BR-11.6); null = tin nhắn bình thường
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+// Kho món ăn (BR-08.1). Số liệu dinh dưỡng theo KHẨU PHẦN CHUẨN `servingSize` (đúng như kho cũ trong code); đơn vị
+// khẩu phần kiểu Việt và quy đổi theo 100 g thuộc E6. Món chưa được gắn thẻ an toàn (`safetyTagged = false`) bị loại khỏi
+// mọi gợi ý (fail-closed) cho tới khi có allergens và các cờ chế độ ăn.
+model FoodCatalog {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  nameNormalized String // không dấu, chữ thường (tìm kiếm)
+  aliases        String[]
+  category       String
+  servingSize    String
+  calories       Float
+  protein        Float
+  carb           Float
+  fat            Float
+  note           String?
+
+  // Thẻ an toàn (BR-08.1a, BR-11.5)
+  allergens      String[]
+  containsMeat   Boolean  @default(false)
+  containsFish   Boolean  @default(false)
+  containsEgg    Boolean  @default(false)
+  containsDairy  Boolean  @default(false)
+  containsPork   Boolean  @default(false)
+  safetyTagged   Boolean  @default(false)
+
+  source     String   @default("OFFICIAL") // OFFICIAL | COMMUNITY
+  dataSource String? // nguồn số liệu của món (bảng thành phần thực phẩm, công thức, quán...)
+  // Đơn vị khẩu phần do admin khai báo: [{name, grams, isDefault}] (BR-08.2); null thì suy ra từ servingSize
+  units      Json?
+  isActive   Boolean  @default(true)
+  // Món chưa được người có chuyên môn rà soát số liệu (BR-08.1); admin bỏ cờ sau khi rà soát
+  needsReview Boolean @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([category, isActive])
+  @@index([nameNormalized])
 }
 
 model ApiUsageLog {
@@ -443,9 +509,12 @@ model ApiUsageLog {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   feature      String
-  promptTokens Int      @default(0)
-  outputTokens Int      @default(0)
-  costUsd      Float    @default(0)
+  model        String?  // model Gemini đã gọi (BR-15.5)
+  promptTokens Int      @default(0) // promptTokenCount THẬT từ usageMetadata của Gemini
+  outputTokens Int      @default(0) // candidatesTokenCount THẬT
+  costUsd      Float    @default(0) // tính theo bảng giá AI_PRICE_*_USD_PER_MTOK
+  latencyMs    Int?
+  status       String   @default("OK") // OK | OK_NO_USAGE (Gemini không trả usageMetadata) | ERROR
   createdAt    DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -463,12 +532,17 @@ model WorkoutLog {
   caloriesBurned  Float           @default(0)
   rpe             Int?
   note            String?
+  // BR-10.4: chống ghi trùng khi app gửi lại (offline), và mốc giờ bắt đầu/kết thúc của phiên tập
+  clientRequestId String?
+  startedAt       DateTime?
+  endedAt         DateTime?
 
   exercises WorkoutExercise[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, clientRequestId])
   @@index([userId, date])
 }
 
@@ -478,9 +552,17 @@ model WorkoutExercise {
   workoutLog   WorkoutLog   @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
   name         String
   order        Int          @default(0)
+  // BR-10.3: nguồn bài tập (CATALOG | CUSTOM) và mã trong kho; bài cũ chỉ có tên nên để trống
+  exerciseSource String?
+  exerciseRefId  String?
+  primaryMuscle  String? // ảnh chụp nhóm cơ chính lúc ghi, phục vụ thống kê set theo nhóm cơ
+  restSec        Int?
+  // Khoá thống nhất của bài ("CATALOG:<id>" | "CUSTOM:<id>" | "name:<tên không dấu>") để gom lịch sử và kỷ lục
+  exerciseKey    String?
   sets         WorkoutSet[]
 
   @@index([workoutLogId])
+  @@index([exerciseKey])
 }
 
 model WorkoutSet {
@@ -490,9 +572,60 @@ model WorkoutSet {
   setNumber  Int
   reps       Int
   weightKg   Float           @default(0)
-  rpe        Int?
+  rpe        Float? // bước 0,5 (BR-10.4)
+  isWarmup   Boolean         @default(false) // set khởi động không tính volume và kỷ lục
+  durationSec Int?
+  distanceM  Float?
 
   @@index([exerciseId])
+}
+
+// Bài tập do người dùng tự tạo; chỉ người đó thấy (BR-10.3).
+model CustomExercise {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  primaryMuscle String
+  equipment     String   @default("NO_EQUIPMENT")
+  kind          String   @default("STRENGTH") // STRENGTH | CARDIO | OTHER
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, name])
+}
+
+// Buổi tập mẫu (BR-10.6). `items` là danh sách bài và số set/reps/tạ gợi ý.
+model WorkoutRoutine {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  category  WorkoutCategory @default(STRENGTH)
+  items     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Kỷ lục cá nhân tính sẵn (BR-10.8). Tính lại mỗi khi sửa/xoá set hoặc buổi liên quan.
+model PersonalRecord {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exerciseKey  String // "CATALOG:<id>" | "CUSTOM:<id>" | "name:<tên không dấu>"
+  exerciseName String
+  type         String // MAX_WEIGHT | MAX_REPS_AT_WEIGHT | EST_1RM | MAX_REPS_BODYWEIGHT
+  weightKey    Float    @default(0) // mức tạ của kỷ lục MAX_REPS_AT_WEIGHT; các loại khác là 0
+  value        Float
+  reps         Int?
+  weightKg     Float?
+  setId        String?
+  workoutId    String?
+  achievedAt   DateTime
+
+  @@unique([userId, exerciseKey, type, weightKey])
+  @@index([userId, exerciseKey])
 }
 
 model WeeklySummary {
@@ -557,6 +690,12 @@ model CheckIn {
   mood Mood?
   note String?
 
+  // Số ngày ĐẦY ĐỦ trong kỳ dữ liệu và việc cần làm khi thiếu dữ liệu (chỉ có với INSUFFICIENT_DATA)
+  completeDays Int?
+  dataNeeds    Json?
+
+  // Phiên bản tham số hệ thống lúc tính Check-in này (BR-19.2)
+  configVersion Int?
   processedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -657,14 +796,16 @@ model Notification {
 }
 
 enum NotificationType {
-  MEAL_REMINDER
-  WATER_REMINDER
-  GOAL_ACHIEVED
-  GOAL_EXCEEDED
-  AI_MESSAGE
   CHECKIN_READY // Check-in tuần vừa được tạo (BR-13.1)
-  DAY_COMPLETED // ngày đã kết thúc có calo trong 85–115% mục tiêu (thay GOAL_ACHIEVED giữa ngày)
+  DAY_COMPLETED // ngày đã kết thúc có calo trong 85–115% mục tiêu
   BILLING_ISSUE // gia hạn Premium lỗi hoặc hết ân hạn (BR-16.6)
+  WEEKLY_SUMMARY_READY // tổng kết tuần được tạo (Premium)
+  FOOD_SUBMISSION_RESULT // admin duyệt hoặc từ chối món người dùng gửi (E9)
+  GOAL_REACHED // cân nặng chạm cân đích của Goal, kèm gợi ý chuyển sang Duy trì
+  PAYMENT_SUCCESS // đơn QR đã được duyệt, Premium đã kích hoạt (luôn gửi)
+  WORKOUT_REMINDER // nhắc ghi buổi tập khi người tập đều có dấu hiệu quên ghi (tối đa 1 lần/ngày)
+  // Đã bỏ GOAL_EXCEEDED, GOAL_ACHIEVED, AI_MESSAGE (trái nguyên tắc không phán xét / đã có loại thay thế)
+  // và MEAL_REMINDER, WATER_REMINDER (là thông báo cục bộ trên máy, không lưu server).
 }
 
 // Bộ đếm hạn mức AI theo ngày (BR-11.4). Mỗi (user, ngày theo múi giờ user) một dòng.
@@ -786,7 +927,10 @@ model ManualGrant {
   id        String    @id @default(uuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  adminId   String
+  // Null khi quyền đến từ đơn QR tự duyệt qua ngân hàng (không có admin); xem `source`
+  adminId   String?
+  source    String    @default("ADMIN") // ADMIN | QR_ORDER
+  orderCode String? // mã đơn QR khi source = QR_ORDER
   reason    String
   startsAt  DateTime
   endsAt    DateTime
@@ -828,6 +972,7 @@ model PaymentOrder {
   expiresAt  DateTime
   paidAt     DateTime?
   approvedBy String?
+  adminNote  String? // ghi chú nội bộ của admin khi đối soát
   createdAt  DateTime           @default(now())
 
   @@index([userId, status])
@@ -852,6 +997,7 @@ model Goal {
   rateKgPerWeek Float?
   status        GoalStatus @default(ACTIVE)
   endedAt       DateTime?
+  reachedNotifiedAt DateTime? // đã gửi thông báo GOAL_REACHED cho Goal này (một lần mỗi Goal)
 
   @@index([userId, status])
 }
@@ -876,3 +1022,110 @@ model AdminAuditLog {
   @@index([targetType, targetId])
 }
 
+
+// Món người dùng gửi vào kho chung, chờ admin duyệt (BR-08.5).
+// SUBMITTED -> APPROVED | REJECTED | CANCELED. Món tự tạo gốc của người dùng giữ nguyên.
+model FoodSubmission {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customFoodId      String? // món tự tạo gốc (có thể đã bị xoá sau đó)
+  name              String
+  nameNormalized    String
+  servingSize       String
+  calories          Float
+  protein           Float
+  carb              Float
+  fat               Float
+  barcode           String?
+  note              String?
+  status            String    @default("SUBMITTED")
+  possibleDuplicate Boolean   @default(false)
+  duplicateOfName   String? // tên món gần giống trong kho khi bị gắn cờ trùng
+  rejectReason      String?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  catalogFoodId     String? // món được tạo trong kho khi APPROVED
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// Tham số hệ thống (BR-19.2): chỉ lưu giá trị ghi đè; mặc định nằm trong code (config.registry.ts).
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+// Lịch sử thay đổi tham số: chỉ thêm, không sửa/xoá. configVersion tăng sau mỗi lần sửa.
+model SystemConfigHistory {
+  id            String   @id @default(uuid())
+  key           String
+  action        String // SET | RESET | RESTORE
+  oldValue      Json?
+  newValue      Json?
+  adminId       String
+  adminEmail    String?
+  reason        String
+  configVersion Int
+  createdAt     DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([configVersion])
+}
+
+// Xác thực hai lớp TOTP cho ADMIN (BR-17.5). Bí mật mã hoá AES-256-GCM; mã dự phòng chỉ lưu băm, dùng một lần.
+model AdminTotp {
+  userId          String    @id
+  secretEnc       String
+  enabled         Boolean   @default(false)
+  enabledAt       DateTime?
+  lastUsedStep    Int? // bước 30 giây của mã đã dùng gần nhất (chống dùng lại)
+  backupCodeHashes String[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Kho bài tập trong DB (F1, J2): admin thêm/sửa/ẩn không cần deploy. `data` giữ nguyên toàn bộ hướng dẫn của bài;
+// các cột còn lại phục vụ tìm kiếm và lọc.
+model ExerciseCatalog {
+  id             String   @id
+  name           String
+  nameNormalized String
+  genderTarget   String // MALE | FEMALE | ALL
+  level          String // BEGINNER | INTERMEDIATE | ADVANCED
+  targetMuscle   String
+  equipment      String
+  data           Json
+  source         String   @default("OFFICIAL") // OFFICIAL | ADMIN
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([genderTarget, level, isActive])
+  @@index([nameNormalized])
+}
+
+// Yêu cầu quyền dữ liệu của người dùng (xuất bản sao, xoá, khiếu nại), ghi nhận qua email và xử lý trong web admin.
+// userId để trống nếu email không khớp tài khoản nào (hoặc tài khoản đã bị xoá).
+model DataRequest {
+  id          String    @id @default(uuid())
+  userId      String?
+  email       String
+  type        String // EXPORT | DELETE | COMPLAINT
+  note        String?
+  status      String    @default("NEW") // NEW | IN_PROGRESS | DONE | REJECTED
+  dueAt       DateTime
+  handledBy   String?
+  handledAt   DateTime?
+  resultNote  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, dueAt])
+  @@index([email])
+}

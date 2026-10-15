@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ChatMessageDto {
   @ApiProperty({ description: 'ID tin nhắn' })
@@ -12,6 +12,12 @@ export class ChatMessageDto {
 
   @ApiProperty({ description: 'Nội dung tin nhắn' })
   content: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Có khi tin nhắn thuộc chế độ an toàn (chủ đề rủi ro hoặc người dùng dưới 18 tuổi/đang mang thai): nội dung là lời khuyên gặp chuyên gia, không phải tư vấn của AI',
+  })
+  safetyFlag?: string;
 
   @ApiProperty({ description: 'Thời điểm gửi' })
   createdAt: Date;
@@ -69,10 +75,16 @@ export class ChatQuotaInfoDto {
   })
   unit: 'MESSAGES' | 'TOKENS';
 
-  @ApiProperty({ example: 10, description: 'Hạn mức mỗi ngày theo đơn vị `unit`' })
+  @ApiProperty({
+    example: 10,
+    description: 'Hạn mức mỗi ngày theo đơn vị `unit`',
+  })
   limit: number;
 
-  @ApiProperty({ example: 3, description: 'Đã dùng hôm nay theo đơn vị `unit`' })
+  @ApiProperty({
+    example: 3,
+    description: 'Đã dùng hôm nay theo đơn vị `unit`',
+  })
   used: number;
 }
 
@@ -85,6 +97,18 @@ export class ChatResponseDto {
     type: () => ChatQuotaInfoDto,
   })
   quota: ChatQuotaInfoDto;
+
+  @ApiPropertyOptional({
+    description:
+      'true khi AI không khả dụng và đây là lời khuyên chung (không có số dinh dưỡng, không tính lượt)',
+  })
+  isFallback?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Có khi câu hỏi kích hoạt chế độ an toàn (BR-11.6): trả văn bản cố định khuyên gặp chuyên gia, không gọi AI và không tính lượt',
+  })
+  safetyFlag?: string;
 }
 
 export class ChatHistoryResponseDto {

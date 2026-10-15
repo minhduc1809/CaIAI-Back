@@ -23,12 +23,28 @@ describe('P1 Chưa có mục tiêu thì tính năng cần mục tiêu báo lỗi
   });
 
   it('gợi ý món khi chưa có mục tiêu → PROFILE_INCOMPLETE (không gợi ý theo mục tiêu 2000 giả)', async () => {
-    const service = build({ targetCalories: null, timezone: 'Asia/Ho_Chi_Minh', goal: 'MAINTAIN', allergies: [], dietType: 'OMNIVORE' });
-    await expect(service.suggestMeal('u1')).rejects.toBeInstanceOf(ProfileIncompleteException);
+    const service = build({
+      targetCalories: null,
+      timezone: 'Asia/Ho_Chi_Minh',
+      goal: 'MAINTAIN',
+      allergies: [],
+      dietType: 'OMNIVORE',
+    });
+    await expect(service.suggestMeal('u1')).rejects.toBeInstanceOf(
+      ProfileIncompleteException,
+    );
   });
 
   it('mục tiêu bằng 0 cũng bị coi là chưa có', async () => {
-    const service = build({ targetCalories: 0, timezone: 'Asia/Ho_Chi_Minh', goal: 'MAINTAIN', allergies: [], dietType: 'OMNIVORE' });
-    await expect(service.suggestMeal('u1')).rejects.toBeInstanceOf(ProfileIncompleteException);
+    const service = build({
+      targetCalories: 0,
+      timezone: 'Asia/Ho_Chi_Minh',
+      goal: 'MAINTAIN',
+      allergies: [],
+      dietType: 'OMNIVORE',
+    });
+    await expect(service.suggestMeal('u1')).rejects.toBeInstanceOf(
+      ProfileIncompleteException,
+    );
   });
 });

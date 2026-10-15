@@ -1,3 +1,4 @@
+import { cfg, configVersion } from '../system-config/config.holder';
 import { isFreeTierLimited } from '../billing/entitlement.util';
 import { PLAN_LIMITS } from '../billing/billing.constants';
 import { QuotaExceededException } from '../common/errors/quota-exceeded.exception';
@@ -9,7 +10,11 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdaptiveExpenditureService } from '../users/adaptive-expenditure.service';
+import {
+  AdaptiveExpenditureService,
+  ENGINE_MIN_LOGGED_DAYS,
+  ENGINE_MIN_WEIGHT_DAYS,
+} from '../users/adaptive-expenditure.service';
 import { HealthCalculatorService } from '../users/health-calculator.service';
 import { WeightLogsService } from '../weight-logs/weight-logs.service';
 import {
@@ -27,9 +32,11 @@ import {
   dateToKey,
   dayBoundsForKey,
   keyToDate,
-  mondayOnOrBefore,
+  dayKeyOf,
   resolveTimezone,
   todayKey,
+  weekdayOnOrAfter,
+  weekdayOnOrBefore,
   zonedMidnight,
 } from '../common/utils/date-zone.util';
 import {
@@ -38,16 +45,16 @@ import {
 } from '../common/utils/day-completeness.util';
 
 /** Guardrail smoothing ±10%/tuần (C018) */
-const SMOOTHING_LIMIT_RATIO = 0.1;
+const smoothingLimitRatio = () => cfg('checkin.maxChangePct') / 100;
 const KCAL_PER_KG = 7700;
 /** "Để sau": sau chừng này giờ Check-in tự quay lại danh sách chờ. */
-const SNOOZE_HOURS = 24;
+const snoozeHours = () => cfg('checkin.snoozeHours');
 /** Chênh lệch nhỏ hơn mức này (kcal) được coi là không đổi. */
-const NO_CHANGE_THRESHOLD_KCAL = 50;
+const noChangeThresholdKcal = () => cfg('checkin.noChangeThresholdKcal');
 /** Dynamic Maintenance: chỉ chỉnh khi lệch khỏi cân đích quá ngưỡng này (kg). */
-const MAINTAIN_TOLERANCE_KG = 0.7;
+const maintainToleranceKg = () => cfg('checkin.maintainToleranceKg');
 /** Dynamic Maintenance: mức bù mỗi tuần theo % cân nặng. */
-const MAINTAIN_NUDGE_PCT_PER_WEEK = 0.15;
+const maintainNudgePctPerWeek = () => cfg('checkin.maintainNudgePctPerWeek');
 
 @Injectable()
 export class CheckinsService {
@@ -71,8 +78,26 @@ export class CheckinsService {
     // BR-06.2: kỳ dữ liệu = 7 ngày ĐÃ HOÀN TẤT kết thúc trước ngày Check-in (Thứ Hai), theo múi giờ user.
     // Tạo Check-in vào bất kỳ ngày nào trong tuần cũng dùng đúng 7 ngày trọn vẹn của tuần trước.
     const tz = resolveTimezone(user.timezone);
+    const checkinDay = user.checkinDay ?? 1;
     const { startKey, lastKey, weekStartDate, weekEndDate, weekNumber } =
-      this.getCompletedPeriod(tz);
+      this.getCompletedPeriod(tz, user.createdAt, checkinDay);
+    const nextCheckinDate = this.nextCheckinKey(tz, checkinDay);
+
+    // BR-06.3: Check-in dùng 7 ngày trọn vẹn của kỳ trước. Tài khoản chưa có đủ một kỳ như vậy thì chưa có Check-in
+    // (thay vì tạo ngay một Check-in rỗng "thiếu dữ liệu" trong ngày đầu dùng app).
+    const createdKey = user.createdAt ? dayKeyOf(user.createdAt, tz) : null;
+    if (createdKey && startKey < createdKey) {
+      return {
+        message: 'Check-in đầu tiên của bạn chưa tới',
+        data: {
+          checkIn: null,
+          coachingContent: null,
+          nextCheckinDate: this.firstCheckinKey(createdKey, checkinDay),
+          checkinDay,
+          tooEarly: true,
+        },
+      };
+    }
 
     // BR-06.6: mỗi kỳ chỉ có một Check-in. Đã có thì trả lại nguyên trạng (không tính lại, không mở lại
     // Check-in đã xử lý). Check-in chờ của kỳ trước chuyển sang EXPIRED để tại mọi thời điểm chỉ có tối đa một.
@@ -88,7 +113,15 @@ export class CheckinsService {
       where: { userId_weekStartDate: { userId, weekStartDate } },
     });
     if (existing) {
-      return this.presentExisting(existing);
+      return this.presentExisting(existing, nextCheckinDate, checkinDay);
+    }
+    // Đổi ngày Check-in giữa chừng làm kỳ mới chồng lên kỳ của Check-in đã có: trả lại Check-in đó, không tạo thêm
+    const overlapping = await this.prisma.checkIn.findFirst({
+      where: { userId, weekEndDate: { gte: weekStartDate } },
+      orderBy: { weekEndDate: 'desc' },
+    });
+    if (overlapping) {
+      return this.presentExisting(overlapping, nextCheckinDate, checkinDay);
     }
 
     // Free: 1 Check-in/tháng (đặc tả 2.9). Check-in đã có của kỳ này được trả lại ở trên nên không tính lại.
@@ -213,12 +246,14 @@ export class CheckinsService {
       }
 
       if (ideal !== null) {
-        const minAllowed = currentTarget * (1 - SMOOTHING_LIMIT_RATIO);
-        const maxAllowed = currentTarget * (1 + SMOOTHING_LIMIT_RATIO);
-        const clamped = Math.round(Math.min(Math.max(ideal, minAllowed), maxAllowed));
+        const minAllowed = currentTarget * (1 - smoothingLimitRatio());
+        const maxAllowed = currentTarget * (1 + smoothingLimitRatio());
+        const clamped = Math.round(
+          Math.min(Math.max(ideal, minAllowed), maxAllowed),
+        );
         proposedCalorieTarget = clamped;
 
-        if (Math.abs(clamped - currentTarget) < NO_CHANGE_THRESHOLD_KCAL) {
+        if (Math.abs(clamped - currentTarget) < noChangeThresholdKcal()) {
           proposedCalorieTarget = currentTarget;
           adjustmentReason = CheckInAdjustmentReason.NO_CHANGE;
         } else if (clamped !== Math.round(ideal)) {
@@ -229,10 +264,26 @@ export class CheckinsService {
       }
     }
 
-    // Tính macro mới theo macroStyle hiện tại
+    // Macro hiện tại là mục tiêu đang dùng của user. Macro đề xuất: không đổi calo thì giữ nguyên macro hiện tại
+    // (Check-in không được âm thầm đổi macro), đổi calo thì tính lại bằng đúng công thức của hồ sơ (đạm theo g/kg
+    // BR-03.4, chia béo/tinh bột theo phong cách BR-03.5) với calo đề xuất.
     const macroStyle = user.macroStyle ?? MacroStyle.BALANCED;
-    const proposedMacros = this.calcMacros(proposedCalorieTarget, macroStyle);
-    const currentMacros = this.calcMacros(currentTarget, macroStyle);
+    const currentMacros = {
+      protein: user.targetProtein,
+      carb: user.targetCarb,
+      fat: user.targetFat,
+    };
+    const proposedMacros =
+      proposedCalorieTarget === currentTarget
+        ? currentMacros
+        : this.healthCalc.calculateMacros(proposedCalorieTarget, macroStyle, {
+            weightKg: trendWeight ?? user.weightKg,
+            heightCm: user.heightCm,
+            gender: user.gender,
+            goal: user.goal,
+            proteinPreference: user.proteinPreference,
+            bodyFatPercent: user.bodyFatPercent,
+          });
 
     // Goal progress % — tái dùng đúng công thức (startWeight từ bản ghi log đầu tiên) đã có ở WeightLogsService
     const progressResult =
@@ -272,13 +323,24 @@ export class CheckinsService {
       newExpenditure,
       adjustmentReason,
       goalProgressPct,
+      completeDays: loggedDays,
+      ...(insufficientData
+        ? {
+            dataNeeds: this.buildDataNeeds(
+              expenditureResult.message,
+              loggedDays,
+              expenditureResult.weightLogsCount,
+            ),
+          }
+        : {}),
       ...(dto.mood ? { mood: dto.mood } : {}),
       ...(dto.note !== undefined ? { note: dto.note } : {}),
     };
 
     let checkIn;
     try {
-      checkIn = await this.prisma.checkIn.create({ data });
+      // Phiên bản tham số lúc tính, để biết Check-in này dùng bộ tham số nào (BR-19.2 điều 7)
+      checkIn = await this.prisma.checkIn.create({ data: { ...data, configVersion: configVersion() } });
     } catch (e) {
       // Hai request tạo cùng lúc: request sau vi phạm unique (userId, kỳ) → trả bản đã có
       if ((e as { code?: string })?.code !== 'P2002') throw e;
@@ -286,7 +348,7 @@ export class CheckinsService {
         where: { userId_weekStartDate: { userId, weekStartDate } },
       });
       if (!winner) throw e;
-      return this.presentExisting(winner);
+      return this.presentExisting(winner, nextCheckinDate, checkinDay);
     }
 
     // BR-13.1: báo cho người dùng biết Check-in đã sẵn sàng (không làm hỏng việc tạo Check-in nếu lỗi)
@@ -309,11 +371,19 @@ export class CheckinsService {
       newTarget: proposedCalorieTarget,
       newExpenditure,
       compliancePct,
+      status: checkIn.status,
+      dataNeeds: checkIn.dataNeeds,
     });
 
     return {
       message: 'Check-in tuần đã được tạo thành công',
-      data: { checkIn, coachingContent, currentMacros },
+      data: {
+        checkIn,
+        coachingContent,
+        currentMacros,
+        nextCheckinDate,
+        checkinDay,
+      },
     };
   }
 
@@ -340,19 +410,29 @@ export class CheckinsService {
         used,
         period: 'month',
         resetsAt,
-        premiumBenefit: 'Mở Premium để Check-in hằng tuần và theo dõi lịch sử điều chỉnh.',
+        premiumBenefit:
+          'Mở Premium để Check-in hằng tuần và theo dõi lịch sử điều chỉnh.',
         isPremium: false,
       });
     }
   }
 
   async getPendingCheckin(userId: string) {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true, checkinDay: true },
+    });
+    const checkinDay = owner?.checkinDay ?? 1;
+    const nextCheckinDate = this.nextCheckinKey(
+      resolveTimezone(owner?.timezone),
+      checkinDay,
+    );
     // "Để sau" tự quay lại PENDING sau 24 giờ
     await this.prisma.checkIn.updateMany({
       where: {
         userId,
         status: CheckInStatus.SNOOZED,
-        processedAt: { lte: new Date(Date.now() - SNOOZE_HOURS * 3_600_000) },
+        processedAt: { lte: new Date(Date.now() - snoozeHours() * 3_600_000) },
       },
       data: { status: CheckInStatus.PENDING },
     });
@@ -368,17 +448,30 @@ export class CheckinsService {
     });
 
     if (!checkIn) {
-      return { message: 'Không có check-in nào đang chờ xử lý', data: null };
+      return {
+        message: 'Không có check-in nào đang chờ xử lý',
+        data: {
+          checkIn: null,
+          coachingContent: null,
+          nextCheckinDate,
+          checkinDay,
+        },
+      };
     }
-    return { message: 'Lấy check-in thành công', data: this.coaching(checkIn) };
+    return {
+      message: 'Lấy check-in thành công',
+      data: { ...this.coaching(checkIn), nextCheckinDate, checkinDay },
+    };
   }
 
   private coaching(checkIn: {
+    status?: CheckInStatus;
     adjustmentReason: CheckInAdjustmentReason;
     currentCalorieTarget: number;
     proposedCalorieTarget: number;
     newExpenditure: number | null;
     compliancePct: number | null;
+    dataNeeds?: unknown;
   }) {
     return {
       checkIn,
@@ -387,14 +480,25 @@ export class CheckinsService {
         newTarget: checkIn.proposedCalorieTarget,
         newExpenditure: checkIn.newExpenditure,
         compliancePct: checkIn.compliancePct,
+        status: checkIn.status,
+        dataNeeds: checkIn.dataNeeds,
       }),
     };
   }
 
-  private presentExisting(checkIn: any) {
+  private presentExisting(
+    checkIn: any,
+    nextCheckinDate?: string,
+    checkinDay?: number,
+  ) {
     return {
       message: 'Check-in của kỳ này đã tồn tại',
-      data: { ...this.coaching(checkIn), currentMacros: undefined },
+      data: {
+        ...this.coaching(checkIn),
+        currentMacros: undefined,
+        nextCheckinDate,
+        checkinDay,
+      },
     };
   }
 
@@ -429,12 +533,19 @@ export class CheckinsService {
       }
       const acknowledged = await this.prisma.checkIn.update({
         where: { id: checkinId },
-        data: { status: CheckInStatus.ACKNOWLEDGED, processedAt: new Date() },
+        data: {
+          status: CheckInStatus.ACKNOWLEDGED,
+          processedAt: new Date(),
+          ...(dto.mood ? { mood: dto.mood } : {}),
+          ...(dto.note !== undefined ? { note: dto.note } : {}),
+        },
       });
       return { message: 'Đã ghi nhận', data: acknowledged };
     }
     if (dto.action === 'ACKNOWLEDGE') {
-      throw new BadRequestException('Chỉ Check-in thiếu dữ liệu mới dùng "Đã hiểu"');
+      throw new BadRequestException(
+        'Chỉ Check-in thiếu dữ liệu mới dùng "Đã hiểu"',
+      );
     }
 
     const now = new Date();
@@ -571,6 +682,8 @@ export class CheckinsService {
       newTarget: checkIn.proposedCalorieTarget,
       newExpenditure: checkIn.newExpenditure,
       compliancePct: checkIn.compliancePct,
+      status: checkIn.status,
+      dataNeeds: checkIn.dataNeeds,
     });
     return { message: 'Chi tiết check-in', data: { checkIn, coachingContent } };
   }
@@ -588,28 +701,63 @@ export class CheckinsService {
   ): number {
     if (trendWeight === null || !targetWeightKg) return Math.round(expenditure);
     const diff = trendWeight - targetWeightKg;
-    if (Math.abs(diff) <= MAINTAIN_TOLERANCE_KG) return Math.round(expenditure);
+    if (Math.abs(diff) <= maintainToleranceKg()) return Math.round(expenditure);
     const nudge =
-      ((MAINTAIN_NUDGE_PCT_PER_WEEK / 100) * trendWeight * KCAL_PER_KG) / 7;
+      ((maintainNudgePctPerWeek() / 100) * trendWeight * KCAL_PER_KG) / 7;
     return Math.round(expenditure - Math.sign(diff) * nudge);
+  }
+
+  private stepsOf(dataNeeds: unknown): string[] {
+    const steps = (dataNeeds as { steps?: unknown } | null)?.steps;
+    return Array.isArray(steps)
+      ? steps.filter((x): x is string => typeof x === 'string')
+      : [];
   }
 
   private avg(values: number[]): number {
     return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
   }
 
-  private calcMacros(calories: number, style: MacroStyle) {
-    const ratios: Record<MacroStyle, [number, number, number]> = {
-      BALANCED: [0.3, 0.4, 0.3],
-      HIGH_CARB_LOW_FAT: [0.3, 0.55, 0.15],
-      LOW_CARB_HIGH_FAT: [0.35, 0.2, 0.45],
-      KETO: [0.25, 0.05, 0.7],
-    };
-    const [p, c, f] = ratios[style];
+  /** Ngày Check-in kế tiếp: lần gần nhất SAU hôm nay rơi vào `checkinDay`. */
+  private nextCheckinKey(tz: string, checkinDay: number): string {
+    return weekdayOnOrAfter(addDaysToKey(todayKey(tz), 1), checkinDay);
+  }
+
+  /** Ngày Check-in đầu tiên: kỳ 7 ngày đầu tiên nằm trọn trong thời gian có tài khoản (không sớm hơn createdKey + 7). */
+  private firstCheckinKey(createdKey: string, checkinDay: number): string {
+    return weekdayOnOrAfter(addDaysToKey(createdKey, 7), checkinDay);
+  }
+
+  /**
+   * Việc cần làm cụ thể khi chưa đủ dữ liệu để đề xuất (BR-06.3). Lấy lý do thật từ engine thay vì câu chung chung,
+   * cộng số ngày ghi đủ của kỳ vừa qua.
+   */
+  private buildDataNeeds(
+    engineMessage: string | undefined,
+    loggedDays: number,
+    weighInDays: number | undefined,
+  ) {
+    const steps: string[] = [];
+    const reason = (engineMessage ?? '')
+      .replace(/\s*Hiện đang dùng công thức TDEE tĩnh\.?/i, '')
+      .trim();
+    if (reason) steps.push(reason);
+    if (loggedDays < ENGINE_MIN_LOGGED_DAYS) {
+      steps.push(
+        `Tuần vừa qua bạn có ${loggedDays}/7 ngày ghi đủ bữa ăn. Hãy ghi đủ ít nhất ${ENGINE_MIN_LOGGED_DAYS} ngày mỗi tuần.`,
+      );
+    }
+    if (steps.length === 0) {
+      steps.push(
+        'Hãy tiếp tục ghi bữa ăn và cân nặng đều đặn để hệ thống ước tính chính xác hơn.',
+      );
+    }
     return {
-      protein: Math.round((calories * p) / 4),
-      carb: Math.round((calories * c) / 4),
-      fat: Math.round((calories * f) / 9),
+      steps,
+      loggedDays,
+      requiredLoggedDays: ENGINE_MIN_LOGGED_DAYS,
+      weighInDays: weighInDays ?? 0,
+      requiredWeighInDays: ENGINE_MIN_WEIGHT_DAYS,
     };
   }
 
@@ -617,22 +765,30 @@ export class CheckinsService {
    * Kỳ dữ liệu của Check-in (BR-06.2): 7 ngày đã hoàn tất, từ Thứ Hai tuần trước đến Chủ Nhật tuần trước
    * (ngày Check-in mặc định là Thứ Hai; nếu hôm nay là Thứ Hai thì kỳ kết thúc ngay hôm qua).
    */
-  private getCompletedPeriod(tz: string): {
+  private getCompletedPeriod(
+    tz: string,
+    userCreatedAt?: Date | null,
+    checkinDay = 1,
+  ): {
     startKey: string;
     lastKey: string;
     weekStartDate: Date;
     weekEndDate: Date;
     weekNumber: number;
   } {
-    const checkinKey = mondayOnOrBefore(todayKey(tz));
+    const checkinKey = weekdayOnOrBefore(todayKey(tz), checkinDay);
     const startKey = addDaysToKey(checkinKey, -7);
     const lastKey = addDaysToKey(checkinKey, -1);
     const weekStartDate = keyToDate(startKey);
     const weekEndDate = new Date(keyToDate(lastKey).getTime() + 86_399_999);
-    // weekNumber: tuần thứ N kể từ epoch (đơn giản)
-    const weekNumber = Math.floor(
-      weekStartDate.getTime() / (7 * 24 * 60 * 60 * 1000),
-    );
+    // weekNumber: tuần thứ N kể từ khi người dùng tạo tài khoản (tuần đầu = 1)
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const weekNumber = userCreatedAt
+      ? Math.max(
+          1,
+          Math.floor((weekStartDate.getTime() - userCreatedAt.getTime()) / weekMs) + 1,
+        )
+      : 1;
     return { startKey, lastKey, weekStartDate, weekEndDate, weekNumber };
   }
 
@@ -646,8 +802,22 @@ export class CheckinsService {
       newTarget: number;
       newExpenditure: number | null;
       compliancePct: number | null;
+      status?: CheckInStatus;
+      dataNeeds?: unknown;
     },
   ) {
+    // Chưa đủ dữ liệu: không có đề xuất nên không được nói "mục tiêu giữ nguyên vì năng lượng không đổi"
+    if (ctx.status === CheckInStatus.INSUFFICIENT_DATA) {
+      return {
+        title: 'Chưa đủ dữ liệu để đề xuất',
+        explanation:
+          'Hệ thống cần thêm dữ liệu để ước tính chính xác năng lượng bạn tiêu hao. Mục tiêu hiện tại của bạn vẫn được giữ nguyên.',
+        complianceMessage:
+          'Ghi đủ các bữa ăn trong ngày và cân đều đặn vài lần mỗi tuần để lần Check-in sau có đề xuất.',
+        callToAction: 'Bấm "Đã hiểu" để tiếp tục.',
+        todo: this.stepsOf(ctx.dataNeeds),
+      };
+    }
     const delta = ctx.newTarget - ctx.oldTarget;
     const sign = delta > 0 ? '+' : '';
     const compliance = ctx.compliancePct ?? 0;

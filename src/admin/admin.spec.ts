@@ -13,6 +13,7 @@ import { BillingService } from '../billing/billing.service';
 import { PaymentsService } from '../payments/payments.service';
 
 import { AdminAuthService } from './services/admin-auth.service';
+import { AdminTotpService } from './services/admin-totp.service';
 import { AdminAuditService } from './services/admin-audit.service';
 import { AdminDashboardService } from './services/admin-dashboard.service';
 import { AdminUsersService } from './services/admin-users.service';
@@ -90,6 +91,8 @@ describe('Admin Module - Giai đoạn 1: Nền tảng Xác thực, Vận hành T
         { provide: BillingService, useValue: billingServiceMock },
         { provide: PaymentsService, useValue: paymentsServiceMock },
         { provide: JwtService, useValue: jwtServiceMock },
+        // Tài khoản trong test chưa bật xác thực hai lớp
+        { provide: AdminTotpService, useValue: { isRequired: jest.fn(async () => false), verifyLogin: jest.fn(), requiredError: jest.fn() } },
       ],
     }).compile();
 

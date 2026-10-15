@@ -8,7 +8,8 @@ export class InsightDto {
   title: string;
 
   @ApiProperty({
-    description: 'Nội dung chi tiết. Rỗng khi `locked` = true (người dùng Free)',
+    description:
+      'Nội dung chi tiết. Rỗng khi `locked` = true (người dùng Free)',
   })
   message: string;
 

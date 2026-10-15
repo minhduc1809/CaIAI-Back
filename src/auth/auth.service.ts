@@ -1,3 +1,5 @@
+import { PRIVACY_POLICY_EFFECTIVE, PRIVACY_POLICY_MARKDOWN, PRIVACY_POLICY_VERSION } from './privacy-policy.data';
+import { createHash, randomUUID } from 'crypto';
 import {
   Injectable,
   ConflictException,
@@ -16,6 +18,16 @@ import { BillingService } from '../billing/billing.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+
+/**
+ * Băm refresh token để lưu DB: SHA-256 TOÀN BỘ chuỗi. KHÔNG dùng bcrypt cho token: bcrypt chỉ xét 72 byte đầu, mà
+ * 72 byte đầu của mọi JWT cùng một người đều giống nhau (header + phần đầu payload chứa mã người dùng), nên
+ * `bcrypt.compare` khớp với MỌI refresh token của người đó và việc thu hồi/xoay vòng token trở nên vô hiệu.
+ * Refresh token đã có độ ngẫu nhiên cao (jti) nên băm nhanh là đủ an toàn và cho phép tra cứu trực tiếp theo hash.
+ */
+export function hashRefreshToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 @Injectable()
 export class AuthService {
@@ -72,6 +84,10 @@ export class AuthService {
         email: email ? email.toLowerCase() : null,
         password: hashedPassword,
         name: name || cleanUsername,
+        // Ghi lại việc đồng ý chính sách quyền riêng tư (DTO đã bắt buộc acceptPrivacy = true)
+        ...(registerDto.acceptPrivacy
+          ? { privacyAcceptedVersion: PRIVACY_POLICY_VERSION, privacyAcceptedAt: new Date() }
+          : {}),
       },
     });
 
@@ -180,7 +196,7 @@ export class AuthService {
   /**
    * Đăng nhập/Đăng ký bằng Google Sign-In (idToken xác thực qua Credential Manager phía Android)
    */
-  async loginWithGoogle(idToken: string, deviceName?: string) {
+  async loginWithGoogle(idToken: string, deviceName?: string, acceptPrivacy = false) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (!clientId) {
       throw new BadRequestException('Server chưa cấu hình GOOGLE_CLIENT_ID');
@@ -255,9 +271,18 @@ export class AuthService {
           }
         }
       } else {
+        // Tài khoản MỚI tạo qua Google cũng phải đồng ý Chính sách quyền riêng tư (BR-18)
+        if (!acceptPrivacy) {
+          throw new BadRequestException({
+            code: 'PRIVACY_CONSENT_REQUIRED',
+            message: 'Bạn cần đồng ý Chính sách quyền riêng tư để tạo tài khoản',
+          });
+        }
         const cleanUsername = await this.generateUniqueUsernameFromEmail(email);
         user = await this.prisma.user.create({
           data: {
+            privacyAcceptedVersion: PRIVACY_POLICY_VERSION,
+            privacyAcceptedAt: new Date(),
             username: cleanUsername,
             email,
             password: null,
@@ -413,29 +438,27 @@ export class AuthService {
       );
     }
 
-    // 3. Tìm trong các RefreshSession của user (BR-01.3)
-    const sessions = await this.prisma.refreshSession.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
+    // 3. Tìm phiên theo hash của refresh token (BR-01.3). Phiên cũ lưu bằng bcrypt (trước bản sửa này) không
+    //    còn khớp, người dùng đó cần đăng nhập lại một lần.
+    const matchedSession = await this.prisma.refreshSession.findFirst({
+      where: { userId: user.id, tokenHash: hashRefreshToken(refreshToken) },
     });
 
-    let matchedSession: (typeof sessions)[0] | null = null;
-    for (const s of sessions) {
-      if (await bcrypt.compare(refreshToken, s.tokenHash)) {
-        matchedSession = s;
-        break;
-      }
+    if (!matchedSession) {
+      throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
-    if (!matchedSession) {
-      // Fallback kiểm tra legacy hash nếu có
-      const legacyMatch = user.refreshTokenHash
-        ? await bcrypt.compare(refreshToken, user.refreshTokenHash)
-        : false;
-      if (!legacyMatch) {
-        throw new UnauthorizedException('Refresh token không hợp lệ');
-      }
+    // Phiên đã bị ĐĂNG XUẤT / thu hồi chủ động (không phải do xoay vòng): từ chối ngay, không áp dụng dung sai
+    // 10 giây. Dung sai chỉ dành cho token vừa bị THAY THẾ (replacedBy) để chịu được gửi trùng do mạng chập chờn.
+    if (
+      matchedSession &&
+      matchedSession.revokedAt &&
+      !matchedSession.replacedBy
+    ) {
+      throw new UnauthorizedException({
+        code: 'SESSION_REVOKED',
+        message: 'Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại.',
+      });
     }
 
     // Phát hiện token đã bị thay thế (Token Reuse / Token Theft)
@@ -469,8 +492,7 @@ export class AuthService {
       user.role,
     );
 
-    const salt = await bcrypt.genSalt(10);
-    const newHash = await bcrypt.hash(newTokens.refreshToken, salt);
+    const newHash = hashRefreshToken(newTokens.refreshToken);
     const now = new Date();
 
     // Tạo phiên mới và liên kết replacedBy
@@ -510,18 +532,15 @@ export class AuthService {
    */
   async logout(userId: string, refreshToken?: string) {
     if (refreshToken) {
-      const sessions = await this.prisma.refreshSession.findMany({
-        where: { userId, revokedAt: null },
+      // Thu hồi đúng phiên của token này (tra cứu theo hash, không phải "phiên đầu tiên khớp")
+      await this.prisma.refreshSession.updateMany({
+        where: {
+          userId,
+          tokenHash: hashRefreshToken(refreshToken),
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
       });
-      for (const s of sessions) {
-        if (await bcrypt.compare(refreshToken, s.tokenHash)) {
-          await this.prisma.refreshSession.update({
-            where: { id: s.id },
-            data: { revokedAt: new Date() },
-          });
-          break;
-        }
-      }
     } else {
       const latest = await this.prisma.refreshSession.findFirst({
         where: { userId, revokedAt: null },
@@ -887,34 +906,22 @@ export class AuthService {
    * Chính sách Quyền riêng tư (BR-18)
    */
   getPrivacyPolicy() {
+    // Nội dung do chủ dự án cung cấp (privacy-policy.data.ts); tách theo mục "## " để app hiển thị từng phần
+    const parts = PRIVACY_POLICY_MARKDOWN.split(/\n(?=## )/);
+    const sections = parts
+      .filter((p) => p.startsWith('## '))
+      .map((p) => {
+        const nl = p.indexOf('\n');
+        return { heading: p.slice(3, nl).trim(), content: p.slice(nl + 1).trim() };
+      });
     return {
       title: 'Chính sách Quyền riêng tư NutriWise',
-      version: '1.0.0',
-      lastUpdated: '2026-10-09',
+      version: PRIVACY_POLICY_VERSION,
+      lastUpdated: PRIVACY_POLICY_EFFECTIVE,
       summary:
-        'NutriWise cam kết bảo vệ dữ liệu sức khỏe và thông tin cá nhân của bạn.',
-      sections: [
-        {
-          heading: '1. Dữ liệu thu thập',
-          content:
-            'NutriWise thu thập các thông tin thể chất (tuổi, giới tính, chiều cao, cân nặng, tỷ lệ mỡ), nhật ký ăn uống và hình ảnh món ăn, dữ liệu tập luyện, nhật ký nước và giấc ngủ nhằm phục vụ mục đích tính toán dinh dưỡng.',
-        },
-        {
-          heading: '2. Mục đích sử dụng',
-          content:
-            'Dữ liệu được dùng để tính toán năng lượng tiêu hao thích ứng (Adaptive Expenditure Engine), gợi ý thực đơn an toàn và theo dõi tiến độ sức khỏe.',
-        },
-        {
-          heading: '3. Chia sẻ dữ liệu với bên thứ ba',
-          content:
-            'Hình ảnh món ăn và câu hỏi dinh dưỡng được xử lý bảo mật qua Google Gemini AI (không kèm danh tính cá nhân). Thanh toán Premium được xử lý qua Google Play Store hoặc cổng ngân hàng VietQR/SePay.',
-        },
-        {
-          heading: '4. Quyền của người dùng',
-          content:
-            'Bạn có quyền xem, chỉnh sửa thông tin, xuất toàn bộ dữ liệu cá nhân ra file ZIP (POST /api/v1/me/export) hoặc xóa vĩnh viễn tài khoản bất kỳ lúc nào (DELETE /api/v1/auth/me).',
-        },
-      ],
+        'NutriWise chỉ dùng dữ liệu sức khỏe của bạn để cung cấp tính năng cho chính bạn, không bán và không dùng cho quảng cáo.',
+      sections,
+      markdown: PRIVACY_POLICY_MARKDOWN,
     };
   }
 
@@ -924,8 +931,12 @@ export class AuthService {
   private async generateTokens(userId: string, username: string, role: string) {
     const payload = { sub: userId, username, role };
 
+    // Mỗi token có `jti` ngẫu nhiên riêng. Thiếu nó, hai token của cùng một người tạo trong cùng một giây là
+    // CHUỖI GIỐNG HỆT NHAU (cùng payload, cùng `iat`), nên xoay vòng token không phân biệt được token cũ với mới,
+    // và đăng xuất/phát hiện đánh cắp có thể thu hồi nhầm hoặc bỏ sót phiên.
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
+        jwtid: randomUUID(),
         secret:
           this.configService.get<string>('JWT_ACCESS_SECRET') ||
           'default_access_secret',
@@ -933,6 +944,7 @@ export class AuthService {
           '15m') as any,
       }),
       this.jwtService.signAsync(payload, {
+        jwtid: randomUUID(),
         secret:
           this.configService.get<string>('JWT_REFRESH_SECRET') ||
           'default_refresh_secret',
@@ -955,8 +967,7 @@ export class AuthService {
     refreshToken: string,
     deviceName?: string,
   ) {
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(refreshToken, salt);
+    const hash = hashRefreshToken(refreshToken);
 
     // Cập nhật legacy hash
     await this.prisma.user.update({

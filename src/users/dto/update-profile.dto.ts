@@ -200,6 +200,17 @@ export class UpdateProfileDto {
   @IsBoolean()
   applyTarget?: boolean;
 
+  @ApiPropertyOptional({
+    example: 1,
+    description:
+      'Ngày Check-in hằng tuần (BR-06.1): 1 = Thứ Hai … 7 = Chủ Nhật. Mặc định Thứ Hai.',
+  })
+  @IsOptional()
+  @IsInt({ message: 'Ngày Check-in phải là số nguyên từ 1 đến 7' })
+  @Min(1, { message: 'Ngày Check-in tối thiểu là 1 (Thứ Hai)' })
+  @Max(7, { message: 'Ngày Check-in tối đa là 7 (Chủ Nhật)' })
+  checkinDay?: number;
+
   @ApiPropertyOptional({ example: 'Asia/Ho_Chi_Minh', description: 'Múi giờ' })
   @IsOptional()
   @IsString()

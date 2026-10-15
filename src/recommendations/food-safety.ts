@@ -69,9 +69,48 @@ export function getAllowedFoods(rules: FoodSafetyRules): SafeFood[] {
 // theo từ khoá tiếng Việt CÓ DẤU. Đây là cảnh báo thận trọng (có thể báo thừa, ví dụ "bơ" không bị nhầm "bò"
 // nhưng "mì" có thể là mì không gluten), không thay được thông tin thành phần thật của quán.
 // ---------------------------------------------------------------------------
-const MEAT_WORDS = ['thịt', 'bò', 'heo', 'lợn', 'gà', 'vịt', 'ngan', 'dê', 'sườn', 'chả', 'giò', 'nem', 'ba chỉ', 'lòng', 'dồi'];
-const FISH_WORDS = ['cá', 'tôm', 'cua', 'ghẹ', 'mực', 'ốc', 'sò', 'nghêu', 'ngao', 'hến', 'hải sản'];
-const PORK_WORDS = ['heo', 'lợn', 'sườn', 'chả', 'giò', 'nem', 'ba chỉ', 'dồi', 'xúc xích', 'thịt xông khói'];
+const MEAT_WORDS = [
+  'thịt',
+  'bò',
+  'heo',
+  'lợn',
+  'gà',
+  'vịt',
+  'ngan',
+  'dê',
+  'sườn',
+  'chả',
+  'giò',
+  'nem',
+  'ba chỉ',
+  'lòng',
+  'dồi',
+];
+const FISH_WORDS = [
+  'cá',
+  'tôm',
+  'cua',
+  'ghẹ',
+  'mực',
+  'ốc',
+  'sò',
+  'nghêu',
+  'ngao',
+  'hến',
+  'hải sản',
+];
+const PORK_WORDS = [
+  'heo',
+  'lợn',
+  'sườn',
+  'chả',
+  'giò',
+  'nem',
+  'ba chỉ',
+  'dồi',
+  'xúc xích',
+  'thịt xông khói',
+];
 const EGG_WORDS = ['trứng'];
 const DAIRY_WORDS = ['sữa', 'phô mai', 'pho mát', 'kem', 'bơ sữa'];
 
@@ -79,21 +118,50 @@ const ALLERGEN_WORDS: Record<string, string[]> = {
   DAIRY: DAIRY_WORDS,
   EGG: EGG_WORDS,
   FISH: ['cá', 'nước mắm', 'mắm'],
-  SHELLFISH: ['tôm', 'cua', 'ghẹ', 'mực', 'ốc', 'sò', 'nghêu', 'ngao', 'hến', 'hải sản', 'mắm tôm'],
+  SHELLFISH: [
+    'tôm',
+    'cua',
+    'ghẹ',
+    'mực',
+    'ốc',
+    'sò',
+    'nghêu',
+    'ngao',
+    'hến',
+    'hải sản',
+    'mắm tôm',
+  ],
   GLUTEN: ['bánh mì', 'mì', 'lúa mì', 'bột mì', 'bia'],
   PEANUT: ['đậu phộng', 'lạc'],
   SESAME: ['mè', 'vừng'],
-  SOY: ['đậu phụ', 'đậu hũ', 'đậu nành', 'tàu hũ', 'xì dầu', 'nước tương', 'tương'],
+  SOY: [
+    'đậu phụ',
+    'đậu hũ',
+    'đậu nành',
+    'tàu hũ',
+    'xì dầu',
+    'nước tương',
+    'tương',
+  ],
   TREE_NUT: ['hạt điều', 'hạnh nhân', 'óc chó', 'hạt dẻ'],
 };
 
 const ALLERGEN_LABEL: Record<string, string> = {
-  DAIRY: 'sữa', EGG: 'trứng', FISH: 'cá', SHELLFISH: 'hải sản có vỏ', GLUTEN: 'gluten',
-  PEANUT: 'đậu phộng', SESAME: 'mè', SOY: 'đậu nành', TREE_NUT: 'hạt cây',
+  DAIRY: 'sữa',
+  EGG: 'trứng',
+  FISH: 'cá',
+  SHELLFISH: 'hải sản có vỏ',
+  GLUTEN: 'gluten',
+  PEANUT: 'đậu phộng',
+  SESAME: 'mè',
+  SOY: 'đậu nành',
+  TREE_NUT: 'hạt cây',
 };
 
 function hasWord(text: string, words: string[]): boolean {
-  return words.some((w) => new RegExp(`(?<![\\p{L}])${w}(?![\\p{L}])`, 'u').test(text));
+  return words.some((w) =>
+    new RegExp(`(?<![\\p{L}])${w}(?![\\p{L}])`, 'u').test(text),
+  );
 }
 
 /** Trả về các lý do (tiếng Việt) khiến món có thể không phù hợp với user; rỗng nghĩa là không phát hiện vi phạm. */
@@ -103,14 +171,18 @@ export function detectTextViolations(
 ): string[] {
   const t = (text || '').toLowerCase();
   const reasons: string[] = [];
-  for (const a of new Set((rules.allergies ?? []).filter((x) => x && x !== 'NONE'))) {
+  for (const a of new Set(
+    (rules.allergies ?? []).filter((x) => x && x !== 'NONE'),
+  )) {
     if (ALLERGEN_WORDS[a] && hasWord(t, ALLERGEN_WORDS[a])) {
       reasons.push(`có thể chứa ${ALLERGEN_LABEL[a] ?? a} (bạn bị dị ứng)`);
     }
   }
   const diet = rules.dietType;
-  if ((diet === 'VEGETARIAN' || diet === 'VEGAN') && hasWord(t, MEAT_WORDS)) reasons.push('có thịt');
-  if ((diet === 'VEGETARIAN' || diet === 'VEGAN') && hasWord(t, FISH_WORDS)) reasons.push('có cá/hải sản');
+  if ((diet === 'VEGETARIAN' || diet === 'VEGAN') && hasWord(t, MEAT_WORDS))
+    reasons.push('có thịt');
+  if ((diet === 'VEGETARIAN' || diet === 'VEGAN') && hasWord(t, FISH_WORDS))
+    reasons.push('có cá/hải sản');
   if (diet === 'VEGAN' && hasWord(t, EGG_WORDS)) reasons.push('có trứng');
   if (diet === 'VEGAN' && hasWord(t, DAIRY_WORDS)) reasons.push('có sữa');
   if (diet === 'PESCATARIAN' && hasWord(t, MEAT_WORDS)) reasons.push('có thịt');

@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfileIncompleteException } from '../common/errors/profile-incomplete.exception';
 import { getAllowedFoods } from '../recommendations/food-safety';
+import { FoodCatalogService } from '../food-catalog/food-catalog.service';
 import { isFreeTierLimited } from '../billing/entitlement.util';
 import {
   addDaysToKey,
@@ -47,7 +48,10 @@ interface PlanUser {
 
 @Injectable()
 export class MealPlanService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly catalog?: FoodCatalogService,
+  ) {}
 
   private async loadUser(userId: string): Promise<PlanUser> {
     const user = await this.prisma.user.findUnique({
@@ -84,12 +88,21 @@ export class MealPlanService {
   /**
    * Tập món ĐÃ QUA bộ lọc an toàn (dị ứng + chế độ ăn là điều kiện lọc cứng). Mọi bước sau chỉ chọn trong tập này.
    */
-  private safeFoods(user: PlanUser): PlanFood[] {
-    return getAllowedFoods({ dietType: user.dietType, allergies: user.allergies });
+  private async safeFoods(user: PlanUser): Promise<PlanFood[]> {
+    const rules = { dietType: user.dietType, allergies: user.allergies };
+    return this.catalog
+      ? this.catalog.getAllowedFoods(rules)
+      : getAllowedFoods(rules);
   }
 
   /** Thực đơn gốc của một ngày, không phụ thuộc ngày khác. */
-  private baseDay(userId: string, user: PlanUser, foods: PlanFood[], dateKey: string, avoid?: Set<string>) {
+  private baseDay(
+    userId: string,
+    user: PlanUser,
+    foods: PlanFood[],
+    dateKey: string,
+    avoid?: Set<string>,
+  ) {
     return buildDayPlan(foods, {
       targetCalories: user.targetCalories,
       macroStyle: user.macroStyle,
@@ -114,7 +127,10 @@ export class MealPlanService {
   ): DayPlan {
     const sinceEpoch = diffDays('1970-01-01', dateKey);
     const blockStart = addDaysToKey(dateKey, -(((sinceEpoch % 7) + 7) % 7));
-    const length = diffDays(addDaysToKey(blockStart, -AVOID_REPEAT_DAYS), dateKey);
+    const length = diffDays(
+      addDaysToKey(blockStart, -AVOID_REPEAT_DAYS),
+      dateKey,
+    );
     const names = (plan: DayPlan) =>
       plan.slots.flatMap((slot) => slot.items.map((item) => item.name));
 
@@ -148,7 +164,7 @@ export class MealPlanService {
   /** Thực đơn hôm nay kèm trạng thái đã ăn / chưa ăn và đề xuất cho phần ngân sách còn lại. */
   async getToday(userId: string) {
     const user = await this.loadUser(userId);
-    const foods = this.safeFoods(user);
+    const foods = await this.safeFoods(user);
     const dateKey = todayKey(user.timezone);
     const limited = isLimitedChoice(foods);
 
@@ -169,12 +185,19 @@ export class MealPlanService {
 
     const logged = await this.prisma.meal.findMany({
       where: { userId, logDate: keyToDate(dateKey) },
-      select: { mealType: true, totalCalories: true, items: { select: { name: true } } },
+      select: {
+        mealType: true,
+        totalCalories: true,
+        items: { select: { name: true } },
+      },
     });
     const consumed = new Map<string, number>();
     const loggedNames = new Set<string>();
     for (const meal of logged) {
-      consumed.set(meal.mealType, (consumed.get(meal.mealType) ?? 0) + meal.totalCalories);
+      consumed.set(
+        meal.mealType,
+        (consumed.get(meal.mealType) ?? 0) + meal.totalCalories,
+      );
       for (const item of meal.items ?? []) loggedNames.add(item.name);
     }
 
@@ -182,7 +205,11 @@ export class MealPlanService {
       const eaten = Math.round(consumed.get(slot.mealType) ?? 0);
       const remaining = Math.round(slot.budgetCalories - eaten);
       const status =
-        eaten >= slot.budgetCalories * SLOT_DONE_RATIO ? 'LOGGED' : eaten > 0 ? 'PARTIAL' : 'PLANNED';
+        eaten >= slot.budgetCalories * SLOT_DONE_RATIO
+          ? 'LOGGED'
+          : eaten > 0
+            ? 'PARTIAL'
+            : 'PLANNED';
 
       let suggestionForRemaining: PlanSlot | null = null;
       if (status === 'PARTIAL' && remaining >= MIN_REMAINING_TO_SUGGEST) {
@@ -192,7 +219,7 @@ export class MealPlanService {
             macroStyle: user.macroStyle,
             mealsPerDay: user.mealsPerDay,
             seed: `${userId}|${dateKey}|rest`,
-            slotBudgets: { [slot.mealType]: remaining } as Partial<Record<MealSlot, number>>,
+            slotBudgets: { [slot.mealType]: remaining },
             onlySlots: [slot.mealType],
             avoid: new Set(loggedNames),
           }).slots[0] ?? null;
@@ -203,7 +230,10 @@ export class MealPlanService {
         status,
         consumedCalories: eaten,
         remainingCalories: remaining, // âm khi bữa này đã ăn vượt ngân sách
-        items: slot.items.map((item) => ({ ...item, logged: loggedNames.has(item.name) })),
+        items: slot.items.map((item) => ({
+          ...item,
+          logged: loggedNames.has(item.name),
+        })),
         suggestionForRemaining,
       };
     });
@@ -225,10 +255,11 @@ export class MealPlanService {
    */
   async getPlan(userId: string, days: 7 | 30) {
     const user = await this.loadUser(userId);
-    const foods = this.safeFoods(user);
+    const foods = await this.safeFoods(user);
     const limited = isLimitedChoice(foods);
     const startKey = todayKey(user.timezone);
-    const previewOnly = days === 30 && (await isFreeTierLimited(this.prisma, userId));
+    const previewOnly =
+      days === 30 && (await isFreeTierLimited(this.prisma, userId));
 
     if (foods.length === 0) {
       return {

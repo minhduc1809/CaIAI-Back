@@ -186,7 +186,11 @@ export class AuthController {
     @Body() googleLoginDto: GoogleLoginDto,
     @Headers('user-agent') userAgent?: string,
   ) {
-    return this.authService.loginWithGoogle(googleLoginDto.idToken, userAgent);
+    return this.authService.loginWithGoogle(
+      googleLoginDto.idToken,
+      userAgent,
+      googleLoginDto.acceptPrivacy === true,
+    );
   }
 
   @Post('send-verification-email')

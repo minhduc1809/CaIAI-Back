@@ -1,3 +1,4 @@
+import { cfg } from '../system-config/config.holder';
 import { SubStatus } from '@prisma/client';
 
 /**
@@ -20,31 +21,31 @@ export interface PlanLimits {
   planPreviewDays: number | null;
 }
 
+/** Trường nào của gói nào là "không giới hạn" (null) thì luôn null; các trường còn lại đọc từ tham số hệ thống. */
+const UNLIMITED: Record<'FREE' | 'PREMIUM', (keyof PlanLimits)[]> = {
+  FREE: ['chatTokensPerDay'],
+  PREMIUM: ['chatMessagesPerDay', 'checkinPerMonth', 'expenditureHistoryDays', 'planPreviewDays'],
+};
+const LIMIT_KEYS: (keyof PlanLimits)[] = [
+  'aiPhotoPerDay', 'menuScanPerDay', 'suggestMealPerDay', 'barcodePerDay', 'chatMessagesPerDay', 'chatTokensPerDay',
+  'checkinPerMonth', 'expenditureHistoryDays', 'chatHistoryDays', 'planPreviewDays',
+];
+
+function makePlan(tier: 'FREE' | 'PREMIUM'): PlanLimits {
+  const plan = {} as PlanLimits;
+  for (const key of LIMIT_KEYS) {
+    Object.defineProperty(plan, key, {
+      enumerable: true,
+      get: () => (UNLIMITED[tier].includes(key) ? null : cfg(`quota.${tier.toLowerCase()}.${key}`)),
+    });
+  }
+  return plan;
+}
+
+/** Hạn mức theo gói (BR-16): đọc từ tham số hệ thống `quota.free.*` / `quota.premium.*`, mặc định như cũ. */
 export const PLAN_LIMITS: { FREE: PlanLimits; PREMIUM: PlanLimits } = {
-  FREE: {
-    aiPhotoPerDay: 5,
-    menuScanPerDay: 1,
-    suggestMealPerDay: 2,
-    barcodePerDay: 5,
-    chatMessagesPerDay: 10,
-    chatTokensPerDay: null,
-    checkinPerMonth: 1,
-    expenditureHistoryDays: 7,
-    chatHistoryDays: 3,
-    planPreviewDays: 7,
-  },
-  PREMIUM: {
-    aiPhotoPerDay: 30,
-    menuScanPerDay: 5,
-    suggestMealPerDay: 20,
-    barcodePerDay: 200,
-    chatMessagesPerDay: null,
-    chatTokensPerDay: 50000,
-    checkinPerMonth: null,
-    expenditureHistoryDays: null,
-    chatHistoryDays: 7,
-    planPreviewDays: null,
-  },
+  FREE: makePlan('FREE'),
+  PREMIUM: makePlan('PREMIUM'),
 };
 
 /** Trạng thái còn quyền Premium cho đến expiryTime (BR-16.3). */

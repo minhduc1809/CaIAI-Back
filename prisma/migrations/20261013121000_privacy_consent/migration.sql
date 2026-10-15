@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "privacyAcceptedVersion" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "privacyAcceptedAt" TIMESTAMP(3);

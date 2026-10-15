@@ -3,7 +3,7 @@ import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from './auth.service';
+import { AuthService, hashRefreshToken } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { BillingService } from '../billing/billing.service';
@@ -208,7 +208,7 @@ describe('Nhóm A: Quyền dữ liệu, phiên thiết bị & Chính sách bảo
 
     it('phát hiện tái sử dụng refresh token (Token Theft) thu hồi toàn bộ phiên của user', async () => {
       const token = 'stolen-refresh-token';
-      const tokenHash = await bcrypt.hash(token, 10);
+      const tokenHash = hashRefreshToken(token);
 
       // Session đã bị thay thế hơn 10 giây trước
       const compromisedSession = {
@@ -220,9 +220,7 @@ describe('Nhóm A: Quyền dữ liệu, phiên thiết bị & Chính sách bảo
         lastUsedAt: new Date(Date.now() - 30_000),
       };
 
-      prisma.refreshSession.findMany.mockResolvedValueOnce([
-        compromisedSession,
-      ]);
+      prisma.refreshSession.findFirst.mockResolvedValueOnce(compromisedSession);
       (jwt.verify as jest.Mock).mockReturnValueOnce({ sub: 'user-a1' });
 
       await expect(
@@ -237,6 +235,45 @@ describe('Nhóm A: Quyền dữ liệu, phiên thiết bị & Chính sách bảo
           data: { revokedAt: expect.any(Date) },
         }),
       );
+    });
+
+    it('phiên vừa bị ĐĂNG XUẤT không refresh được, kể cả trong vài giây sau lần dùng cuối (không có dung sai)', async () => {
+      const token = 'logged-out-refresh-token';
+      const tokenHash = hashRefreshToken(token);
+      prisma.refreshSession.findFirst.mockResolvedValueOnce({
+        id: 'sess-out',
+        userId: 'user-a1',
+        tokenHash,
+        replacedBy: null,
+        revokedAt: new Date(),
+        lastUsedAt: new Date(), // vừa dùng xong rồi đăng xuất
+      });
+      (jwt.verify as jest.Mock).mockReturnValueOnce({ sub: 'user-a1' });
+
+      await expect(
+        service.refreshTokens({ refreshToken: token }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'SESSION_REVOKED' }),
+      });
+      expect(prisma.refreshSession.create).not.toHaveBeenCalled();
+    });
+
+    it('token vừa bị THAY THẾ gửi lại trong 10 giây vẫn được chấp nhận (chịu mạng chập chờn)', async () => {
+      const token = 'just-rotated-token';
+      const tokenHash = hashRefreshToken(token);
+      prisma.refreshSession.findFirst.mockResolvedValueOnce({
+        id: 'sess-rot',
+        userId: 'user-a1',
+        tokenHash,
+        replacedBy: 'sess-next',
+        revokedAt: new Date(),
+        lastUsedAt: new Date(),
+      });
+      (jwt.verify as jest.Mock).mockReturnValueOnce({ sub: 'user-a1' });
+
+      await expect(
+        service.refreshTokens({ refreshToken: token }),
+      ).resolves.toBeDefined();
     });
 
     it('đổi mật khẩu hoặc reset mật khẩu thu hồi tất cả phiên', async () => {
@@ -270,9 +307,9 @@ describe('Nhóm A: Quyền dữ liệu, phiên thiết bị & Chính sách bảo
       expect(policy.sections.some((s) => s.content.includes('Gemini'))).toBe(
         true,
       );
-      expect(policy.sections.some((s) => s.content.includes('export'))).toBe(
-        true,
-      );
+      expect(policy.sections.some((s) => s.content.includes('xóa tài khoản'.normalize()) || s.content.includes('Yêu cầu xóa'))).toBe(true);
+      expect(policy.version).toMatch(/^\d+\.\d+/);
+      expect(policy.markdown).toContain('NUTRIWISE');
     });
   });
 });

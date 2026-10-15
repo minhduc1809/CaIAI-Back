@@ -1,0 +1,1 @@
+ALTER TABLE "CheckIn" ADD COLUMN IF NOT EXISTS "configVersion" INTEGER;

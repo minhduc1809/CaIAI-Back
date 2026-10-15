@@ -1,3 +1,4 @@
+import { cfg } from '../system-config/config.holder';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WeightLogsService } from '../weight-logs/weight-logs.service';
@@ -15,11 +16,11 @@ import {
   loadDayFlags,
 } from '../common/utils/day-completeness.util';
 
-const PLATEAU_WEEKLY_RATIO = 0.0025; // 0.25% cân nặng / tuần
-const PLATEAU_WEEKS = 3; // 3 tuần liên tiếp
-const GOAL_DEVIATION_RATIO = 0.5; // lệch > 50% tốc độ mục tiêu
-const GOAL_DEVIATION_WEEKS = 2; // 2 tuần liên tiếp
-const MIN_COMPLETE_DAYS_PER_WEEK = 4; // mỗi tuần dùng để kết luận phải có >= 4 ngày ghi đầy đủ
+const plateauWeeklyRatio = () => cfg('insight.plateauWeeklyRatioPct') / 100; // mặc định 0.25% cân nặng / tuần
+const plateauWeeks = () => cfg('insight.plateauWeeks'); // mặc định 3 tuần liên tiếp
+const goalDeviationRatio = () => cfg('insight.goalDeviationRatioPct') / 100; // mặc định lệch > 50% tốc độ mục tiêu
+const goalDeviationWeeks = () => cfg('insight.goalDeviationWeeks'); // mặc định 2 tuần liên tiếp
+const minCompleteDaysPerWeek = () => cfg('insight.minCompleteDaysPerWeek'); // mặc định >= 4 ngày ghi đầy đủ mỗi tuần
 
 interface WeekRate {
   /** Ngày thứ Hai của tuần kết thúc khoảng này (tuần mới hơn trong cặp). */
@@ -69,9 +70,9 @@ export class AnalyticsService {
     const rates = this.trailingConsecutiveRates(trendData);
 
     const wantPlateau =
-      user.goal !== 'MAINTAIN' && rates.length >= PLATEAU_WEEKS;
+      user.goal !== 'MAINTAIN' && rates.length >= plateauWeeks();
     const wantDeviation =
-      user.goal !== 'MAINTAIN' && rates.length >= GOAL_DEVIATION_WEEKS;
+      user.goal !== 'MAINTAIN' && rates.length >= goalDeviationWeeks();
     if (!wantPlateau && !wantDeviation) {
       return { message: 'Lấy insight tự động thành công', data: { insights } };
     }
@@ -85,14 +86,17 @@ export class AnalyticsService {
       list.every(
         (r) =>
           (completeDaysByWeek.get(r.weekStart) ?? 0) >=
-          MIN_COMPLETE_DAYS_PER_WEEK,
+          minCompleteDaysPerWeek(),
       );
 
     // Plateau: 3 tuần liền nhau |Δ| < 0,25% cân nặng. Người đang Duy trì thì đi ngang là thành công nên bỏ qua.
     if (wantPlateau) {
-      const lastN = rates.slice(-PLATEAU_WEEKS);
-      const threshold = PLATEAU_WEEKLY_RATIO * user.weightKg;
-      if (lastN.every((r) => Math.abs(r.rate) < threshold) && enoughData(lastN)) {
+      const lastN = rates.slice(-plateauWeeks());
+      const threshold = plateauWeeklyRatio() * user.weightKg;
+      if (
+        lastN.every((r) => Math.abs(r.rate) < threshold) &&
+        enoughData(lastN)
+      ) {
         insights.push({
           type: 'PLATEAU',
           title: 'Cân nặng đang đi ngang',
@@ -111,11 +115,11 @@ export class AnalyticsService {
       const expectedRate =
         user.goal === 'LOSE_WEIGHT' ? -targetMagnitude : targetMagnitude;
       if (Math.abs(expectedRate) > 0.0001) {
-        const lastN = rates.slice(-GOAL_DEVIATION_WEEKS);
+        const lastN = rates.slice(-goalDeviationWeeks());
         const deviating = lastN.every(
           (r) =>
             Math.abs(r.rate - expectedRate) / Math.abs(expectedRate) >
-            GOAL_DEVIATION_RATIO,
+            goalDeviationRatio(),
         );
         if (deviating && enoughData(lastN)) {
           insights.push({
@@ -203,7 +207,9 @@ export class AnalyticsService {
       byDay.set(key, cur);
     }
     for (const [key, day] of byDay) {
-      if (isCompleteDay(day.meals, day.calories, targetCalories, flags.get(key))) {
+      if (
+        isCompleteDay(day.meals, day.calories, targetCalories, flags.get(key))
+      ) {
         const week = mondayOnOrBefore(key);
         result.set(week, (result.get(week) ?? 0) + 1);
       }

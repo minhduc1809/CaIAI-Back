@@ -34,7 +34,8 @@ export class BillingController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Xác minh giao dịch Google Play ở server và trả entitlement (BR-16.4)',
+    summary:
+      'Xác minh giao dịch Google Play ở server và trả entitlement (BR-16.4)',
   })
   verify(@CurrentUser('id') userId: string, @Body() dto: VerifyPurchaseDto) {
     return this.billing.verify(userId, dto);
@@ -43,7 +44,9 @@ export class BillingController {
   @Get('me/entitlement')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Gói hiện tại, hạn mức và mức đã dùng hôm nay (BR-15.3)' })
+  @ApiOperation({
+    summary: 'Gói hiện tại, hạn mức và mức đã dùng hôm nay (BR-15.3)',
+  })
   entitlement(@CurrentUser('id') userId: string) {
     return this.billing.getEntitlement(userId);
   }
@@ -52,7 +55,10 @@ export class BillingController {
   @Post('billing/rtdn')
   @HttpCode(200)
   @ApiOperation({ summary: 'Nhận thông báo thay đổi gói từ Google (RTDN)' })
-  rtdn(@Headers('authorization') authorization: string | undefined, @Body() body: unknown) {
+  rtdn(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
     return this.billing.handleRtdn(authorization, body);
   }
 }

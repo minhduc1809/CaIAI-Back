@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
 /** Cột đếm theo ngày trong UsageCounter. */
-export type CounterColumn = 'aiPhoto' | 'menuScans' | 'suggestMeals' | 'barcodeLookups' | 'chatMessages';
+export type CounterColumn =
+  'aiPhoto' | 'menuScans' | 'suggestMeals' | 'barcodeLookups' | 'chatMessages';
 
 type Db = Pick<PrismaClient, 'usageCounter'>;
 
@@ -38,7 +39,12 @@ export async function reserveDaily(
 }
 
 /** Hoàn lại một lượt đã giữ khi xử lý thất bại. Không bao giờ xuống dưới 0. */
-export async function refundDaily(db: Db, userId: string, date: string, column: CounterColumn) {
+export async function refundDaily(
+  db: Db,
+  userId: string,
+  date: string,
+  column: CounterColumn,
+) {
   try {
     await db.usageCounter.updateMany({
       where: { userId, date, [column]: { gt: 0 } },
@@ -50,7 +56,14 @@ export async function refundDaily(db: Db, userId: string, date: string, column: 
 }
 
 /** Số lượt đã dùng hôm nay của một cột. */
-export async function usedToday(db: Db, userId: string, date: string, column: CounterColumn): Promise<number> {
-  const row = await db.usageCounter.findUnique({ where: { userId_date: { userId, date } } });
+export async function usedToday(
+  db: Db,
+  userId: string,
+  date: string,
+  column: CounterColumn,
+): Promise<number> {
+  const row = await db.usageCounter.findUnique({
+    where: { userId_date: { userId, date } },
+  });
   return (row as Record<string, number> | null)?.[column] ?? 0;
 }

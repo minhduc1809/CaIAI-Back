@@ -13,7 +13,8 @@ const CRC_TABLE = (() => {
 
 export function crc32(data: Buffer): number {
   let c = 0xffffffff;
-  for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  for (let i = 0; i < data.length; i++)
+    c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -27,8 +28,12 @@ export interface ZipEntry {
 function dosDateTime(at: Date): { time: number; date: number } {
   const year = Math.max(1980, at.getUTCFullYear());
   return {
-    time: (at.getUTCHours() << 11) | (at.getUTCMinutes() << 5) | (at.getUTCSeconds() >> 1),
-    date: ((year - 1980) << 9) | ((at.getUTCMonth() + 1) << 5) | at.getUTCDate(),
+    time:
+      (at.getUTCHours() << 11) |
+      (at.getUTCMinutes() << 5) |
+      (at.getUTCSeconds() >> 1),
+    date:
+      ((year - 1980) << 9) | ((at.getUTCMonth() + 1) << 5) | at.getUTCDate(),
   };
 }
 
@@ -37,7 +42,8 @@ function dosDateTime(at: Date): { time: number; date: number } {
  * Không dùng ZIP64: tổng dung lượng và số file phải nhỏ hơn 4 GB / 65.535 file (dữ liệu người dùng luôn nhỏ hơn nhiều).
  */
 export function createZip(entries: ZipEntry[], at: Date = new Date()): Buffer {
-  if (entries.length > 0xfffe) throw new Error('Quá nhiều file trong một gói ZIP');
+  if (entries.length > 0xfffe)
+    throw new Error('Quá nhiều file trong một gói ZIP');
   const { time, date } = dosDateTime(at);
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];

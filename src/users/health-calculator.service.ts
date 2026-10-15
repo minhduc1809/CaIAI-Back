@@ -1,3 +1,4 @@
+import { cfg } from '../system-config/config.holder';
 import { Injectable } from '@nestjs/common';
 import {
   Gender,
@@ -14,25 +15,85 @@ import {
  * Giới hạn an toàn của mục tiêu calo (BR-03.3 đến BR-03.7).
  */
 export const NUTRITION_LIMITS = {
-  calorieFloorFemale: 1200,
-  calorieFloorMale: 1500,
+  get calorieFloorFemale() {
+    return cfg('nutrition.calorieFloorFemale');
+  },
+  get calorieFloorMale() {
+    return cfg('nutrition.calorieFloorMale');
+  },
   /** Thâm hụt tối đa so với mức năng lượng nền E (%). */
-  maxDeficitPctOfE: 25,
+  get maxDeficitPctOfE() {
+    return cfg('nutrition.maxDeficitPctOfE');
+  },
   /** Thặng dư tối đa so với mức năng lượng nền E (%). */
-  maxSurplusPctOfE: 15,
+  get maxSurplusPctOfE() {
+    return cfg('nutrition.maxSurplusPctOfE');
+  },
   /** Năng lượng bổ sung cho thai kỳ (kcal/ngày, BR-02.2). */
-  pregnancyEnergyAddKcal: 300,
+  get pregnancyEnergyAddKcal() {
+    return cfg('nutrition.pregnancyEnergyAddKcal');
+  },
   /** Năng lượng bổ sung cho con bú (kcal/ngày, BR-02.2). */
-  lactationEnergyAddKcal: 500,
-  /** Sàn chất béo tối thiểu g/kg cân nặng (BR-03.5: ưu tiên an toàn nội tiết tố). */
-  minFatGramPerKg: 0.7,
+  get lactationEnergyAddKcal() {
+    return cfg('nutrition.lactationEnergyAddKcal');
+  },
+  /** Sàn chất béo tối thiểu g/kg cân nặng (BR-03.5: ưu tiên an toàn nội tiết tố, `macro.fatMinPerKg`). */
+  get minFatGramPerKg() {
+    return cfg('macro.fatMinPerKg');
+  },
   /** Tỷ lệ calo tối thiểu từ chất béo (%). */
   minFatPctOfCalories: 20,
   /** Sàn chất béo tuyệt đối cho nữ (g). */
   minFatAbsoluteFemale: 40,
   /** Sàn chất béo tuyệt đối cho nam (g). */
   minFatAbsoluteMale: 45,
-} as const;
+  /** Đạm tối đa theo % tổng calo (BR-03.4, `macro.proteinMaxPctKcal`). */
+  get maxProteinPctOfCalories() {
+    return cfg('macro.proteinMaxPctKcal');
+  },
+  /** Keto: tinh bột tối đa (g) và tối đa theo % calo, lấy giá trị nhỏ hơn (BR-03.5). */
+  ketoMaxCarbGram: 50,
+  ketoCarbPctOfCalories: 5,
+  /** Tinh bột tối thiểu (kcal) giữ lại khi sàn béo quá lớn so với calo thấp, để tinh bột không âm. */
+  minCarbKcal: 120,
+};
+
+/**
+ * Tỉ lệ TINH BỘT trong phần calo còn lại sau đạm (R = calo − đạm×4) cho từng phong cách (BR-03.5,
+ * `macro.carbShare.*`). Phần còn lại của R là béo. KETO tính riêng nên không có ở đây.
+ */
+export const CARB_SHARE_OF_REMAINING: Record<
+  Exclude<MacroStyle, 'KETO'>,
+  number
+> = {
+  BALANCED: 0.55,
+  HIGH_CARB_LOW_FAT: 0.75,
+  LOW_CARB_HIGH_FAT: 0.3,
+};
+
+/** Ghi chú hiển thị khi sàn béo tối thiểu được kích hoạt (BR-03.7: ưu tiên an toàn). */
+export const FAT_FLOOR_NOTE = 'Mức béo tối thiểu để đảm bảo sức khoẻ';
+
+export interface MacroResult {
+  protein: number | null;
+  carb: number | null;
+  fat: number | null;
+  /** true khi béo bị nâng lên bằng sàn tối thiểu (phong cách ít béo không đạt được tỉ lệ mong muốn). */
+  fatFloorApplied: boolean;
+}
+
+export interface MacroStylePreview {
+  style: MacroStyle;
+  protein: number;
+  carb: number;
+  fat: number;
+  /** % calo của từng chất, làm tròn sao cho tổng đúng 100. */
+  proteinPct: number;
+  carbPct: number;
+  fatPct: number;
+  fatFloorApplied: boolean;
+  note: string | null;
+}
 
 export interface HealthMetricsInput {
   heightCm?: number | null;
@@ -65,6 +126,8 @@ export interface HealthCalculationsResult {
   targetCarb: number | null; // gram
   targetFat: number | null; // gram
   macroStyle: MacroStyle;
+  /** true khi béo đang ở mức sàn tối thiểu thay vì tỉ lệ của phong cách đã chọn (BR-03.5/03.7). */
+  fatFloorApplied?: boolean;
 }
 
 /**
@@ -172,6 +235,7 @@ export class HealthCalculatorService {
       targetCarb: macros.carb,
       targetFat: macros.fat,
       macroStyle: resolvedMacroStyle,
+      fatFloorApplied: macros.fatFloorApplied,
     };
   }
 
@@ -372,16 +436,53 @@ export class HealthCalculatorService {
   }
 
   /**
+   * Xem trước tỉ lệ THỰC TẾ của từng phong cách với cùng một mức calo (BR-03.5/03.7). Màn Goal Setup dùng để
+   * hiển thị đúng con số đã tính thay vì mô tả cố định (sàn béo có thể khiến "ít béo" không đạt như mô tả).
+   */
+  previewMacroStyles(
+    targetCalories: number | null,
+    opts?: Parameters<HealthCalculatorService['calculateMacros']>[2],
+  ): MacroStylePreview[] {
+    if (!targetCalories) return [];
+    return [
+      MacroStyle.BALANCED,
+      MacroStyle.HIGH_CARB_LOW_FAT,
+      MacroStyle.LOW_CARB_HIGH_FAT,
+      MacroStyle.KETO,
+    ].map((style) => {
+      const m = this.calculateMacros(targetCalories, style, opts);
+      const protein = m.protein ?? 0;
+      const carb = m.carb ?? 0;
+      const fat = m.fat ?? 0;
+      const proteinPct = Math.round(((protein * 4) / targetCalories) * 100);
+      const fatPct = Math.round(((fat * 9) / targetCalories) * 100);
+      return {
+        style,
+        protein,
+        carb,
+        fat,
+        proteinPct,
+        fatPct,
+        // Tinh bột nhận phần còn lại để tổng luôn đúng 100%
+        carbPct: 100 - proteinPct - fatPct,
+        fatFloorApplied: m.fatFloorApplied,
+        note: m.fatFloorApplied ? FAT_FLOOR_NOTE : null,
+      };
+    });
+  }
+
+  /**
    * Phân bổ tỷ lệ Macro (BR-03.3 đến BR-03.7):
    * 1. Đạm theo g/kg (BR-03.4):
    *    - LOSE_WEIGHT (bảo toàn khối cơ): 2.0 g/kg (LOW=1.6, MID=2.0, HIGH=2.2, VERY_HIGH=2.4)
    *    - MAINTAIN: 1.8 g/kg (LOW=1.4, MID=1.8, HIGH=2.0, VERY_HIGH=2.2)
    *    - GAIN_WEIGHT: 1.8 - 2.0 g/kg
    *    - Béo phì (BMI >= 30 hoặc mỡ cao): tính theo Lean Body Mass (LBM) để chống đạm vượt trần.
-   * 2. Béo tối thiểu (Fat Floor - BR-03.5):
-   *    - Sàn an toàn: tối thiểu 0.7 g/kg cân nặng, tối thiểu 20% tổng calo, và tối thiểu sàn tuyệt đối (nữ 40g, nam 45g).
-   * 3. Carb nhận phần calo còn lại: Carb = (TargetCalories - Protein * 4 - Fat * 9) / 4.
-   * 4. Cân bằng sai số làm tròn để tổng calo từ P, C, F khớp TargetCalories (BR-03.7).
+   * 2. Chia R = calo − đạm×4 theo phong cách (BR-03.5): tinh bột:béo = 55:45 / 75:25 / 30:70; KETO tinh bột
+   *    = min(50 g, 5% calo), béo là phần còn lại.
+   * 3. Béo tối thiểu (BR-03.5/03.7, ưu tiên an toàn): max(0,6 g/kg, 20% calo/9, sàn tuyệt đối nữ 40g/nam 45g);
+   *    béo tính ra thấp hơn thì nâng lên sàn (`fatFloorApplied`), tinh bột lấy phần còn lại, không âm.
+   * 4. Sai số làm tròn dồn vào tinh bột để tổng P×4 + C×4 + F×9 khớp calo mục tiêu.
    */
   calculateMacros(
     targetCalories: number | null,
@@ -394,9 +495,9 @@ export class HealthCalculatorService {
       proteinPreference?: ProteinPreference | null;
       bodyFatPercent?: number | null;
     },
-  ) {
+  ): MacroResult {
     if (!targetCalories) {
-      return { protein: null, carb: null, fat: null };
+      return { protein: null, carb: null, fat: null, fatFloorApplied: false };
     }
 
     const weightKg = opts?.weightKg;
@@ -444,7 +545,11 @@ export class HealthCalculatorService {
       proteinGram = Math.round(weightForProtein * factor);
 
       // Ràng buộc trần: đạm ≤ 35% tổng calo (C1 / macro.proteinMaxPctKcal)
-      const maxProteinGram = Math.round((targetCalories * 0.35) / 4);
+      const maxProteinGram = Math.round(
+        (targetCalories *
+          (NUTRITION_LIMITS.maxProteinPctOfCalories / 100)) /
+          4,
+      );
       proteinGram = Math.min(proteinGram, maxProteinGram);
     } else {
       // Fallback khi chưa có cân nặng: 30% calo
@@ -453,81 +558,64 @@ export class HealthCalculatorService {
 
     const proteinCals = proteinGram * 4;
 
-    // 2. Tính sàn chất béo tối thiểu (Fat Floor - BR-03.5)
+    // 2. Sàn béo tối thiểu (BR-03.5): max(0,6 g/kg, 20% calo / 9), cộng sàn tuyệt đối theo giới để an toàn
     const refWeight = weightKg && weightKg > 0 ? weightKg : 60;
     const isFemale = opts?.gender === Gender.FEMALE;
     const absoluteMinFat = isFemale
       ? NUTRITION_LIMITS.minFatAbsoluteFemale
       : NUTRITION_LIMITS.minFatAbsoluteMale;
-    const fatFloor = Math.max(
-      Math.round(refWeight * NUTRITION_LIMITS.minFatGramPerKg),
+    const pctFloor = Math.max(
       Math.round(
         (targetCalories * (NUTRITION_LIMITS.minFatPctOfCalories / 100)) / 9,
       ),
       absoluteMinFat,
     );
-
-    let targetFatRatio = 0.28;
-    switch (style) {
-      case MacroStyle.HIGH_CARB_LOW_FAT:
-        targetFatRatio = 0.2;
-        break;
-      case MacroStyle.LOW_CARB_HIGH_FAT:
-        targetFatRatio = 0.42;
-        break;
-      case MacroStyle.KETO:
-        targetFatRatio = 0.7;
-        break;
-      case MacroStyle.BALANCED:
-      default:
-        targetFatRatio = 0.28;
-    }
-
-    let fatGram = Math.round((targetCalories * targetFatRatio) / 9);
-    // Áp dụng sàn chất béo tối thiểu (ưu tiên an toàn nội tiết tố)
-    fatGram = Math.max(fatGram, fatFloor);
-
-    // Đảm bảo Fat không chiếm vượt quá calo sau khi đã trừ đạm
-    const minCarbCalories = style === MacroStyle.KETO ? 80 : 120; // 20g carb cho keto, 30g carb tối thiểu thông thường
-    const maxFatGram = Math.max(
-      fatFloor,
-      Math.round((targetCalories - proteinCals - minCarbCalories) / 9),
+    const fatFloor = Math.max(
+      Math.round(refWeight * NUTRITION_LIMITS.minFatGramPerKg),
+      pctFloor,
     );
-    fatGram = Math.min(fatGram, maxFatGram);
-    const fatCals = fatGram * 9;
 
-    // 3. Carb nhận phần calo còn lại
-    const remainingCals = Math.max(0, targetCalories - proteinCals - fatCals);
-    let carbGram = Math.round(remainingCals / 4);
-
-    // KETO: giới hạn carb <= 35g, calo dư chuyển sang béo
-    if (style === MacroStyle.KETO && carbGram > 35) {
-      const excessCarb = carbGram - 30;
-      carbGram = 30;
-      fatGram += Math.round((excessCarb * 4) / 9);
-    }
-
-    // 4. Cân bằng sai số làm tròn (BR-03.7)
-    let currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
-    let diff = targetCalories - currentTotal;
-
-    if (style !== MacroStyle.KETO) {
-      const carbAdjust = Math.round(diff / 4);
-      carbGram += carbAdjust;
+    // 3. Chia phần calo còn lại sau đạm R theo phong cách (BR-03.5)
+    const remainingCals = Math.max(0, targetCalories - proteinCals);
+    let fatGram: number;
+    if (style === MacroStyle.KETO) {
+      // Tinh bột = min(50 g, 5% calo); béo = phần còn lại
+      const ketoCarbGram = Math.min(
+        NUTRITION_LIMITS.ketoMaxCarbGram,
+        Math.round(
+          (targetCalories * (NUTRITION_LIMITS.ketoCarbPctOfCalories / 100)) / 4,
+        ),
+      );
+      fatGram = Math.round((remainingCals - ketoCarbGram * 4) / 9);
     } else {
-      const fatAdjust = Math.round(diff / 9);
-      fatGram += fatAdjust;
-      currentTotal = proteinGram * 4 + carbGram * 4 + fatGram * 9;
-      diff = targetCalories - currentTotal;
-      if (Math.abs(diff) > 3) {
-        carbGram += Math.round(diff / 4);
-      }
+      const carbShare =
+        CARB_SHARE_OF_REMAINING[
+          style as Exclude<MacroStyle, 'KETO'>
+        ] ?? CARB_SHARE_OF_REMAINING.BALANCED;
+      fatGram = Math.round((remainingCals * (1 - carbShare)) / 9);
     }
+
+    // Béo thấp hơn sàn thì nâng lên sàn (ưu tiên an toàn, BR-03.7), nhưng không để tinh bột âm khi calo rất thấp
+    let fatFloorApplied = false;
+    if (fatGram < fatFloor) {
+      const roomForFat = Math.floor(
+        (remainingCals - NUTRITION_LIMITS.minCarbKcal) / 9,
+      );
+      fatGram = Math.max(pctFloor, Math.min(fatFloor, roomForFat));
+      fatFloorApplied = true;
+    }
+
+    // 4. Tinh bột nhận phần còn lại: sai số làm tròn dồn vào tinh bột (lệch ≤ 2 kcal)
+    const carbGram = Math.max(
+      0,
+      Math.round((targetCalories - proteinCals - fatGram * 9) / 4),
+    );
 
     return {
       protein: Math.max(0, proteinGram),
-      carb: Math.max(0, carbGram),
+      carb: carbGram,
       fat: Math.max(0, fatGram),
+      fatFloorApplied,
     };
   }
 }

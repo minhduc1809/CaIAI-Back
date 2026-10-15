@@ -1,3 +1,4 @@
+import { dayBoundsForKey, DEFAULT_TIMEZONE } from '../../common/utils/date-zone.util';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -47,6 +48,9 @@ export class AdminAuditService {
     action?: string;
     adminId?: string;
     targetType?: string;
+    targetId?: string;
+    from?: string;
+    to?: string;
   }) {
     const page = Math.max(1, query.page || 1);
     const limit = Math.min(100, Math.max(1, query.limit || 20));
@@ -56,6 +60,13 @@ export class AdminAuditService {
     if (query.action) where.action = query.action;
     if (query.adminId) where.adminId = query.adminId;
     if (query.targetType) where.targetType = query.targetType;
+    if (query.targetId) where.targetId = query.targetId;
+    if (query.from || query.to) {
+      where.createdAt = {
+        ...(query.from ? { gte: dayBoundsForKey(query.from, DEFAULT_TIMEZONE).start } : {}),
+        ...(query.to ? { lt: dayBoundsForKey(query.to, DEFAULT_TIMEZONE).end } : {}),
+      };
+    }
 
     const [total, items] = await Promise.all([
       this.prisma.adminAuditLog.count({ where }),

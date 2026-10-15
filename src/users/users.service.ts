@@ -1,9 +1,15 @@
+import { AVATAR_CONTENT_TYPE, avatarKey, validateAvatarFile } from './avatar.util';
+import { LocalStorageDriver, StorageDriver, StorageService } from '../storage/storage.service';
+import { UserSettings, validateSettingsPatch } from './user-settings';
+import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { isFreeTierLimited } from '../billing/entitlement.util';
 import { PLAN_LIMITS } from '../billing/billing.constants';
 import { startGoal } from './goal.util';
 import {
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
+  Optional,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
@@ -15,6 +21,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProfileIncompleteException } from '../common/errors/profile-incomplete.exception';
 import {
   HealthCalculatorService,
   HealthMetricsInput,
@@ -29,11 +36,81 @@ import { SaveOnboardingDraftDto } from './dto/onboarding-draft.dto';
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
+  /** Lưu ảnh đại diện (đã kiểm tra chữ ký file) lên kho lưu trữ và xoá ảnh cũ của chính người dùng. */
+  async setAvatar(userId: string, file: { buffer?: Buffer; size?: number } | undefined) {
+    const ext = validateAvatarFile(file);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatar: true } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    let avatar: string;
+    try {
+      avatar = await this.storage.put(avatarKey(userId, ext), file!.buffer!, AVATAR_CONTENT_TYPE[ext]);
+    } catch (err) {
+      // Chi tiết lỗi của kho lưu trữ chỉ ghi log, không trả cho ứng dụng
+      this.logger.error(`Không lưu được ảnh đại diện của ${userId}: ${(err as Error).message}`);
+      throw new ServiceUnavailableException('Chưa thể lưu ảnh đại diện lúc này, vui lòng thử lại sau');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { avatar } });
+    await this.storage.remove(user.avatar);
+    return { avatar };
+  }
+
+  async removeAvatar(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatar: true } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    await this.prisma.user.update({ where: { id: userId }, data: { avatar: null } });
+    await this.storage.remove(user.avatar);
+    return { avatar: null };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly healthCalculator: HealthCalculatorService,
     private readonly adaptiveExpenditure: AdaptiveExpenditureService,
-  ) {}
+    @Optional() storage?: StorageService,
+  ) {
+    this.storage = storage ?? new LocalStorageDriver();
+  }
+
+  private readonly storage: StorageDriver;
+
+  /** Cài đặt cá nhân đồng bộ trên server (BR-19.4). */
+  async getSettings(userId: string) {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        weightUnit: true, heightUnit: true, energyUnit: true, timezone: true, checkinDay: true,
+        dailyCompletionReminder: true, defaultRestSec: true, notificationPrefs: true, settingsInitialized: true,
+      },
+    });
+    if (!u) throw new NotFoundException('Không tìm thấy người dùng');
+    const settings: UserSettings = {
+      weightUnit: u.weightUnit,
+      heightUnit: u.heightUnit,
+      energyUnit: u.energyUnit,
+      timezone: u.timezone,
+      checkinDay: u.checkinDay,
+      dailyCompletionReminder: u.dailyCompletionReminder,
+      defaultRestSec: u.defaultRestSec,
+      notificationPrefs: (u.notificationPrefs as Record<string, boolean> | null) ?? {},
+      initialized: u.settingsInitialized,
+    };
+    return { message: 'Lấy cài đặt thành công', data: settings };
+  }
+
+  /**
+   * Cập nhật cài đặt. Không đụng tới mục tiêu calo/macro (đổi đơn vị hay thông báo không đổi mục tiêu). `initialized`
+   * đánh dấu app đã đẩy cài đặt cũ trên máy lên server một lần.
+   */
+  async updateSettings(userId: string, dto: UpdateSettingsDto) {
+    const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { notificationPrefs: true } });
+    if (!current) throw new NotFoundException('Không tìm thấy người dùng');
+    const data = validateSettingsPatch(dto, (current.notificationPrefs as Record<string, boolean> | null) ?? {});
+    if (dto.initialized === true) data.settingsInitialized = true;
+    if (Object.keys(data).length > 0) {
+      await this.prisma.user.update({ where: { id: userId }, data: data as any });
+    }
+    return this.getSettings(userId);
+  }
 
   /**
    * Lấy thông tin cá nhân của người dùng đang đăng nhập
@@ -98,6 +175,7 @@ export class UsersService {
         ifWindowEnd: true,
         dailyAiQuota: true,
         timezone: true,
+        checkinDay: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -358,6 +436,10 @@ export class UsersService {
         macroStyle: calculations.macroStyle,
         timezone:
           dto.timezone !== undefined ? dto.timezone : currentUser.timezone,
+        checkinDay:
+          dto.checkinDay !== undefined
+            ? dto.checkinDay
+            : (currentUser.checkinDay ?? 1),
         sleepHours:
           dto.sleepHours !== undefined
             ? dto.sleepHours
@@ -515,6 +597,7 @@ export class UsersService {
         ifWindowEnd: true,
         dailyAiQuota: true,
         timezone: true,
+        checkinDay: true,
         updatedAt: true,
       },
     });
@@ -823,6 +906,47 @@ export class UsersService {
   /**
    * Báo cáo tổng quan phân tích thể trạng và chỉ số dinh dưỡng
    */
+  /**
+   * Xem trước tỉ lệ thực tế của 4 phong cách ăn với mức calo hiện tại (BR-03.5/03.7). Calo không phụ thuộc phong
+   * cách nên dùng mục tiêu đang áp dụng; chưa có mục tiêu thì tính tạm từ hồ sơ (chưa lưu gì).
+   */
+  async getMacroPreview(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+
+    const calories =
+      user.targetCalories ??
+      this.healthCalculator.calculateAllMetrics({
+        heightCm: user.heightCm,
+        weightKg: user.weightKg,
+        targetWeightKg: user.targetWeightKg,
+        weightRateKgPerWeek: user.weightRateKgPerWeek,
+        weightRatePercent: user.weightRatePercent,
+        bodyFatPercent: user.bodyFatPercent,
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        pregnancyStatus: user.pregnancyStatus,
+        activityLevel: user.activityLevel,
+        goal: user.goal,
+        macroStyle: user.macroStyle,
+        proteinPreference: user.proteinPreference,
+      }).targetCalories;
+    if (!calories) throw new ProfileIncompleteException();
+
+    return {
+      targetCalories: calories,
+      currentStyle: user.macroStyle,
+      styles: this.healthCalculator.previewMacroStyles(calories, {
+        weightKg: user.weightKg,
+        heightCm: user.heightCm,
+        gender: user.gender,
+        goal: user.goal,
+        proteinPreference: user.proteinPreference,
+        bodyFatPercent: user.bodyFatPercent,
+      }),
+    };
+  }
+
   async getHealthSummary(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

@@ -8,7 +8,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -21,7 +26,9 @@ export class NotificationsController {
   constructor(private readonly service: NotificationsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Danh sách thông báo (tối đa 50, mới nhất trước) + số chưa đọc' })
+  @ApiOperation({
+    summary: 'Danh sách thông báo (tối đa 50, mới nhất trước) + số chưa đọc',
+  })
   @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
   list(@CurrentUser('id') userId: string) {
     return this.service.list(userId);

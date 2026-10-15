@@ -62,6 +62,16 @@ export function isoWeekday(key: string): number {
   return d === 0 ? 7 : d;
 }
 
+/** Khoá ngày của thứ `isoDay` (1 = Thứ Hai … 7 = Chủ Nhật) gần nhất trước hoặc đúng ngày `key`. */
+export function weekdayOnOrBefore(key: string, isoDay: number): string {
+  return addDaysToKey(key, -((isoWeekday(key) - isoDay + 7) % 7));
+}
+
+/** Khoá ngày của thứ `isoDay` gần nhất sau hoặc đúng ngày `key`. */
+export function weekdayOnOrAfter(key: string, isoDay: number): string {
+  return addDaysToKey(key, (isoDay - isoWeekday(key) + 7) % 7);
+}
+
 /** Khoá ngày của Thứ Hai gần nhất trước hoặc đúng ngày `key`. */
 export function mondayOnOrBefore(key: string): string {
   return addDaysToKey(key, -(isoWeekday(key) - 1));
@@ -101,7 +111,8 @@ export function tzOffsetMs(at: Date, tz: string): number {
     minute: 'numeric',
     second: 'numeric',
   }).formatToParts(at);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const get = (t: string) =>
+    Number(parts.find((p) => p.type === t)?.value ?? 0);
   const asUtc = Date.UTC(
     get('year'),
     get('month') - 1,

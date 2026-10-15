@@ -183,7 +183,7 @@ export class RecommendationsController {
     @CurrentUser('id') userId: string,
     @Body() dto: AddFavoriteFoodDto,
   ) {
-    return this.recommendationsService.addFavoriteFood(userId, dto.foodName);
+    return this.recommendationsService.addFavoriteFood(userId, dto.foodName, dto.sourceType, dto.sourceId);
   }
 
   @Get('favorites')

@@ -1,3 +1,4 @@
+import { UpdateSettingsDto } from './dto/update-settings.dto';
 import {
   Controller,
   Get,
@@ -10,7 +11,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { AVATAR_MAX_BYTES } from './avatar.util';
 import {
   ApiTags,
   ApiOperation,
@@ -54,6 +60,34 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(userId, updateProfileDto);
+  }
+
+  @Post('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES, files: 1 } }))
+  @ApiOperation({ summary: 'Đặt ảnh đại diện (JPG/PNG/WEBP, tối đa 2 MB)' })
+  async setAvatar(@CurrentUser('id') userId: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.usersService.setAvatar(userId, file);
+  }
+
+  @Delete('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xoá ảnh đại diện, quay về chữ cái đầu' })
+  async removeAvatar(@CurrentUser('id') userId: string) {
+    return this.usersService.removeAvatar(userId);
+  }
+
+  @Get('me/settings')
+  @ApiOperation({ summary: 'Cài đặt cá nhân đồng bộ giữa các thiết bị (đơn vị, nhắc nhở, thông báo...)' })
+  async getSettings(@CurrentUser('id') userId: string) {
+    return this.usersService.getSettings(userId);
+  }
+
+  @Patch('me/settings')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cập nhật cài đặt cá nhân (không đổi mục tiêu calo/macro)' })
+  async updateSettings(@CurrentUser('id') userId: string, @Body() dto: UpdateSettingsDto) {
+    return this.usersService.updateSettings(userId, dto);
   }
 
   @Get('me/onboarding-draft')
@@ -110,6 +144,17 @@ export class UsersController {
       userId,
       limit ? parseInt(limit, 10) : undefined,
     );
+  }
+
+  @Get('me/macro-preview')
+  @ApiOperation({
+    summary:
+      'Xem trước tỉ lệ đạm/tinh bột/béo thực tế của 4 phong cách ăn với mức calo hiện tại (kèm cờ sàn béo tối thiểu)',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách 4 phong cách với số gram và % calo' })
+  @ApiResponse({ status: 400, description: 'PROFILE_INCOMPLETE: chưa đủ hồ sơ để có mục tiêu' })
+  async getMacroPreview(@CurrentUser('id') userId: string) {
+    return this.usersService.getMacroPreview(userId);
   }
 
   @Get('me/health-summary')

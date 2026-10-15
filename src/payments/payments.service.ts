@@ -1,4 +1,7 @@
+import { cfg } from '../system-config/config.holder';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
+  Optional,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -13,7 +16,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 
 const DAY = 24 * 3600 * 1000;
+/** Mặc định; giá trị hiệu lực lấy từ `payments.orderTtlMin`. */
 export const ORDER_TTL_MS = 30 * 60 * 1000;
+const orderTtlMs = () => cfg('payments.orderTtlMin') * 60_000;
 /** Đơn hết hạn vẫn cho admin duyệt trong 7 ngày, vì khách có thể chuyển tiền muộn. */
 export const LATE_APPROVAL_WINDOW_MS = 7 * DAY;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // bỏ I, O, 0, 1 cho dễ đọc
@@ -48,27 +53,36 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  /** Thông tin ngân hàng lấy từ cấu hình máy chủ, không nằm trong code hay app. */
+  /**
+   * Thông tin ngân hàng lấy từ cấu hình máy chủ, không nằm trong code hay app.
+   *
+   * Chỉ khi chủ động bật ALLOW_DEV_BANK_FALLBACK=true VÀ NODE_ENV=development mới dùng tài khoản giả để thử
+   * giao diện. Thiếu cấu hình mà không bật cờ này thì báo PAYMENT_NOT_CONFIGURED; tuyệt đối không tự dùng một
+   * tài khoản giả, vì khách sẽ chuyển tiền thật vào tài khoản không phải của chủ dự án.
+   */
   private bank() {
-    const bin =
-      process.env.BANK_BIN ||
-      (process.env.NODE_ENV === 'development' ? '970422' : undefined);
+    const useFake =
+      process.env.NODE_ENV === 'development' &&
+      process.env.ALLOW_DEV_BANK_FALLBACK === 'true';
+    const bin = process.env.BANK_BIN || (useFake ? '970422' : undefined);
     const accountNo =
-      process.env.BANK_ACCOUNT_NO ||
-      (process.env.NODE_ENV === 'development' ? '0388888888' : undefined);
+      process.env.BANK_ACCOUNT_NO || (useFake ? '0388888888' : undefined);
     const accountName =
-      process.env.BANK_ACCOUNT_NAME ||
-      (process.env.NODE_ENV === 'development' ? 'NUTRIWISE' : undefined);
-    const bankName =
-      process.env.BANK_NAME ||
-      (process.env.NODE_ENV === 'development' ? 'MB Bank' : '');
+      process.env.BANK_ACCOUNT_NAME || (useFake ? 'NUTRIWISE' : undefined);
+    const bankName = process.env.BANK_NAME || (useFake ? 'MB Bank' : '');
     if (!bin || !accountNo || !accountName) {
       throw new ServiceUnavailableException({
         code: 'PAYMENT_NOT_CONFIGURED',
         message: 'Chưa cấu hình tài khoản nhận tiền.',
       });
+    }
+    if (useFake && accountNo === '0388888888') {
+      this.logger.warn(
+        'Đang dùng tài khoản NHẬN TIỀN GIẢ (ALLOW_DEV_BANK_FALLBACK=true). Chỉ dùng để thử giao diện.',
+      );
     }
     return { bin, accountNo, accountName, bankName };
   }
@@ -136,7 +150,7 @@ export class PaymentsService {
             userId,
             productId,
             amount: plan.amount,
-            expiresAt: new Date(now.getTime() + ORDER_TTL_MS),
+            expiresAt: new Date(now.getTime() + orderTtlMs()),
           },
         });
         return this.view(created);
@@ -255,7 +269,10 @@ export class PaymentsService {
       await tx.manualGrant.create({
         data: {
           userId: order.userId,
-          adminId: approvedBy,
+          // Đơn tự duyệt qua ngân hàng không có admin: để null thay vì nhét chuỗi giả vào adminId (I6)
+          adminId: approvedBy === 'AUTO:BANK' ? null : approvedBy,
+          source: 'QR_ORDER',
+          orderCode: order.code,
           reason: `QR_ORDER:${order.code}`,
           startsAt: now,
           endsAt: new Date(base.getTime() + plan.days * DAY),
@@ -265,6 +282,19 @@ export class PaymentsService {
     });
 
     this.billing.invalidate(order.userId);
+    // Báo cho người dùng khi đơn được duyệt, kể cả khi họ đã đóng app (chỉ lần thắng, không báo lặp)
+    if (won) {
+      try {
+        await this.notifications?.create(
+          order.userId,
+          'PAYMENT_SUCCESS' as any,
+          'Premium đã được kích hoạt',
+          `Đơn ${order.code} đã được xác nhận. Cảm ơn bạn đã nâng cấp Premium!`,
+        );
+      } catch {
+        // Thông báo là việc phụ; lỗi không làm hỏng việc kích hoạt
+      }
+    }
     return { alreadyPaid: !won, orderId, code: order.code };
   }
 

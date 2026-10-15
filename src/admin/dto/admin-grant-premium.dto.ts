@@ -1,12 +1,13 @@
 import {
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Max,
   Min,
   MinLength,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AdminGrantPremiumDto {
   @ApiProperty({
@@ -23,9 +24,8 @@ export class AdminGrantPremiumDto {
   })
   @IsInt({ message: 'Số ngày phải là số nguyên' })
   @Min(1, { message: 'Số ngày tối thiểu là 1' })
-  @Max(90, {
-    message: 'Cấp thủ công tối đa 90 ngày mỗi lần (admin.maxGrantDays)',
-  })
+  // Trần cứng 365; mức thực tế do tham số admin.maxGrantDays (mặc định 90) và được kiểm trong service
+  @Max(365, { message: 'Cấp thủ công tối đa 365 ngày mỗi lần' })
   days: number;
 
   @ApiProperty({
@@ -36,6 +36,11 @@ export class AdminGrantPremiumDto {
   @IsNotEmpty({ message: 'Lý do không được để trống' })
   @MinLength(10, { message: 'Lý do cấp quyền phải có ít nhất 10 ký tự' })
   reason: string;
+
+  @ApiPropertyOptional({ description: 'Mật khẩu admin để xác thực lại (bắt buộc qua API quản trị)' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }
 
 export class AdminRevokeGrantDto {
@@ -47,4 +52,9 @@ export class AdminRevokeGrantDto {
   @IsNotEmpty({ message: 'Lý do không được để trống' })
   @MinLength(10, { message: 'Lý do thu hồi phải có ít nhất 10 ký tự' })
   reason: string;
+
+  @ApiPropertyOptional({ description: 'Mật khẩu admin để xác thực lại (bắt buộc qua API quản trị)' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }
