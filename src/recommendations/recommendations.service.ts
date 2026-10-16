@@ -1,4 +1,5 @@
 import { ExerciseCatalogService } from '../exercise-catalog/exercise-catalog.service';
+import { BARCODE_NAME_OVERRIDES } from './barcode-name-overrides.data';
 import { cfg } from '../system-config/config.holder';
 import { parseServing, per100g, unitsOf } from '../food-catalog/food-units';
 import { getPlanLimits } from '../billing/entitlement.util';
@@ -545,7 +546,7 @@ export class RecommendationsService {
 
     try {
       const response = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
+        `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?lc=vi&fields=product_name,product_name_vi,generic_name,generic_name_vi,brands,image_url,serving_size,nutriments`,
       );
       const json = await response.json();
 
@@ -562,23 +563,36 @@ export class RecommendationsService {
       const product = json.product;
       const nutriments = product.nutriments || {};
 
+      // OpenFoodFacts luôn cho nutriments theo 100g/100ml. Nhãn "serving_size" (vd "15 g") là khẩu phần
+      // THẬT của sản phẩm — nếu đọc được số gram thì quy đổi số liệu về đúng khẩu phần đó, tránh hiển thị
+      // "400 kcal · 15 g" (số kcal/100g ghép nhầm với nhãn khẩu phần 15g, sai lệch ~6-7 lần).
+      const servingGrams = parseFloat(
+        String(product.serving_size || '').match(/[\d.,]+/)?.[0]?.replace(',', '.') || '',
+      );
+      const hasServing = Number.isFinite(servingGrams) && servingGrams > 0;
+      const ratio = hasServing ? servingGrams / 100 : 1;
+      const round1 = (n: number) => Math.round(n * 10) / 10;
+
       return {
         message: 'Tra cứu mã vạch thành công',
         data: {
           barcode,
           name:
-            product.product_name ||
+            BARCODE_NAME_OVERRIDES[barcode] ||
             product.product_name_vi ||
+            product.generic_name_vi ||
+            product.product_name ||
+            product.generic_name ||
             'Sản phẩm không tên',
           brand: product.brands || null,
           imageUrl: product.image_url || null,
-          servingSize: product.serving_size || '100g',
-          servingAmount: 100,
+          servingSize: hasServing ? product.serving_size : '100g',
+          servingAmount: hasServing ? servingGrams : 100,
           servingUnit: 'GRAM',
-          calories: Math.round((nutriments['energy-kcal_100g'] || 0) * 10) / 10,
-          protein: Math.round((nutriments['proteins_100g'] || 0) * 10) / 10,
-          carb: Math.round((nutriments['carbohydrates_100g'] || 0) * 10) / 10,
-          fat: Math.round((nutriments['fat_100g'] || 0) * 10) / 10,
+          calories: round1((nutriments['energy-kcal_100g'] || 0) * ratio),
+          protein: round1((nutriments['proteins_100g'] || 0) * ratio),
+          carb: round1((nutriments['carbohydrates_100g'] || 0) * ratio),
+          fat: round1((nutriments['fat_100g'] || 0) * ratio),
         },
       };
     } catch (error) {

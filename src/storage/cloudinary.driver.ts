@@ -38,6 +38,9 @@ export function readCloudinarySettings(get: (k: string) => string | undefined): 
  * Lưu tệp lên Cloudinary bằng tải lên có chữ ký (api_secret chỉ nằm ở máy chủ, không bao giờ gửi cho app).
  * Giá trị lưu vào cơ sở dữ liệu là secure_url (https) do Cloudinary trả về.
  */
+/** Cạnh dài tối đa 1024 px, tự chọn chất lượng; ảnh nhỏ hơn giữ nguyên kích thước. */
+const STORED_IMAGE_TRANSFORMATION = 'c_limit,w_1024,h_1024,q_auto';
+
 export class CloudinaryStorageDriver implements StorageDriver {
   readonly kind = 'cloudinary' as const;
   private static readonly TIMEOUT_MS = 20_000;
@@ -61,13 +64,15 @@ export class CloudinaryStorageDriver implements StorageDriver {
     assertSafeKey(key);
     const publicId = this.publicIdFor(key);
     const timestamp = this.now();
-    const signed = { overwrite: 'true', public_id: publicId, timestamp };
+    // Giảm ảnh lớn ngay khi lưu (chỉ thu nhỏ, không phóng to): ảnh đại diện nhẹ hơn nhiều khi tải về điện thoại
+    const signed = { overwrite: 'true', public_id: publicId, timestamp, transformation: STORED_IMAGE_TRANSFORMATION };
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(body)], { type: contentType }), key.split('/').pop());
     form.append('api_key', this.cfg.apiKey);
     form.append('timestamp', String(timestamp));
     form.append('public_id', publicId);
     form.append('overwrite', 'true');
+    form.append('transformation', STORED_IMAGE_TRANSFORMATION);
     form.append('signature', cloudinarySignature(signed, this.cfg.apiSecret));
 
     const res = await this.doFetch(this.endpoint('upload'), { method: 'POST', body: form, signal: AbortSignal.timeout(CloudinaryStorageDriver.TIMEOUT_MS) });

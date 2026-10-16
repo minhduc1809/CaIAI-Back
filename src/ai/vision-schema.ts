@@ -46,22 +46,35 @@ export function parseDetectedDishes(parsed: any): DetectedDish[] | null {
   return dishes;
 }
 
+const normalizeName = (s: string) =>
+  s.trim().toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+
 /** Ước tính cho món không có trong kho. null nếu thiếu món, số âm/NaN hoặc calo vô lý. */
 export function parseEstimates(parsed: any, expectedNames: string[]): DishEstimate[] | null {
   if (!parsed || !Array.isArray(parsed.estimates)) return null;
-  const byName = new Map<string, DishEstimate>();
+  const rows: DishEstimate[] = [];
   for (const e of parsed.estimates) {
     if (!e || typeof e.dishName !== 'string') return null;
     const { calories, protein, carb, fat } = e;
     if (![calories, protein, carb, fat].every((n) => isFiniteNumber(n) && n >= 0)) return null;
     if (calories <= 0 || calories > MAX_ESTIMATE_KCAL) return null;
-    byName.set(e.dishName.trim(), { dishName: e.dishName.trim(), calories, protein, carb, fat });
+    rows.push({ dishName: e.dishName.trim(), calories, protein, carb, fat });
   }
+
+  // Ưu tiên khớp theo đúng thứ tự (Gemini được yêu cầu trả đủ, đúng thứ tự danh sách đã đánh số) —
+  // tránh lệ thuộc vào việc chép lại tên món y hệt từng ký tự, vốn hay lệch dấu/khoảng trắng/viết hoa.
+  if (rows.length === expectedNames.length) {
+    return rows.map((r, i) => ({ ...r, dishName: expectedNames[i].trim() }));
+  }
+
+  // Dự phòng: khớp theo tên đã chuẩn hoá (bỏ qua hoa/thường, khoảng trắng thừa).
+  const byName = new Map<string, DishEstimate>();
+  for (const r of rows) byName.set(normalizeName(r.dishName), r);
   const out: DishEstimate[] = [];
   for (const name of expectedNames) {
-    const est = byName.get(name.trim());
+    const est = byName.get(normalizeName(name));
     if (!est) return null;
-    out.push(est);
+    out.push({ ...est, dishName: name.trim() });
   }
   return out;
 }

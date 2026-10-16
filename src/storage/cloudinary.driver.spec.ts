@@ -21,7 +21,7 @@ describe('cloudinary driver', () => {
     const form = init.body as FormData;
     expect(form.get('public_id')).toBe('nutriwise/avatars/u-1');
     expect(form.get('api_key')).toBe('key123');
-    expect(form.get('signature')).toBe(cloudinarySignature({ overwrite: 'true', public_id: 'nutriwise/avatars/u-1', timestamp: 1700000000 }, 'abcd'));
+    expect(form.get('signature')).toBe(cloudinarySignature({ overwrite: 'true', public_id: 'nutriwise/avatars/u-1', timestamp: 1700000000, transformation: 'c_limit,w_1024,h_1024,q_auto' }, 'abcd'));
     expect([...form.keys()]).not.toContain('api_secret');
     expect(JSON.stringify([...form.values()].filter((v) => typeof v === 'string'))).not.toContain('abcd');
   });
